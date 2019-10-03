@@ -4,9 +4,11 @@ import glob
 import os
 import re
 import random
+import math
 from collections import namedtuple
 from inspect import getsourcefile
 import plac
+import scipy
 import imageio
 from skimage import io
 from skimage.io import imread
@@ -16,8 +18,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import keras
 import pandas as pd
+import mpmath
+import cv2
+mpmath.dps = 100
 
-TARGETFILE = "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_raw.csv"
+IMSHAPE = (1300,1300,3)
+TARGETFILE = "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv"
 DATADIR = "%s/data/train/AOI_7_Moscow/" % \
           os.path.abspath(os.path.dirname(getsourcefile(lambda : 0)))
 
@@ -34,9 +40,8 @@ class SpacenetSequence(keras.utils.Sequence):
     def __getitem__(self, idx):
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
         batch_y = self.y[idx * self.batch_size:(idx + 1) * self.batch_size]
-
         return np.array([
-            resize(imread(file_name), (299, 299))
+            resize(imread(file_name), IMSHAPE)
                for file_name in batch_x]), np.array(batch_y)
 
 def get_npy(filename=None, dataset="PS-RGB"):
@@ -66,11 +71,10 @@ def get_filenames(filename=None, dataset="PS-RGB"):
         return glob.glob("%s/*%s*" % (datadir, filename))
 
 class Target:
-    regex = re.compile("[\d\.]+ [\d]+\.?[\d]*")
+    regex = re.compile("[\d\.]+ [\d\.]+")
     df = pd.read_csv(TARGETFILE)
 
-    def __init__(self, imageid=None):
-        self.image = np.zeros((299, 299, 1))
+    def __init__(self, imageid):
         self.graph = networkx.Graph()
         self.imageid = imageid
         self.add_df(df=Target.df)
@@ -88,18 +92,47 @@ class Target:
             ret = imageid.strip(mstr) + "chip" + num.replace(" ", "0")
         return ret
 
-    def add_linestring(self, string):
+    def add_linestring(self, string, weight):
         if string.lower().find("empty") != -1:
             return
-        line = string.replace(", ", ",").strip('"').strip("LINESTRING").strip(")").strip("(")
-        edges = re.findall(Target.regex, line)
-        for edge in edges:
-            x,y = edge.split(" ")
-            self.graph.add_edge(float(x), float(y))
+        edges = re.findall(Target.regex, string)
+        for i in range(len(edges) - 1):
+            x1,y1 = edges[i].split(" ")
+            x2,y2 = edges[i+1].split(" ")
+            x1,y1 = float(x1), float(y1)
+            x2,y2 = float(x2), float(y2)
+            self.graph.add_edge((x1,y1), (x2,y2), weight=weight)
+#        for edge in edges:
+#            p1,p2 = edge.split(',')
+#            x1,y1 = p1.strip().split(" ")
+#            x2,y2 = p2.strip().split(" ")
+#            x1,y1 = float(x1), float(y1)
+#            x2,y2 = float(x2), float(y2)
+#            self.graph.add_edge((x1,y1), (x2, y2), weight=weight)#(float(x1), float(x2)), (float(y1), float(y2)), weight=weight)
         return self
 
     def add_df(self, df):
         for idx,linestring in enumerate(Target.df['WKT_Pix']):
-            if Target.expand_imageid(Target.df['ImageId'][idx]).find(self.imageid) != -1:
-                self.add_linestring(linestring)
+            if Target.expand_imageid(Target.df['ImageId'][idx]).find(Target.expand_imageid(self.imageid)) != -1:
+                weight = mpmath.mpf(Target.df['length_m'][idx]) / mpmath.mpf(Target.df['travel_time_s'][idx])
+                self.add_linestring(linestring, weight)
 
+    def image(self):
+        img = np.zeros(IMSHAPE)
+#        (IMSHAPE[0], IMSHAPE[1]))
+        for edge in self.graph.edges:
+            origin_x, origin_y = 0, 0
+            x1,y1 = edge[0]
+            x2,y2 = edge[1]
+            x1,y1 = round(x1), round(y1)
+            x2,y2 = round(x2), round(y2)
+            cv2.line(img, (x1, y1), (x2, y2), (255,255,255), 20)
+#        kernel = np.ones((1, 75))
+#        img = cv2.dilate(img, kernel, iterations=1)
+#        img = cv2.erode(img, kernel, iterations=1)
+        img = img / 255
+        plt.imshow(img)
+        fig = plt.figure()
+        plt.imshow(get_image(self.imageid))
+        plt.show()
+        return img

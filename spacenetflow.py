@@ -25,7 +25,7 @@ mpmath.dps = 100
 IMSHAPE = (1300,1300,3)
 TARGETFILE = "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv"
 DATADIR = "%s/data/train/AOI_7_Moscow/" % \
-          os.path.abspath(os.path.dirname(getsourcefile(lambda : 0)))
+          os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
 
 
 class SpacenetSequence(keras.utils.Sequence):
@@ -40,9 +40,12 @@ class SpacenetSequence(keras.utils.Sequence):
     def __getitem__(self, idx):
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
         batch_y = self.y[idx * self.batch_size:(idx + 1) * self.batch_size]
-        return np.array([
-            resize(imread(file_name), IMSHAPE)
-               for file_name in batch_x]), np.array(batch_y)
+        return np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), batch_y
+            
+    @staticmethod
+    def all():
+        imageids = ['chip%d' % i for i in range(1,2000)]
+        return SpacenetSequence(imageids, imageids, 32)
 
 def get_npy(filename=None, dataset="PS-RGB"):
     filename = get_file(filename=filename, dataset=dataset)
@@ -131,8 +134,8 @@ class Target:
 #        img = cv2.dilate(img, kernel, iterations=1)
 #        img = cv2.erode(img, kernel, iterations=1)
         img = img / 255
-        plt.imshow(img)
-        fig = plt.figure()
-        plt.imshow(get_image(self.imageid))
-        plt.show()
+#        plt.imshow(img)
+#        fig = plt.figure()
+#        plt.imshow(get_image(self.imageid))
+#        plt.show()
         return img

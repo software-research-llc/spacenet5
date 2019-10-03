@@ -2,18 +2,25 @@
 import sys
 import glob
 import os
+import re
 import random
+from collections import namedtuple
 from inspect import getsourcefile
 import plac
 import imageio
 from skimage import io
 from skimage.io import imread
-from skimage.transform input resize
+from skimage.transform import resize
+import networkx
 import matplotlib.pyplot as plt
 import numpy as np
 import keras
+import pandas as pd
 
-DATADIR = "%s/data/train/AOI_7_Moscow/" % os.path.abspath(os.path.dirname(getsourcefile(lambda : 0)))
+TARGETFILE = "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_raw.csv"
+DATADIR = "%s/data/train/AOI_7_Moscow/" % \
+          os.path.abspath(os.path.dirname(getsourcefile(lambda : 0)))
+
 
 class SpacenetSequence(keras.utils.Sequence):
     def __init__(self, x_set: "List of paths to images",
@@ -42,7 +49,7 @@ def get_image(filename=None, dataset="PS-RGB"):
 
 def get_file(filename=None, dataset="PS-RGB"):
     datadir = os.path.join(DATADIR, dataset.upper())
-    if not filename:
+    if filename is None:
         files = os.listdir(datadir)
         filename = os.path.join(datadir, files[random.randint(0,len(files)-1)])
     if not os.path.exists(filename):
@@ -53,9 +60,46 @@ def get_file(filename=None, dataset="PS-RGB"):
 
 def get_filenames(filename=None, dataset="PS-RGB"):
     datadir = os.path.join(DATADIR, dataset.upper())
-    if not filename:
+    if filename is None:
         return os.listdir(datadir)
     else:
         return glob.glob("%s/*%s*" % (datadir, filename))
 
+class Target:
+    regex = re.compile("[\d\.]+ [\d]+\.?[\d]*")
+    df = pd.read_csv(TARGETFILE)
+
+    def __init__(self, imageid=None):
+        self.image = np.zeros((299, 299, 1))
+        self.graph = networkx.Graph()
+        self.imageid = imageid
+        self.add_df(df=Target.df)
+
+    @staticmethod
+    def expand_imageid(imageid):
+        regex = re.compile("chip(\d+)")
+        m = re.search(regex, imageid)
+        mstr = m.string[m.start():m.end()]
+        mnum = m.groups()[0]
+        if len(mnum) >= 5:
+            ret = imageid
+        else:
+            num = "{:>5.5s}".format(mnum)
+            ret = imageid.strip(mstr) + "chip" + num.replace(" ", "0")
+        return ret
+
+    def add_linestring(self, string):
+        if string.lower().find("empty") != -1:
+            return
+        line = string.replace(", ", ",").strip('"').strip("LINESTRING").strip(")").strip("(")
+        edges = re.findall(Target.regex, line)
+        for edge in edges:
+            x,y = edge.split(" ")
+            self.graph.add_edge(float(x), float(y))
+        return self
+
+    def add_df(self, df):
+        for idx,linestring in enumerate(Target.df['WKT_Pix']):
+            if Target.expand_imageid(Target.df['ImageId'][idx]).find(self.imageid) != -1:
+                self.add_linestring(linestring)
 

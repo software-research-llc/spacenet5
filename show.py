@@ -4,18 +4,36 @@ import matplotlib.pyplot as plt
 import sys
 import glob
 import os
+import plac
+import random
+from inspect import getsourcefile
 
-DATADIR = "nfs/data/cosmiq/spacenet/competitions/SN5_roads/tiles_upload/train/AOI_7_Moscow/PAN/"
-filename = sys.argv[1]
-if not os.path.exists(filename):
-    filename = os.path.join(DATADIR, sys.argv[1])
+DATADIR = "%s/data/train/AOI_7_Moscow/" % os.path.abspath(os.path.dirname(getsourcefile(lambda : 0)))
+
+def get_file(dataset="PS-RGB", filename = None):
+    datadir = os.path.join(DATADIR, dataset.upper())
+    if not filename:
+        files = os.listdir(datadir)
+        filename = os.path.join(datadir, files[random.randint(0,len(files)-1)])
     if not os.path.exists(filename):
-        filename = glob.glob("%s/%s" % (DATADIR, sys.argv[1]))
-        if filename and issubclass(type(filename), list):
-            filename = filename[0]
-        if not filename:
-            raise FileNotFoundError("File not found: %s" % sys.argv[1])
-print("Displaying %s" % filename)
-im = io.imread(filename)
-plt.imshow(im)
-plt.show()
+        filename = glob.glob("%s/*%s*" % (datadir, filename))
+        if filename:
+            return filename[0]
+    return filename
+
+def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
+        *filename: "The name of the file, or the first characters of it"):
+    for f in filename:
+        fpath = get_file(dataset, f)
+        print("Displaying %s" % fpath)
+        im = io.imread(fpath)
+        plt.imshow(im)
+    if not filename:
+        fpath = get_file(dataset)
+        print("Displaying %s" % fpath)
+        im = io.imread(fpath)
+        plt.imshow(im)
+    plt.show()
+
+if __name__ == '__main__':
+    plac.call(cli)

@@ -20,10 +20,14 @@ import keras
 import pandas as pd
 import mpmath
 import cv2
+import tqdm
+from keras.applications import xception
+
 mpmath.dps = 100
 
-IMSHAPE = (1300,1300,3)
+IMSHAPE = [299,299,3]
 TARGETFILE = "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv"
+DATASET = "PS-RGB"
 DATADIR = "%s/data/train/AOI_7_Moscow/" % \
           os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
 
@@ -39,13 +43,13 @@ class SpacenetSequence(keras.utils.Sequence):
 
     def __getitem__(self, idx):
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
-        batch_y = self.y[idx * self.batch_size:(idx + 1) * self.batch_size]
-        return np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), batch_y
+        return np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
+               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x]).reshape(self.batch_size, -1)#299 * 299 * 3)#299 * 299 * 3)#.reshape(self.batch_size, 299, 299, 3)
             
     @staticmethod
-    def all():
-        imageids = ['chip%d' % i for i in range(1,2000)]
-        return SpacenetSequence(imageids, imageids, 32)
+    def all(batch_size = 16):
+        imageids = get_filenames()
+        return SpacenetSequence(imageids, TargetBundle(), batch_size)
 
 def get_npy(filename=None, dataset="PS-RGB"):
     filename = get_file(filename=filename, dataset=dataset)
@@ -61,7 +65,7 @@ def get_file(filename=None, dataset="PS-RGB"):
         files = os.listdir(datadir)
         filename = os.path.join(datadir, files[random.randint(0,len(files)-1)])
     if not os.path.exists(filename):
-        filename = glob.glob("%s/*%s*" % (datadir, filename))
+        filename = glob.glob("%s/*%s" % (datadir, filename))
         if filename:
             return filename[0]
     return filename
@@ -73,18 +77,58 @@ def get_filenames(filename=None, dataset="PS-RGB"):
     else:
         return glob.glob("%s/*%s*" % (datadir, filename))
 
+def get_imageids():
+    paths = get_filenames()
+    return [Target.expand_imageid(path.replace(DATASET + "_", "")) for path in paths]
+
+class TargetBundle:
+    def __init__(self):
+        self.targets = {}
+        i = 0
+        imageids = get_imageids()
+        for imageid in imageids:
+            self.targets[imageid] = Target(imageid)
+            i += 1
+        self.add_df(Target.df)
+
+    def add_df(self, df):
+        for idx,linestring in enumerate(Target.df['WKT_Pix']):
+            if linestring.lower().find("empty") != -1:
+                continue
+            imageid = Target.expand_imageid(Target.df['ImageId'][idx])
+            try:
+                weight = mpmath.mpf(Target.df['length_m'][idx]) / mpmath.mpf(Target.df['travel_time_s'][idx])
+            except ZeroDivisionError:
+                print("ZeroDivisionError: %s, %s, length = %s, time = %s" % (imageid,
+                      linestring,
+                      Target.df['length_m'][idx],
+                      Target.df['travel_time_s'][idx]))
+                weight = 0
+            self.targets[imageid].add_linestring(linestring, weight)
+
+    def __getitem__(self, idx):
+        return self.targets[idx]
+
+    def __len__(self, idx):
+        return len(self.targets)
+
+    def __getnext__(self, idx):
+        for key in self.targets:
+            yield self.targets[key]
+
 class Target:
     regex = re.compile("[\d\.]+ [\d\.]+")
     df = pd.read_csv(TARGETFILE)
+    idbase = os.listdir(DATADIR)[1].replace("PS-RGB_", "")
 
     def __init__(self, imageid):
         self.graph = networkx.Graph()
         self.imageid = imageid
-        self.add_df(df=Target.df)
 
     @staticmethod
     def expand_imageid(imageid):
-        regex = re.compile("chip(\d+)")
+        imageid = imageid.replace(DATASET + "_", "")
+        regex = re.compile("chip(\d+)(.tif)?")
         m = re.search(regex, imageid)
         mstr = m.string[m.start():m.end()]
         mnum = m.groups()[0]
@@ -92,7 +136,7 @@ class Target:
             ret = imageid
         else:
             num = "{:>5.5s}".format(mnum)
-            ret = imageid.strip(mstr) + "chip" + num.replace(" ", "0")
+            ret = imageid.replace(mstr, "") + "chip" + num.replace(" ", "0")
         return ret
 
     def add_linestring(self, string, weight):
@@ -105,24 +149,10 @@ class Target:
             x1,y1 = float(x1), float(y1)
             x2,y2 = float(x2), float(y2)
             self.graph.add_edge((x1,y1), (x2,y2), weight=weight)
-#        for edge in edges:
-#            p1,p2 = edge.split(',')
-#            x1,y1 = p1.strip().split(" ")
-#            x2,y2 = p2.strip().split(" ")
-#            x1,y1 = float(x1), float(y1)
-#            x2,y2 = float(x2), float(y2)
-#            self.graph.add_edge((x1,y1), (x2, y2), weight=weight)#(float(x1), float(x2)), (float(y1), float(y2)), weight=weight)
         return self
-
-    def add_df(self, df):
-        for idx,linestring in enumerate(Target.df['WKT_Pix']):
-            if Target.expand_imageid(Target.df['ImageId'][idx]).find(Target.expand_imageid(self.imageid)) != -1:
-                weight = mpmath.mpf(Target.df['length_m'][idx]) / mpmath.mpf(Target.df['travel_time_s'][idx])
-                self.add_linestring(linestring, weight)
 
     def image(self):
         img = np.zeros(IMSHAPE)
-#        (IMSHAPE[0], IMSHAPE[1]))
         for edge in self.graph.edges:
             origin_x, origin_y = 0, 0
             x1,y1 = edge[0]
@@ -134,8 +164,4 @@ class Target:
 #        img = cv2.dilate(img, kernel, iterations=1)
 #        img = cv2.erode(img, kernel, iterations=1)
         img = img / 255
-#        plt.imshow(img)
-#        fig = plt.figure()
-#        plt.imshow(get_image(self.imageid))
-#        plt.show()
         return img

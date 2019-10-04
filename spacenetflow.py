@@ -23,11 +23,17 @@ import cv2
 import tqdm
 from keras.applications import xception
 
+# Accuracy of the multiprecision floating point arithmetic library
 mpmath.dps = 100
-
+# The size of unmodified satellite images
+CHIP_CANVAS_SIZE = [1300,1300,3]
+# The target image size for input to the network
 IMSHAPE = [299,299,3]
+# The file containing descriptions of road networks (linestrings) for training
 TARGETFILE = "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv"
+# The dataset we use (PS-RGB is panchromatic sharpened red-green-blue data)
 DATASET = "PS-RGB"
+# Where the satellite images are
 DATADIR = "%s/data/train/AOI_7_Moscow/" % \
           os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
 
@@ -44,7 +50,7 @@ class SpacenetSequence(keras.utils.Sequence):
     def __getitem__(self, idx):
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
         return np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
-               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x]).reshape(self.batch_size, -1)#299 * 299 * 3)#299 * 299 * 3)#.reshape(self.batch_size, 299, 299, 3)
+               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x]).reshape(len(batch_x), -1)#299 * 299 * 3)#299 * 299 * 3)#.reshape(self.batch_size, 299, 299, 3)
             
     @staticmethod
     def all(batch_size = 16):
@@ -107,7 +113,14 @@ class TargetBundle:
             self.targets[imageid].add_linestring(linestring, weight)
 
     def __getitem__(self, idx):
-        return self.targets[idx]
+        try:
+            return self.targets[idx]
+        except KeyError:
+            try:
+                return self.targets[Target.expand_imageid(idx)]
+            except KeyError as exc:
+                raise KeyError("cannot find `%s' or `%s' in target dict" %
+                               (str(idx), Target.expand_imageid(idx)))
 
     def __len__(self, idx):
         return len(self.targets)
@@ -152,7 +165,7 @@ class Target:
         return self
 
     def image(self):
-        img = np.zeros(IMSHAPE)
+        img = np.zeros(ORIGINAL_CHIP_CANVAS_SIZE)
         for edge in self.graph.edges:
             origin_x, origin_y = 0, 0
             x1,y1 = edge[0]
@@ -164,4 +177,4 @@ class Target:
 #        img = cv2.dilate(img, kernel, iterations=1)
 #        img = cv2.erode(img, kernel, iterations=1)
         img = img / 255
-        return img
+        return resize(img, IMSHAPE)

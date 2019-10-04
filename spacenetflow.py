@@ -165,7 +165,7 @@ class Target:
         return self
 
     def image(self):
-        img = np.zeros(ORIGINAL_CHIP_CANVAS_SIZE)
+        img = np.zeros(CHIP_CANVAS_SIZE)
         for edge in self.graph.edges:
             origin_x, origin_y = 0, 0
             x1,y1 = edge[0]

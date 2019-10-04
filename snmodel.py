@@ -8,7 +8,7 @@ def build_model():
     x = xm.get_layer("avg_pool").output
     x = keras.layers.Dense(3, activation='relu')(x)
     x = keras.layers.Dense(299, activation='relu')(x)
-    x = keras.layers.Dense(299 * 299 * 3, activation='sigmoid', name='predictions')(x)
+    x = keras.layers.Dense(299 * 299 * 3, activation='linear', name='predictions')(x)
     return keras.models.Model(inputs=xm.input, outputs=x)
     """
     i = keras.layers.Input((299,299,3))

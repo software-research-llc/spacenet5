@@ -9,6 +9,7 @@ import random
 import imageio
 import numpy as np
 from inspect import getsourcefile
+import spacenetflow as flow
 
 DATADIR = "%s/data/train/AOI_7_Moscow/" % os.path.abspath(os.path.dirname(getsourcefile(lambda : 0)))
 
@@ -38,12 +39,23 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
         fpath = get_file(filename=f, dataset=dataset)
         print("Displaying %s" % fpath)
         im = io.imread(fpath)
+        fig = plt.figure()
+        fig.add_subplot(1,2,1)
         plt.imshow(im)
+        fig.add_subplot(1,2,2)
+        tb = flow.TargetBundle()
+        plt.imshow(tb[f].image())
+        plt.imshow
     if not filename:
         fpath = get_file(dataset=dataset)
         print("Displaying %s" % fpath)
         im = io.imread(fpath)
+        fig = plt.figure()
+        fig.add_subplot(1,2,1)
         plt.imshow(im)
+        fig.add_subplot(1,2,2)
+        tb = flow.TargetBundle()
+        plt.imshow(tb[os.path.basename(fpath)].image())
     plt.show()
 
 if __name__ == '__main__':

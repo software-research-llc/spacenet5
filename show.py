@@ -6,11 +6,21 @@ import glob
 import os
 import plac
 import random
+import imageio
+import numpy as np
 from inspect import getsourcefile
 
 DATADIR = "%s/data/train/AOI_7_Moscow/" % os.path.abspath(os.path.dirname(getsourcefile(lambda : 0)))
 
-def get_file(dataset="PS-RGB", filename = None):
+def get_npy(filename=None, dataset="PS-RGB"):
+    filename = get_file(filename=filename, dataset=dataset)
+    return np.asarray(imageio.imread(filename))
+
+def get_image(filename=None, dataset="PS-RGB"):
+    filename = get_file(filename=filename, dataset=dataset)
+    return io.imread(filename)
+
+def get_file(filename=None, dataset="PS-RGB"):
     datadir = os.path.join(DATADIR, dataset.upper())
     if not filename:
         files = os.listdir(datadir)
@@ -22,14 +32,15 @@ def get_file(dataset="PS-RGB", filename = None):
     return filename
 
 def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
-        *filename: "The name of the file, or the first characters of it"):
+        *filename: "The name of the file, or a substring within the name"):
+    """Leave filename blank to choose a random image"""
     for f in filename:
-        fpath = get_file(dataset, f)
+        fpath = get_file(filename=f, dataset=dataset)
         print("Displaying %s" % fpath)
         im = io.imread(fpath)
         plt.imshow(im)
     if not filename:
-        fpath = get_file(dataset)
+        fpath = get_file(dataset=dataset)
         print("Displaying %s" % fpath)
         im = io.imread(fpath)
         plt.imshow(im)

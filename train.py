@@ -9,16 +9,20 @@ import time
 model = None
 model_file = "model.tf"
 
-def train(model, seq, epochs=32):
+def train(model, seq, epochs=100):
     for x, y in seq:
         history = model.fit(x, y, batch_size=seq.batch_size, epochs=epochs, verbose=1)
     print(history)
 
 def custom_accuracy(y_true, y_pred):
-    return K.sum(K.round(y_true * y_pred)) / K.sum(y_true)
-    pos = K.sum(y_true * y_pred, axis=-1)
-    neg = K.max((1. - y_true) * y_pred, axis=-1)
-    return K.maximum(0., neg - pos + 1.)
+    """Return the percentage of pixels that were correctly predicted as belonging to a road"""
+    return K.sum(y_true * y_pred) / K.sum(y_true)
+
+def custom_loss(y_true, y_pred):
+    return 1 - custom_accuracy(y_true, y_pred)
+
+keras.metrics.custom_accuracy = custom_accuracy
+keras.losses.custom_loss = custom_loss
 
 def load(path=model_file):
     global model
@@ -33,7 +37,8 @@ def main():
         time.sleep(5)
     else:
         print("Model was loaded successfully.")
-    model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy', custom_accuracy])
+    model.summary()
+    model.compile(optimizer='adam', loss='mean_absolute_error', metrics=['accuracy', 'binary_accuracy', custom_accuracy])
     seq = flow.SpacenetSequence.all()
     i = 0
     while True:

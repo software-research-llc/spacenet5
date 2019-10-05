@@ -19,7 +19,7 @@ def get_npy(filename=None, dataset="PS-RGB"):
 
 def get_image(filename=None, dataset="PS-RGB"):
     filename = get_file(filename=filename, dataset=dataset)
-    return io.imread(filename)
+    return flow.resize(io.imread(filename), flow.IMSHAPE)
 
 def get_file(filename=None, dataset="PS-RGB"):
     datadir = os.path.join(DATADIR, dataset.upper())
@@ -38,7 +38,7 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
     for f in filename:
         fpath = get_file(filename=f, dataset=dataset)
         print("Displaying %s" % fpath)
-        im = io.imread(fpath)
+        im = get_image(filename=fpath, dataset=dataset)
         fig = plt.figure()
         fig.add_subplot(1,2,1)
         plt.imshow(im)
@@ -49,7 +49,7 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
     if not filename:
         fpath = get_file(dataset=dataset)
         print("Displaying %s" % fpath)
-        im = io.imread(fpath)
+        im = get_image(filename=fpath, dataset=dataset)
         fig = plt.figure()
         fig.add_subplot(1,2,1)
         plt.imshow(im)

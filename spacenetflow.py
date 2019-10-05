@@ -23,12 +23,19 @@ import cv2
 import tqdm
 from keras.applications import xception
 
+BATCH_SIZE = 32
+
 # Accuracy of the multiprecision floating point arithmetic library
 mpmath.dps = 100
 # The size of unmodified satellite images
 CHIP_CANVAS_SIZE = [1300,1300,3]
 # The target image size for input to the network
-IMSHAPE = [299,299,3]
+IMSHAPE = [256,256,3]
+# The image size for skeletonized path networks (training TARGET images, not input samples)
+TARGET_IMSHAPE = [256,256,1]
+# The shape of the decoder output
+DECODER_OUTPUT_SHAPE = [256,256,3]
+
 # The file containing descriptions of road networks (linestrings) for training
 TARGETFILE = "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv"
 # The dataset we use (PS-RGB is panchromatic sharpened red-green-blue data)
@@ -50,10 +57,10 @@ class SpacenetSequence(keras.utils.Sequence):
     def __getitem__(self, idx):
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
         return np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
-               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x]).reshape(len(batch_x), -1)#299 * 299 * 3)#299 * 299 * 3)#.reshape(self.batch_size, 299, 299, 3)
+               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
             
     @staticmethod
-    def all(batch_size = 16):
+    def all(batch_size = BATCH_SIZE):
         imageids = get_filenames()
         return SpacenetSequence(imageids, TargetBundle(), batch_size)
 
@@ -172,9 +179,10 @@ class Target:
             x2,y2 = edge[1]
             x1,y1 = round(x1), round(y1)
             x2,y2 = round(x2), round(y2)
-            cv2.line(img, (x1, y1), (x2, y2), (255,255,255), 20)
+            cv2.line(img, (x1, y1), (x2, y2), (1,1,1), 5)
+#            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 0), 10)
 #        kernel = np.ones((1, 75))
 #        img = cv2.dilate(img, kernel, iterations=1)
 #        img = cv2.erode(img, kernel, iterations=1)
-        img = img / 255
-        return resize(img, IMSHAPE)
+        img = img
+        return resize(img, TARGET_IMSHAPE)

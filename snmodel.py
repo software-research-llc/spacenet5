@@ -10,7 +10,7 @@ import cv2
 
 
 def build_model():
-    return unet.get_unet(dropout=0.5, input_img=keras.layers.Input(flow.IMSHAPE))
+    return unet.get_unet(dropout=0.25, input_img=keras.layers.Input(flow.IMSHAPE))
     return unet.build_google_unet()
     return xception_model()
 

@@ -23,6 +23,8 @@ import cv2
 import tqdm
 from keras.applications import xception
 import interactatscope
+import random
+import preprocess as pp
 
 BATCH_SIZE = 32
 
@@ -48,18 +50,24 @@ DATADIR = "%s/data/train/AOI_7_Moscow/" % \
 
 class SpacenetSequence(keras.utils.Sequence):
     def __init__(self, x_set: "List of paths to images",
-                 y_set: "Associated classes", batch_size):
+                 y_set: "Associated targets", batch_size, transform=False):
         self.x, self.y = x_set, y_set
         self.batch_size = batch_size
+        self.transform = transform
 
     def __len__(self):
         return int(np.ceil(len(self.x) / float(self.batch_size)))
 
     def __getitem__(self, idx):
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
-        return np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
+        x, y = np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
                np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
-            
+        for idx in range(len(x)):
+            x[idx] = pp.subtract_image_mean(x[idx])
+            if self.transform:
+                if random.random() > self.transform:
+                    x[idx] = x[idx][::-1]
+        return x,y
     @staticmethod
     def all(batch_size = BATCH_SIZE):
         imageids = get_filenames()
@@ -96,7 +104,7 @@ def get_imageids():
     return [Target.expand_imageid(path.replace(DATASET + "_", "")) for path in paths]
 
 class TargetBundle:
-    def __init__(self):
+    def __init__(self, transform=False):
         self.targets = {}
         i = 0
         imageids = get_imageids()

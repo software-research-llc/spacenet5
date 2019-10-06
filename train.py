@@ -11,8 +11,9 @@ import tensorflow as tf
 
 model = None
 model_file = "model.tf"
+i = 0
 
-def train(model, seq, epochs=100):
+def train(model, seq, epochs=50):
     for x, y in seq:
         history = model.fit(x, y, batch_size=seq.batch_size, epochs=epochs, verbose=1)
     print(history)
@@ -39,14 +40,16 @@ def load(path=model_file):
 
 def main():
     global model
+    global i
     if model is None:
         model = snmodel.build_model()
         print("WARNING: starting from a new model")
         time.sleep(5)
     else:
         print("Model was loaded successfully.")
+        time.sleep(5)
     model.summary()
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy', 'binary_accuracy', custom_accuracy])
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy', 'binary_accuracy'])
     seq = flow.SpacenetSequence.all()
     i = 0
     while True:
@@ -66,6 +69,7 @@ if __name__ == '__main__':
         model.save(model_file)
         raise exc
     except KeyboardInterrupt:
+        print("Finished %d full epochs." % i)
         print("\nSaving to file in 5...")
         time.sleep(5)
         print("\nSaving...")

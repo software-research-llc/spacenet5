@@ -89,7 +89,7 @@ if __name__ == '__main__':
             fig = plt.figure()
             fig.add_subplot(2, 2, 1)
             plt.imshow(inp_im[0])
-            plt.title("Input (satellite image)")
+            plt.title("Satellite image (input)")
 
             fig.add_subplot(2, 2, 2)
             out_im = cv2.cvtColor(out_im, cv2.COLOR_GRAY2BGR)
@@ -104,22 +104,25 @@ if __name__ == '__main__':
             # build graph from skeleton
             graph = sknw.build_sknw(skel, True)
             print(graph.nodes(), graph.edges())
-            # draw edges by pts
-            for (s,e) in graph.edges():
-                ps = graph[s][e][0]['pts']
-                plt.plot(ps[:,1], ps[:,0], 'green')
+            try:
+                # draw edges by pts
+                for (s,e) in graph.edges():
+                    ps = graph[s][e][0]['pts']
+                    plt.plot(ps[:,1], ps[:,0], 'green')
     
-            # draw node by o
-            node, nodes = graph.node, graph.nodes()
-            ps = np.array([node[i]['o'] for i in nodes])
-#            plt.plot(ps[:,1], ps[:,0], 'r.')
+                # draw node by o
+                node, nodes = graph.node, graph.nodes()
+                ps = np.array([node[i]['o'] for i in nodes])
+                plt.plot(ps[:,1], ps[:,0], 'r.')
+            except Exception as exc:
+                print("ERROR drawing graph: %s" % exc)
             plt.title("Graph built from prediction")
 
             fig.add_subplot(2, 2, 4)
             t_im = tb[os.path.basename(fpath)].image()
             t_im = cv2.cvtColor(t_im, cv2.COLOR_GRAY2RGB)
             plt.imshow(t_im)
-            plt.title("Target")
+            plt.title("Ground truth (manually crafted by a person)")
         except Exception as exc:
             print("ERROR in second try: %s" % exc)
             raise exc

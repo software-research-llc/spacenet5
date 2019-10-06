@@ -26,16 +26,16 @@ import interactatscope
 import random
 import preprocess as pp
 
-BATCH_SIZE = 32
+BATCH_SIZE = 12
 
 # Accuracy of the multiprecision floating point arithmetic library
 mpmath.dps = 100
 # The size of unmodified satellite images
 CHIP_CANVAS_SIZE = [1300,1300,3]
 # The target image size for input to the network
-IMSHAPE = [256,256,3]
+IMSHAPE = [512,512,3]
 # The image size for skeletonized path networks (training TARGET images, not input samples)
-TARGET_IMSHAPE = [256,256,1]
+TARGET_IMSHAPE = [512,512,1]
 # The shape of the decoder output
 DECODER_OUTPUT_SHAPE = IMSHAPE
 
@@ -52,6 +52,7 @@ class SpacenetSequence(keras.utils.Sequence):
     def __init__(self, x_set: "List of paths to images",
                  y_set: "Associated targets", batch_size, transform=False):
         self.x, self.y = x_set, y_set
+        random.shuffle(self.x)
         self.batch_size = batch_size
         self.transform = transform
 
@@ -63,7 +64,7 @@ class SpacenetSequence(keras.utils.Sequence):
         x, y = np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
                np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
         for idx in range(len(x)):
-            x[idx] = pp.subtract_image_mean(x[idx])
+#            x[idx] = pp.subtract_image_mean(x[idx])
             if self.transform:
                 if random.random() > self.transform:
                     x[idx] = x[idx][::-1]
@@ -205,7 +206,7 @@ class Target:
             x2,y2 = edge[1]
             x1,y1 = round(x1), round(y1)
             x2,y2 = round(x2), round(y2)
-            cv2.line(img, (x1, y1), (x2, y2), (255,255,255), 3)
+            cv2.line(img, (x1, y1), (x2, y2), (255,255,255), 25)
 #            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 0), 10)
 #        kernel = np.ones((1, 75))
 #        img = cv2.dilate(img, kernel, iterations=1)

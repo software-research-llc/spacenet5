@@ -13,8 +13,6 @@ tlist = list(tb.targets.values())
 while True:
     t = tlist[random.randint(0, len(tlist))]
     timg = t.image()[:,:,0]
-    print(timg, timg.shape)
-    exit()
     img = flow.get_image(t.chip())
     if t is None or img is None:
         raise Exception("ImageID not found: %s" % path)

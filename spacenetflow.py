@@ -68,10 +68,11 @@ class SpacenetSequence(keras.utils.Sequence):
                 if random.random() > self.transform:
                     x[idx] = x[idx][::-1]
         return x,y
+
     @staticmethod
-    def all(batch_size = BATCH_SIZE):
+    def all(batch_size = BATCH_SIZE, transform = False):
         imageids = get_filenames()
-        return SpacenetSequence(imageids, TargetBundle(), batch_size)
+        return SpacenetSequence(imageids, TargetBundle(), batch_size=batch_size, transform=transform)
 
 def get_npy(filename=None, dataset="PS-RGB"):
     filename = get_file(filename=filename, dataset=dataset)
@@ -79,6 +80,8 @@ def get_npy(filename=None, dataset="PS-RGB"):
 
 def get_image(filename=None, dataset="PS-RGB"):
     filename = get_file(filename=filename, dataset=dataset)
+    if not os.path.exists(filename):
+        raise Exception("File not found: %s" % filename)
     return io.imread(filename)
 
 def get_file(filename=None, dataset="PS-RGB"):
@@ -87,9 +90,20 @@ def get_file(filename=None, dataset="PS-RGB"):
         files = os.listdir(datadir)
         filename = os.path.join(datadir, files[random.randint(0,len(files)-1)])
     if not os.path.exists(filename):
-        filename = glob.glob("%s/*%s" % (datadir, filename))
-        if filename:
-            return filename[0]
+        trying = glob.glob("%s/*%s*" % (datadir, filename))
+        if trying:
+            return trying[0]
+        else:
+            trying = re.search("chip(0)*(\d+)$", str(filename))
+            if trying:
+                trying = trying.groups()[-1]
+                trying = glob.glob("%s/*%s*.tif" % (datadir, trying))
+                if trying:
+                    filename = trying[0]
+                else:
+                    return None
+    if not filename:
+        return None
     return filename
 
 def get_filenames(filename=None, dataset="PS-RGB"):
@@ -180,6 +194,9 @@ class Target:
             self.graph.add_edge((x1,y1), (x2,y2), weight=weight)
         return self
 
+    def chip(self):
+        return re.search("_(chip\d+)", self.imageid).groups()[0]
+
     def image(self):
         img = np.zeros(CHIP_CANVAS_SIZE, dtype=np.int32)
         for edge in self.graph.edges():
@@ -188,7 +205,7 @@ class Target:
             x2,y2 = edge[1]
             x1,y1 = round(x1), round(y1)
             x2,y2 = round(x2), round(y2)
-            cv2.line(img, (x1, y1), (x2, y2), (255,255,255), 15)
+            cv2.line(img, (x1, y1), (x2, y2), (255,255,255), 3)
 #            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 0), 10)
 #        kernel = np.ones((1, 75))
 #        img = cv2.dilate(img, kernel, iterations=1)

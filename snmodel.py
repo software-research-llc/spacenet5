@@ -7,7 +7,7 @@ import unet
 import numpy as np
 import train
 import cv2
-
+import time
 
 def build_model():
     return unet.get_unet(dropout=0.25, input_img=keras.layers.Input(flow.IMSHAPE))
@@ -56,6 +56,10 @@ def xception_model():
 def preprocess(image):
     return xception.preprocess_input(image)
 
+def prep_for_skeletonize(img):
+    img = np.array(np.round(img), dtype=np.float32)
+    return img
+
 if __name__ == '__main__':
     try:
         m = keras.models.load_model(train.model_file)
@@ -68,35 +72,56 @@ if __name__ == '__main__':
     import spacenetflow as flow
     import matplotlib.pyplot as plt
     import os
+    import sknw
+    from skimage.morphology import skeletonize
+    tb = flow.TargetBundle()
     while True:
         fpath = flow.get_file()
-        tb = flow.TargetBundle()
         inp_im = flow.resize(flow.get_image(fpath), flow.IMSHAPE).reshape([1,] + flow.IMSHAPE)
         try:
             out_im = m.predict(inp_im)[0]
-            out_im = cv2.cvtColor(out_im, cv2.COLOR_GRAY2RGB)
+            #out_im = cv2.cvtColor(out_im, cv2.COLOR_GRAY2RGB)
         except Exception as exc:
-            print("ERROR: %s" % exc)
+            print("ERROR in first try: %s" % exc)
             out_im = np.zeros(flow.IMSHAPE)
-            out_im = np.array(m.predict(inp_im)).reshape(flow.DECODER_OUTPUT_SHAPE)
+            out_im = np.array(m.predict(inp_im))
         try:
             fig = plt.figure()
             fig.add_subplot(2, 2, 1)
             plt.imshow(inp_im[0])
-            plt.title("Input")
+            plt.title("Input (satellite image)")
+
             fig.add_subplot(2, 2, 2)
-            plt.imshow(out_im)
-            plt.title("Pred")
+            out_im = cv2.cvtColor(out_im, cv2.COLOR_GRAY2BGR)
+            plt.imshow(out_im)#[:,:,0])
+            plt.title("Predicted (output)")
+
             fig.add_subplot(2, 2, 3)
-            edges = cv2.Canny(np.cast['uint8'](out_im * 255), 1, 255)
-            plt.imshow(edges)
-            plt.title("Post-proc'd pred")
+            buf = cv2.cvtColor(out_im, cv2.COLOR_RGB2GRAY)
+            buf = prep_for_skeletonize(buf)
+            skel = skeletonize(buf)#[:,:,0])
+            plt.imshow(skel)
+            # build graph from skeleton
+            graph = sknw.build_sknw(skel, True)
+            print(graph.nodes(), graph.edges())
+            # draw edges by pts
+            for (s,e) in graph.edges():
+                ps = graph[s][e][0]['pts']
+                plt.plot(ps[:,1], ps[:,0], 'green')
+    
+            # draw node by o
+            node, nodes = graph.node, graph.nodes()
+            ps = np.array([node[i]['o'] for i in nodes])
+#            plt.plot(ps[:,1], ps[:,0], 'r.')
+            plt.title("Graph built from prediction")
+
             fig.add_subplot(2, 2, 4)
             t_im = tb[os.path.basename(fpath)].image()
             t_im = cv2.cvtColor(t_im, cv2.COLOR_GRAY2RGB)
             plt.imshow(t_im)
             plt.title("Target")
         except Exception as exc:
-            print("ERROR: %s" % exc)
-
+            print("ERROR in second try: %s" % exc)
+            raise exc
+        time.sleep(1)
         plt.show()

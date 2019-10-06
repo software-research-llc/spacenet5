@@ -7,49 +7,55 @@ import show
 import spacenetflow as flow
 import random
 
-# get satellite image
-tb = flow.TargetBundle()
-img = show.get_image()
-
 # get target image built from ground truth road coords
+tb = flow.TargetBundle()
 tlist = list(tb.targets.values())
-t = tlist[random.randint(0, len(tlist))]
-timg = t.image()[:,:,0]
+while True:
+    t = tlist[random.randint(0, len(tlist))]
+    timg = t.image()[:,:,0]
+    print(timg, timg.shape)
+    exit()
+    img = flow.get_image(t.chip())
+    if t is None or img is None:
+        raise Exception("ImageID not found: %s" % path)
 
-# skeletonize target image
-simg = skeletonize(timg)
+    # skeletonize target image
+    simg = skeletonize(timg)
 
-# build graph from skeleton
-graph = sknw.build_sknw(simg)
+    # build graph from skeleton
+    graph = sknw.build_sknw(simg, True)
 
-# draw them all
-fig = plt.figure()
-fig.add_subplot(1,4,1)
-fig = plt.figure()
-plt.imshow(img)
-plt.title("Satellite image")
+    # draw the sattelite image
+    fig = plt.figure()
+    fig.add_subplot(1,4,1)
+    plt.imshow(img)
+    plt.title(t.imageid)
 
-fig.add_subplot(1,4,2)
-plt.imshow(timg)
-plt.title("Target image")
+    # draw the target
+    fig.add_subplot(1,4,2)
+    plt.imshow(timg)
+    plt.title("Target image")
+   
+    # draw the skeleton image
+    fig.add_subplot(1,4,3)
+    plt.imshow(simg)
+    plt.title("Skeleton image")
 
-fig.add_subplot(1,4,3)
-plt.imshow(simg)
-plt.title("Skeleton image")
+    # draw the skeleton w/ nodes
+    fig.add_subplot(1,4,4)
+    plt.imshow(simg)
+    plt.title("Nodes/edges")
 
-fig.add_subplot(1,4,4)
-plt.imshow(simg)
-plt.title("Skeleton image w/ points")
-
-# draw edges by pts
-for (s,e) in graph.edges():
-    ps = graph[s][e]['pts']
-    plt.plot(ps[:,1], ps[:,0], 'green')
+    # draw edges by pts
+    for (s,e) in graph.edges():
+        ps = graph[s][e][0]['pts']
+        plt.plot(ps[:,1], ps[:,0], 'green')
     
-# draw node by o
-node, nodes = graph.node, graph.nodes()
-ps = np.array([node[i]['o'] for i in nodes])
-plt.plot(ps[:,1], ps[:,0], 'r.')
+    # draw node by o
+    node, nodes = graph.node, graph.nodes()
+    ps = np.array([node[i]['o'] for i in nodes])
+    plt.plot(ps[:,1], ps[:,0], 'r.')
 
-# title and show
-plt.show()
+    # title and show
+    print(t.imageid, t.chip())
+    plt.show()

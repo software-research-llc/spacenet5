@@ -5,6 +5,9 @@ import numpy as np
 import snmodel
 from keras.applications import xception
 import time
+import tensorflow as tf
+
+#tf.compat.v1.disable_eager_execution()
 
 model = None
 model_file = "model.tf"
@@ -16,10 +19,15 @@ def train(model, seq, epochs=100):
 
 def custom_accuracy(y_true, y_pred):
     """Return the percentage of pixels that were correctly predicted as belonging to a road"""
-    return K.sum(y_true * y_pred) / K.sum(y_true)
+    tp = tf.math.count_nonzero(y_true * y_pred)
+    total_pos = tf.math.count_nonzero(y_true)
+    return tf.dtypes.cast(tp, dtype=tf.float64) / tf.maximum(tf.constant(1, dtype=tf.float64), tf.dtypes.cast(total_pos, dtype=tf.float64))
 
 def custom_loss(y_true, y_pred):
-    return 1 - custom_accuracy(y_true, y_pred)
+    tp = tf.math.count_nonzero(y_true * y_pred)
+    total_pos = tf.math.count_nonzero(y_true)
+    loss = tf.constant(1, dtype=tf.float64) - tf.dtypes.cast(tp, dtype=tf.float64) / tf.maximum(tf.constant(1, dtype=tf.float64), tf.dtypes.cast(total_pos, dtype=tf.float64))
+    return loss
 
 keras.metrics.custom_accuracy = custom_accuracy
 keras.losses.custom_loss = custom_loss
@@ -38,7 +46,7 @@ def main():
     else:
         print("Model was loaded successfully.")
     model.summary()
-    model.compile(optimizer='adam', loss='mean_absolute_error', metrics=['accuracy', 'binary_accuracy', custom_accuracy])
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy', 'binary_accuracy', custom_accuracy])
     seq = flow.SpacenetSequence.all()
     i = 0
     while True:

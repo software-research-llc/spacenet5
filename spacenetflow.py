@@ -22,6 +22,7 @@ import mpmath
 import cv2
 import tqdm
 from keras.applications import xception
+import interactatscope
 
 BATCH_SIZE = 32
 
@@ -34,7 +35,7 @@ IMSHAPE = [256,256,3]
 # The image size for skeletonized path networks (training TARGET images, not input samples)
 TARGET_IMSHAPE = [256,256,1]
 # The shape of the decoder output
-DECODER_OUTPUT_SHAPE = [256,256,3]
+DECODER_OUTPUT_SHAPE = IMSHAPE
 
 # The file containing descriptions of road networks (linestrings) for training
 TARGETFILE = "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv"
@@ -172,17 +173,19 @@ class Target:
         return self
 
     def image(self):
-        img = np.zeros(CHIP_CANVAS_SIZE)
+        img = np.zeros(CHIP_CANVAS_SIZE, dtype=np.int32)
         for edge in self.graph.edges():
             origin_x, origin_y = 0, 0
             x1,y1 = edge[0]
             x2,y2 = edge[1]
             x1,y1 = round(x1), round(y1)
             x2,y2 = round(x2), round(y2)
-            cv2.line(img, (x1, y1), (x2, y2), (1,1,1), 5)
+            cv2.line(img, (x1, y1), (x2, y2), (255,255,255), 15)
 #            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 0), 10)
 #        kernel = np.ones((1, 75))
 #        img = cv2.dilate(img, kernel, iterations=1)
 #        img = cv2.erode(img, kernel, iterations=1)
-        img = img
-        return resize(img, TARGET_IMSHAPE)
+        img = img / 255
+        img = resize(img, IMSHAPE)
+        status, ret = cv2.threshold(img, 0.5, 1, cv2.THRESH_BINARY)
+        return np.array(cv2.cvtColor(np.cast['float32'](ret), cv2.COLOR_RGB2GRAY)).reshape(TARGET_IMSHAPE)

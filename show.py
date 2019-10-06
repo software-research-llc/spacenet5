@@ -42,10 +42,12 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
         fig = plt.figure()
         fig.add_subplot(1,2,1)
         plt.imshow(im)
+        plt.title("Original")
         fig.add_subplot(1,2,2)
         tb = flow.TargetBundle()
         plt.imshow(tb[f].image())
         plt.imshow
+        plt.title("Target")
     if not filename:
         fpath = get_file(dataset=dataset)
         print("Displaying %s" % fpath)
@@ -53,9 +55,11 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
         fig = plt.figure()
         fig.add_subplot(1,2,1)
         plt.imshow(im)
+        plt.title("Original")
         fig.add_subplot(1,2,2)
         tb = flow.TargetBundle()
         plt.imshow(tb[os.path.basename(fpath)].image())
+        plt.title("Target")
     plt.show()
 
 if __name__ == '__main__':

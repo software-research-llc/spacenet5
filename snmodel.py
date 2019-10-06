@@ -11,6 +11,7 @@ import cv2
 
 def build_model():
     return unet.get_unet(dropout=0.5, input_img=keras.layers.Input(flow.IMSHAPE))
+    return unet.build_google_unet()
     return xception_model()
 
 def simple_model():
@@ -56,7 +57,13 @@ def preprocess(image):
     return xception.preprocess_input(image)
 
 if __name__ == '__main__':
-    m = keras.models.load_model(train.model_file)
+    try:
+        m = keras.models.load_model(train.model_file)
+    except:
+        try:
+            m = build_model()
+        except Exception as exc:
+            print("ERROR BUILDING MODEL: %s" % exc)
     m.summary()
     import spacenetflow as flow
     import matplotlib.pyplot as plt
@@ -65,20 +72,31 @@ if __name__ == '__main__':
         fpath = flow.get_file()
         tb = flow.TargetBundle()
         inp_im = flow.resize(flow.get_image(fpath), flow.IMSHAPE).reshape([1,] + flow.IMSHAPE)
-        out_im = np.array([m.predict(inp_im)[0]] * 3).reshape(flow.DECODER_OUTPUT_SHAPE)
+        try:
+            out_im = m.predict(inp_im)[0]
+            out_im = cv2.cvtColor(out_im, cv2.COLOR_GRAY2RGB)
+        except Exception as exc:
+            print("ERROR: %s" % exc)
+            out_im = np.zeros(flow.IMSHAPE)
+            out_im = np.array(m.predict(inp_im)).reshape(flow.DECODER_OUTPUT_SHAPE)
+        try:
+            fig = plt.figure()
+            fig.add_subplot(2, 2, 1)
+            plt.imshow(inp_im[0])
+            plt.title("Input")
+            fig.add_subplot(2, 2, 2)
+            plt.imshow(out_im)
+            plt.title("Pred")
+            fig.add_subplot(2, 2, 3)
+            edges = cv2.Canny(np.cast['uint8'](out_im * 255), 1, 255)
+            plt.imshow(edges)
+            plt.title("Post-proc'd pred")
+            fig.add_subplot(2, 2, 4)
+            t_im = tb[os.path.basename(fpath)].image()
+            t_im = cv2.cvtColor(t_im, cv2.COLOR_GRAY2RGB)
+            plt.imshow(t_im)
+            plt.title("Target")
+        except Exception as exc:
+            print("ERROR: %s" % exc)
 
-        fig = plt.figure()
-        fig.add_subplot(2, 2, 1)
-        plt.imshow(inp_im[0])
-        plt.title("Input")
-        fig.add_subplot(2, 2, 2)
-        plt.imshow(out_im)
-        plt.title("Pred")
-        fig.add_subplot(2, 2, 3)
-        edges = cv2.Canny(np.cast['uint8']((out_im * 255)[:,:,0]), 100, 255)
-        plt.imshow(edges)
-        plt.title("Post-proc'd pred")
-        fig.add_subplot(2, 2, 4)
-        plt.imshow(flow.resize(tb[os.path.basename(fpath)].image(), flow.IMSHAPE))
-        plt.title("Target")
         plt.show()

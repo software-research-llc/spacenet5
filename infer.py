@@ -40,12 +40,18 @@ def dilate_and_erode(img):
     img = cv2.erode(img, kernel, iterations=1)
     return img
 
-def infer_and_show(model, image):
+def infer(model, image):
     mask = infer_mask(model, image.reshape([1,] + flow.IMSHAPE))
-    dilated_mask = dilate_and_erode(mask[0][:,:,0])
     graph, skel = infer_roads(mask)
-    masks, graphs, skels = [mask], [graph], [skel]
-    for idx in range(len(masks)):
+    return mask, graph, skel
+
+def infer_and_show(model, image):
+    mask, graph, skel = infer(model, image)
+    dilated_mask = dilate_and_erode(mask[0][:,:,0])
+#    mask = infer_mask(model, image.reshape([1,] + flow.IMSHAPE))
+#    graph, skel = infer_roads(mask)
+#    masks, graphs, skels = [mask], [graph], [skel]
+    for idx in range(1):
         fig = plt.figure()
         fig.add_subplot(1,5,1)
         plt.imshow(image)
@@ -79,12 +85,14 @@ def infer_and_show(model, image):
         
         plt.show()
 
-if __name__ == "__main__":
+def do_all(loop=True):
     model = keras.models.load_model("model.tf")
-    model.summary()
     while True:
         path = flow.get_file()
         image = flow.resize(flow.get_image(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
+        if not loop:
+            ret = infer(model, image) + (path,)
+            return ret
         infer_and_show(model, image)
         sys.stdout.write("(Q)uit, or press any other key to continue.")
         sys.stdout.flush()
@@ -92,3 +100,6 @@ if __name__ == "__main__":
         print()
         if char.lower() == 'q':
             sys.exit()
+
+if __name__ == "__main__":
+    do_all()

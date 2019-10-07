@@ -46,7 +46,7 @@ TARGETFILES = [ "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv",
 DATASET = "PS-RGB"
 # The directory of this file
 MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
-CITIES = [ "AOI_7_Moscow", "AOI_8_Mumbai" ]
+CITIES = [ "AOI_7_Moscow", "AOI_8_Mumbai", "AOI_9_San_Juan" ]
 
 # Where the satellite images are
 BASEDIR = "%s/data/train/" % MYDIR

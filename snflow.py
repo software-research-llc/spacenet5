@@ -104,7 +104,7 @@ def get_image(filename=None, dataset="PS-RGB"):
     return io.imread(filename)
 
 def get_file(filename=None, dataset="PS-RGB", datadir=BASEDIR + CITIES[0]):
-    if os.path.exists(filename):
+    if os.path.exists(str(filename)):
         return filename
     datadir = os.path.join(datadir, dataset.upper())
     if filename is None:

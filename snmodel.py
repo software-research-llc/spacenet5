@@ -60,6 +60,9 @@ def prep_for_skeletonize(img):
     img = np.array(np.round(img), dtype=np.float32)
     return img
 
+def load_model(path="model.tf"):
+    return keras.models.load_model(path)
+
 if __name__ == '__main__':
     try:
         m = keras.models.load_model(train.model_file)

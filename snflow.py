@@ -238,5 +238,5 @@ class Target:
 #        img = cv2.erode(img, kernel, iterations=1)
         img = img / 255
         img = resize(img, IMSHAPE)
-        status, ret = cv2.threshold(img, 0.5, 1, cv2.THRESH_BINARY)
+        status, ret = cv2.threshold(img, 0.25, 1, cv2.THRESH_BINARY)
         return np.array(cv2.cvtColor(np.cast['float32'](ret), cv2.COLOR_RGB2GRAY)).reshape(TARGET_IMSHAPE)

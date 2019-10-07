@@ -17,14 +17,18 @@ import create_submission
 import infer
 
 model = keras.models.load_model("model.tf")
-filenames = []
 graphs = []
+filenames = []
 for city in flow.CITIES:
-    filenames += flow.get_filenames(datadir=flow.BASEDIR + city)
-for fn in tqdm.tqdm(filenames):
-    image = flow.resize(flow.get_image(fn), flow.IMSHAPE).reshape(flow.IMSHAPE)
-    _, graph, _ = infer.infer(model, image)
-    graphs.append(graph)
+    for fn in os.listdir(os.path.join(flow.BASEDIR, city, flow.DATASET)):
+        filenames.append(os.path.join(flow.BASEDIR, city, flow.DATASET, fn))
+for fn in tqdm.tqdm(filenames[::-1]):
+    try:
+        image = flow.resize(flow.get_image(fn), flow.IMSHAPE).reshape(flow.IMSHAPE)
+        _, graph, _ = infer.infer(model, image)
+        graphs.append(graph)
+    except Exception as exc:
+        print(type(exc), exc)
 
 #mask, graph, skel, filename = infer.do_all(loop=False)
 #import pdb; pdb.set_trace()

@@ -98,7 +98,11 @@ def get_npy(filename=None, dataset="PS-RGB"):
 
 def get_image(filename=None, dataset="PS-RGB"):
     if not os.path.exists(filename):
-        filename = get_file(filename=filename, dataset=dataset)
+        for city in CITIES:
+            trying = get_file(filename=filename, dataset=dataset, datadir=BASEDIR + city)
+            if trying:
+                filename = trying
+                break
     if not os.path.exists(filename):
         raise Exception("File not found: %s" % filename)
     return io.imread(filename)

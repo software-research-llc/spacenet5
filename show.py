@@ -9,7 +9,7 @@ import random
 import imageio
 import numpy as np
 from inspect import getsourcefile
-import spacenetflow as flow
+import snflow as flow
 
 DATADIR = "%s/data/train/AOI_7_Moscow/" % os.path.abspath(os.path.dirname(getsourcefile(lambda : 0)))
 

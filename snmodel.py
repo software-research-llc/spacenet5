@@ -2,7 +2,7 @@ import show
 import keras
 from keras.applications import xception
 from scipy.ndimage.interpolation import zoom
-import spacenetflow as flow
+import snflow as flow
 import unet
 import numpy as np
 import train
@@ -69,7 +69,7 @@ if __name__ == '__main__':
         except Exception as exc:
             print("ERROR BUILDING MODEL: %s" % exc)
     m.summary()
-    import spacenetflow as flow
+    import snflow as flow
     import matplotlib.pyplot as plt
     import os
     import sknw

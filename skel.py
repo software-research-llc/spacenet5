@@ -4,7 +4,7 @@ import numpy as np
 import sknw
 import matplotlib.pyplot as plt
 import show
-import spacenetflow as flow
+import snflow as flow
 import random
 
 # get target image built from ground truth road coords

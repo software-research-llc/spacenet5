@@ -1,4 +1,4 @@
-import spacenetflow as flow
+import snflow as flow
 import keras
 import keras.backend as K
 import numpy as np
@@ -9,14 +9,23 @@ import tensorflow as tf
 
 #tf.compat.v1.disable_eager_execution()
 
+EPOCHS = 25
 model = None
 model_file = "model.tf"
 i = 0
 
-def train(model, seq, epochs=50):
+def train(model, seq, epochs=EPOCHS):
+    iters = 0
     for x, y in seq:
+        start = time.time()
         history = model.fit(x, y, batch_size=seq.batch_size, epochs=epochs, verbose=1)
-    print(history)
+        stop = time.time()
+        steptime = stop - start
+        totaltime = len(seq) * steptime / 60
+        iters += 1
+        print("{:15s} {:^20s} {:^20s} {:^15s} {:^20s}".format("Full epochs", "Secs per iteration", "Mins per full epoch", "Batch size", "Samples remaining"))
+        print("{:15s} {:^20.2f} {:^20.2f} {:^15s} {:^20s}".format(str(i), steptime, totaltime, str(len(x)), str(len(seq) * len(x) - iters * len(x))))
+    print(history.history['loss'])
 
 def custom_accuracy(y_true, y_pred):
     """Return the percentage of pixels that were correctly predicted as belonging to a road"""

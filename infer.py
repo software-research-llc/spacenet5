@@ -1,3 +1,4 @@
+import sys
 import snflow as flow
 import numpy as np
 import snmodel
@@ -6,6 +7,8 @@ from skimage.morphology import skeletonize
 import matplotlib.pyplot as plt
 import sknw
 import keras
+import time
+import getch
 
 def infer_mask(model, image):
     output = model.predict(image)
@@ -24,13 +27,15 @@ def infer_roads(masks):
     return graphs, skels
 
 def prep_for_skeletonize(img):
-    img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    _, img = cv2.threshold(img, 0.25, 1, cv2.THRESH_BINARY)
+    img = dilate_and_erode(img)
     img = np.array(np.round(img), dtype=np.float32)
     return img
 
 def dilate_and_erode(img):
-    kernel = np.ones((1,50))
+    kernel = np.ones((1,35))
     img = cv2.dilate(img, kernel, iterations=1)
     img = cv2.erode(img, kernel, iterations=1)
     return img
@@ -38,7 +43,7 @@ def dilate_and_erode(img):
 def infer_and_show(model, image):
     mask = infer_mask(model, image.reshape([1,] + flow.IMSHAPE))
     dilated_mask = dilate_and_erode(mask[0][:,:,0])
-    graph, skel = infer_roads(dilated_mask)
+    graph, skel = infer_roads(mask)
     masks, graphs, skels = [mask], [graph], [skel]
     for idx in range(len(masks)):
         fig = plt.figure()
@@ -77,6 +82,13 @@ def infer_and_show(model, image):
 if __name__ == "__main__":
     model = keras.models.load_model("model.tf")
     model.summary()
-    path = flow.get_file()
-    image = flow.resize(flow.get_image(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
-    infer_and_show(model, image)
+    while True:
+        path = flow.get_file()
+        image = flow.resize(flow.get_image(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
+        infer_and_show(model, image)
+        sys.stdout.write("(Q)uit, or press any other key to continue.")
+        sys.stdout.flush()
+        char = getch.getch()
+        print()
+        if char.lower() == 'q':
+            sys.exit()

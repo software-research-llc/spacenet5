@@ -36,22 +36,24 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
         *filename: "The name of the file, or a substring within the name"):
     """Leave filename blank to choose a random image"""
     for f in filename:
-        fpath = get_file(filename=f, dataset=dataset)
-        print("Displaying %s" % fpath)
-        im = get_image(filename=fpath, dataset=dataset)
+        im = flow.get_image(filename=f, dataset=dataset)
         fig = plt.figure()
         fig.add_subplot(1,2,1)
         plt.imshow(im)
         plt.title("Original")
         fig.add_subplot(1,2,2)
         tb = flow.TargetBundle()
-        plt.imshow(tb[f].image())
+        binim = tb[f].image()
+        for val in tb.targets.values():
+            if f == val.imageid:
+                print("Match: %s" % f)
+        plt.imshow(binim[:,:,0])
         plt.imshow
-        plt.title("Target")
+        plt.title("Target: %s" % f)
     if not filename:
-        fpath = get_file(dataset=dataset)
+        fpath = flow.get_file(dataset=dataset)
         print("Displaying %s" % fpath)
-        im = get_image(filename=fpath, dataset=dataset)
+        im = flow.get_image(filename=fpath, dataset=dataset)
         fig = plt.figure()
         fig.add_subplot(1,2,1)
         plt.imshow(im)

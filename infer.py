@@ -14,13 +14,14 @@ def infer_mask(model, image):
     output = model.predict(image)
     return np.array(output)
 
-def infer_roads(masks):
+def infer_roads(masks, chipname=''):
     skels = []
     graphs = []
     for mask in masks:
         img = prep_for_skeletonize(mask)
         skel = skeletonize(img)
         graph = sknw.build_sknw(skel)
+        graph.name = chipname
         return graph, skel
         skels.append(skel)
         graphs.append(graph)
@@ -29,8 +30,8 @@ def infer_roads(masks):
 def prep_for_skeletonize(img):
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    _, img = cv2.threshold(img, 0.25, 1, cv2.THRESH_BINARY)
     img = dilate_and_erode(img)
+    _, img = cv2.threshold(img, 0.25, 1, cv2.THRESH_BINARY)
     img = np.array(np.round(img), dtype=np.float32)
     return img
 
@@ -40,9 +41,9 @@ def dilate_and_erode(img):
     img = cv2.erode(img, kernel, iterations=1)
     return img
 
-def infer(model, image):
+def infer(model, image, chipname=''):
     mask = infer_mask(model, image.reshape([1,] + flow.IMSHAPE))
-    graph, skel = infer_roads(mask)
+    graph, skel = infer_roads(mask, chipname)
     return mask, graph, skel
 
 def infer_and_show(model, image):

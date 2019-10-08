@@ -79,7 +79,7 @@ if __name__ == '__main__':
     from skimage.morphology import skeletonize
     tb = flow.TargetBundle()
     while True:
-        fpath = flow.get_file()
+        fpath = "/home/mmiron/src/spacenet5/data/train/AOI_7_Moscow/PS-RGB/SN5_roads_train_AOI_7_Moscow_PS-RGB_chip0.tif"
         inp_im = flow.resize(flow.get_image(fpath), flow.IMSHAPE).reshape([1,] + flow.IMSHAPE)
         try:
             out_im = m.predict(inp_im)[0]
@@ -92,12 +92,12 @@ if __name__ == '__main__':
             fig = plt.figure()
             fig.add_subplot(2, 2, 1)
             plt.imshow(inp_im[0])
-            plt.title("Satellite image (input)")
+            plt.title("1. Satellite image (input)")
 
             fig.add_subplot(2, 2, 2)
             out_im = cv2.cvtColor(out_im, cv2.COLOR_GRAY2BGR)
             plt.imshow(out_im)#[:,:,0])
-            plt.title("Predicted (output)")
+            plt.title("2. Road predictions (output)")
 
             fig.add_subplot(2, 2, 3)
             buf = cv2.cvtColor(out_im, cv2.COLOR_RGB2GRAY)
@@ -112,20 +112,21 @@ if __name__ == '__main__':
                 for (s,e) in graph.edges():
                     ps = graph[s][e][0]['pts']
                     plt.plot(ps[:,1], ps[:,0], 'green')
-    
+                    print(ps[:,1], ps[:,0])
+
                 # draw node by o
                 node, nodes = graph.node, graph.nodes()
                 ps = np.array([node[i]['o'] for i in nodes])
                 plt.plot(ps[:,1], ps[:,0], 'r.')
             except Exception as exc:
                 print("ERROR drawing graph: %s" % exc)
-            plt.title("Graph built from prediction")
+            plt.title("3. Graph built from predictions")
 
             fig.add_subplot(2, 2, 4)
             t_im = tb[os.path.basename(fpath)].image()
             t_im = cv2.cvtColor(t_im, cv2.COLOR_GRAY2RGB)
             plt.imshow(t_im)
-            plt.title("Ground truth (manually crafted by a person)")
+            plt.title("Ground truth (drawn by a person)")
         except Exception as exc:
             print("ERROR in second try: %s" % exc)
             raise exc

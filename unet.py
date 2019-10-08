@@ -27,7 +27,7 @@ def conv2d_block(input_tensor, n_filters, kernel_size=3, batchnorm=True):
     return x
 
 def get_unet(input_img, n_filters=16, dropout=0.5, batchnorm=True):
-    # contracting path
+    # down we go
     c1 = conv2d_block(input_img, n_filters=n_filters*1, kernel_size=3, batchnorm=batchnorm)
     p1 = MaxPooling2D((2, 2)) (c1)
     p1 = Dropout(dropout)(p1)
@@ -46,7 +46,7 @@ def get_unet(input_img, n_filters=16, dropout=0.5, batchnorm=True):
     
     c5 = conv2d_block(p4, n_filters=n_filters*16, kernel_size=3, batchnorm=batchnorm)
    
-    # expansive path
+    # build it back up
     u6 = Conv2DTranspose(n_filters*16, (3, 3), strides=(2, 2), padding='same') (c5)
     u6 = concatenate([u6, c4])
     u6 = Dropout(dropout)(u6)

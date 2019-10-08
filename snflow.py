@@ -26,16 +26,16 @@ import interactatscope
 import random
 import preprocess
 
-BATCH_SIZE = 12
+BATCH_SIZE = 45
 
 # Accuracy of the multiprecision floating point arithmetic library
 mpmath.dps = 100
 # The size of unmodified satellite images
 CHIP_CANVAS_SIZE = [1300,1300,3]
 # The target image size for input to the network
-IMSHAPE = [512,512,3]
+IMSHAPE = [256,256,3]
 # The image size for skeletonized path networks (training TARGET images, not input samples)
-TARGET_IMSHAPE = [512,512,1]
+TARGET_IMSHAPE = [256,256,1]
 # The shape of the decoder output
 DECODER_OUTPUT_SHAPE = IMSHAPE
 
@@ -46,7 +46,7 @@ TARGETFILES = [ "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv",
 DATASET = "PS-RGB"
 # The directory of this file
 MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
-CITIES = [ "AOI_7_Moscow", "AOI_8_Mumbai", "AOI_9_San_Juan" ]
+CITIES = [ "AOI_7_Moscow", "AOI_8_Mumbai" ]#, "AOI_9_San_Juan" ]
 
 # Where the satellite images are
 BASEDIR = "%s/data/train/" % MYDIR
@@ -97,13 +97,13 @@ def get_npy(filename=None, dataset="PS-RGB"):
     return np.asarray(imageio.imread(filename))
 
 def get_image(filename=None, dataset="PS-RGB"):
-    if not os.path.exists(filename):
+    if not os.path.exists(str(filename)):
         for city in CITIES:
             trying = get_file(filename=filename, dataset=dataset, datadir=BASEDIR + city)
             if trying:
                 filename = trying
                 break
-    if not os.path.exists(filename):
+    if not os.path.exists(str(filename)):
         raise Exception("File not found: %s" % filename)
     return io.imread(filename)
 
@@ -114,14 +114,14 @@ def get_file(filename=None, dataset="PS-RGB", datadir=BASEDIR + CITIES[0]):
     if filename is None:
         files = os.listdir(datadir)
         filename = os.path.join(datadir, files[random.randint(0,len(files)-1)])
-    if not os.path.exists(filename):
-        trying = glob.glob("%s/*%s*" % (datadir, filename))
+    if not os.path.exists(str(filename)):
+        trying = glob.glob("%s/*%s.tif" % (datadir, filename))
         if trying:
             return trying[0]
         else:
-            trying = re.search("chip(0)*(\d+)$", str(filename))
+            trying = re.search("chip[0]*(\d+)$", str(filename))
             if trying:
-                trying = trying.groups()[-1]
+                trying = trying.groups()[0]
                 trying = glob.glob("%s/*%s*.tif" % (datadir, trying))
                 if trying:
                     filename = trying[0]
@@ -173,14 +173,20 @@ class TargetBundle:
             self.targets[imageid].add_linestring(linestring, weight)
 
     def __getitem__(self, idx):
-        try:
-            return self.targets[idx]
-        except KeyError:
-            try:
-                return self.targets[Target.expand_imageid(idx)]
-            except KeyError as exc:
-                raise KeyError("cannot find `%s' or `%s' in target dict" %
-                               (str(idx), Target.expand_imageid(idx)))
+        ret = self.targets.get(idx, None)
+        if not ret:
+            expanded = Target.expand_imageid(idx)
+            ret = self.targets.get(expanded, None)
+            if ret:
+                return ret
+            for key in self.targets.keys():
+                if re.search(expanded, key):
+                    return self.targets[key]
+            for key in self.targets.keys():
+                if re.search(idx, key):
+                    return self.targets[key]
+        else:
+            return ret
 
     def __len__(self, idx):
         return len(self.targets)
@@ -205,6 +211,8 @@ class Target:
         m = re.search(regex, imageid)
         mstr = m.string[m.start():m.end()]
         mnum = m.groups()[0]
+        ret = imageid.replace(mstr, "") + "chip" + mnum
+        return ret
         if len(mnum) >= 5:
             ret = imageid
         else:

@@ -56,7 +56,7 @@ def main():
         print("Model was loaded successfully.")
         time.sleep(5)
     model.summary()
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy', 'binary_accuracy', 'mse', 'mae', 'hinge'])
     seq = flow.SpacenetSequence.all()
     i = 0
     while True:

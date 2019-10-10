@@ -1,30 +1,17 @@
 #!/usr/bin/env python3
-import sys
 import glob
 import os
 import re
 import random
-import math
-from collections import namedtuple
 from inspect import getsourcefile
-import plac
-import scipy
-import imageio
 from skimage import io
-from skimage.io import imread
 from skimage.transform import resize
 import networkx
-import matplotlib.pyplot as plt
 import numpy as np
 import keras
 import pandas as pd
 import mpmath
 import cv2
-import tqdm
-from keras.applications import xception
-import interactatscope
-import random
-import preprocess
 import logging
 log = logging.getLogger(__name__)
 
@@ -44,7 +31,7 @@ log = logging.getLogger(__name__)
 BATCH_SIZE = 5
 
 # see header above
-N_CLASSES = 4
+N_CLASSES = 3
 
 # Accuracy of the multiprecision floating point arithmetic library (doesn't matter in the end)
 mpmath.dps = 100
@@ -63,7 +50,7 @@ TARGET_IMSHAPE = [IMSHAPE[0], IMSHAPE[1], N_CLASSES]
 DECODER_OUTPUT_SHAPE = TARGET_IMSHAPE
 
 # The files containing road network linestrings for ground truth during training
-TARGETFILES = [ 
+TARGETFILES = [
            #     "train_AOI_4_Shanghai_geojson_roads_speed_wkt_weighted_simp.csv",
                 "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv",
                 "train_AOI_8_Mumbai_geojson_roads_speed_wkt_weighted_simp.csv"
@@ -234,7 +221,7 @@ class TargetBundle:
         else:
             return ret
 
-    def __len__(self, idx):
+    def __len__(self):
         return len(self.targets)
 
 class Target:
@@ -293,7 +280,7 @@ class Target:
     def pixel(self, weight):
         """Returns the tuple of a pixel for painting, e.g. (0, 255, 0, 0)"""
         channel = N_CLASSES / self.tb.max_speed * weight
-        channel = channel * (4 / N_CLASSES)
+        channel = channel# * (4 / N_CLASSES)
         pixel = [0] * 4
         pixel[round(channel)] = 255
         return pixel
@@ -314,7 +301,7 @@ class Target:
         down its center, then the corresponding target image would have 255 in every x, y index
         position of the alpha channel corresponding to the x,y pixel coordinates of the road.
         """
-        img = np.zeros((CHIP_CANVAS_SIZE[0], CHIP_CANVAS_SIZE[1], N_CLASSES), dtype=np.uint8)
+        img = np.zeros((CHIP_CANVAS_SIZE[0], CHIP_CANVAS_SIZE[1], N_CLASSES))
         for edge in self.graph.edges():
             weight = self.graph[edge[0]][edge[1]]['weight']
             pixel = self.pixel(weight)
@@ -324,4 +311,4 @@ class Target:
             x2,y2 = round(x2), round(y2)
             cv2.line(img, (x1, y1), (x2, y2), pixel, 10)
         img = resize(img, TARGET_IMSHAPE, anti_aliasing=True)
-        return np.cast['uint8'](img)
+        return np.cast['uint8'](img).reshape(TARGET_IMSHAPE)

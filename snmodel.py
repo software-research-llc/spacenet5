@@ -8,9 +8,11 @@ import numpy as np
 import train
 import cv2
 import time
+import loss
+
 
 def build_model():
-    return unet.get_unet(dropout=0.25, input_img=keras.layers.Input(flow.IMSHAPE))
+    return unet.get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
     return unet.build_google_unet()
     return xception_model()
 
@@ -79,7 +81,7 @@ if __name__ == '__main__':
     from skimage.morphology import skeletonize
     tb = flow.TargetBundle()
     while True:
-        fpath = "/home/mmiron/src/spacenet5/data/train/AOI_7_Moscow/PS-RGB/SN5_roads_train_AOI_7_Moscow_PS-RGB_chip0.tif"
+        fpath = flow.get_file()#"/home/mmiron/src/spacenet5/data/train/AOI_7_Moscow/PS-RGB/SN5_roads_train_AOI_7_Moscow_PS-RGB_chip0.tif"
         inp_im = flow.resize(flow.get_image(fpath), flow.IMSHAPE).reshape([1,] + flow.IMSHAPE)
         try:
             out_im = m.predict(inp_im)[0]
@@ -95,7 +97,7 @@ if __name__ == '__main__':
             plt.title("1. Satellite image (input)")
 
             fig.add_subplot(2, 2, 2)
-            out_im = cv2.cvtColor(out_im, cv2.COLOR_GRAY2BGR)
+            out_im = cv2.cvtColor(out_im, cv2.COLOR_GRAY2RGB)
             plt.imshow(out_im)#[:,:,0])
             plt.title("2. Road predictions (output)")
 
@@ -124,8 +126,8 @@ if __name__ == '__main__':
 
             fig.add_subplot(2, 2, 4)
             t_im = tb[os.path.basename(fpath)].image()
-            t_im = cv2.cvtColor(t_im, cv2.COLOR_GRAY2RGB)
-            plt.imshow(t_im)
+            #t_im = cv2.cvtColor(t_im, cv2.COLOR_GRAY2RGB)
+            plt.imshow(t_im[:,:,0])
             plt.title("Ground truth (drawn by a person)")
         except Exception as exc:
             print("ERROR in second try: %s" % exc)

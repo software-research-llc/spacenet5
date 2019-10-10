@@ -74,9 +74,11 @@ def graphs_to_wkt(graphs, output_csv_path):
             weights.append(weight)
 
             pts = graph[s][e]['pts']
-            xs = pts[:,1]
-            ys = pts[:,0]
-            if len(xs) > 1 and len(ys) > 1:
+            node, nodes = graph.node, graph.nodes()
+            ps = np.array([node[i]['o'] for i in nodes])
+            xs = pts[:,1]# + ps[:,1]
+            ys = pts[:,0]# + ps[:,0]
+            if len(xs) > 1:
                 linestring = "LINESTRING ({} {}".format(tr_x(xs[0]), tr_y(ys[0]))
                 for i in range(1, len(pts)):
                     linestring += ", {} {}".format(tr_x(xs[i]), tr_y(ys[i]))
@@ -85,18 +87,31 @@ def graphs_to_wkt(graphs, output_csv_path):
                 linestrings.append(linestring)
             else:
                 log.info("{}: unconnected point".format(chipname))
-#            import pdb; pdb.set_trace()
-
+            """
+            xs = ps[:,1]
+            ys = ps[:,0]
+            if len(xs) > 1:
+                linestring = "LINESTRING ({} {}".format(tr_x(xs[0]), tr_y(ys[0]))
+                for i in range(1, len(xs)):
+                    linestring += ", {} {}".format(tr_x(xs[i]), tr_y(ys[i]))
+                linestring += ")"
+                log.debug(linestring)
+                weights.append(weight / 2)
+                linestrings.append(linestring)
+            """
         for idx,linestring in enumerate(linestrings):
             error_shown = False
             output_csv.write("{},".format(chipname))
             output_csv.write('"{}",'.format(linestring))
             output_csv.write("0.0,")
             try:
-                output_csv.write("{}\n".format(weights[i]))
+                output_csv.write("{}\n".format(weights[idx]))
             except Exception as exc:
                 if not error_shown:
+                    error_shown = True
                     log.error("{} at idx {} / {} in {}".format(str(exc), idx, len(weights), chipname))
+                else:
+                    log.debug("{} at idx {} / {} in {}".format(str(exc), idx, len(weights), chipname))
                 output_csv.write("0.0\n")
         """
             print("weight:")

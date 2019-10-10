@@ -1,6 +1,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
-from keras.layers import MaxPooling2D, Dropout, BatchNormalization, Conv2D, Activation, Conv2DTranspose, Concatenate, concatenate, Conv3D
+from keras.layers import MaxPooling2D, Dropout, BatchNormalization, Conv2D, Activation, Conv2DTranspose, Concatenate, concatenate, Conv3D, Cropping2D
 from keras.models import Model
+import keras
 import tensorflow as tf
 
 from tensorflow_examples.models.pix2pix import pix2pix
@@ -11,15 +12,59 @@ tfds.disable_progress_bar()
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
 
+
+DOWN = -1
+UP = 1
+OUT = 0
+
+def conv3x3_relu_block(inp, n_filters, kernel_size=3, direction=DOWN):
+    x = Conv2D(filters=n_filters, kernel_size=(kernel_size, kernel_size), activation='relu')(inp)
+    y = Conv2D(filters=n_filters, kernel_size=(kernel_size, kernel_size), activation='relu')(x)
+
+    if direction is DOWN:
+        x = MaxPooling2D((1, 1), strides=(2, 2))(y)
+    elif direction is UP:
+        x = Conv2DTranspose(n_filters, kernel_size=(kernel_size, kernel_size),
+                            strides=(2, 2), activation='relu')(y)
+#        x = Conv2D(n_filters, kernel_size=(kernel_size, kernel_size), activation='relu')(x)
+    else:
+        x = Conv2D(n_filters, kernel_size=(1,1))(y)
+
+    return x, y
+
+def build(inp):
+    base_filters = 64
+    n_classes = 4
+    x1,y1 = conv3x3_relu_block(inp, n_filters=base_filters)
+    x2,y2 = conv3x3_relu_block(x1, n_filters=base_filters * 2)
+    x3,y3 = conv3x3_relu_block(x2, n_filters=base_filters * 2 ** 2)
+    x4,y4 = conv3x3_relu_block(x3, n_filters=base_filters * 2 ** 3)
+
+    x5,y5 = conv3x3_relu_block(x4, kernel_size=3, n_filters=base_filters * 2 ** 4, direction=UP)
+    x5 = Cropping2D((15,15))(x5)
+
+    x = concatenate([x5, y5])
+    x, _ = conv3x3_relu_block(x, kernel_size=2, n_filters=base_filters * 2 ** 3, direction=UP)
+    y3 = concatenate([x3, y3])
+    y2 = conv3x3_relu_block(y3, kernel_size=2, n_filters=base_filters * 2 ** 2, direction=UP)
+    y2 = concatenate([x2,y2])
+    y1 = conv3x3_relu_block(y2, kernel_size=2, n_filters=base_filters * 2, direction=UP)
+    y1 = concatenate([x1,y1])
+
+    x = conv3x3_relu_block(y1, n_filters=n_classes, direction=OUT)
+    return keras.models.Model(inputs=[inp], outputs=[x])
+
 def conv2d_block(input_tensor, n_filters, kernel_size=3, batchnorm=True):
     # first layer
     x = Conv2D(filters=n_filters, kernel_size=(kernel_size, kernel_size),  kernel_initializer="he_normal",
+               #kernel_regularizer=keras.regularizers.l2(),
                padding="same")(input_tensor)
     if batchnorm:
         x = BatchNormalization()(x)
     x = Activation("relu")(x)
     # second layer
     x = Conv2D(filters=n_filters, kernel_size=(kernel_size, kernel_size), kernel_initializer="he_normal",
+               #kernel_regularizer=keras.regularizers.l2(),
                padding="same")(x)
     if batchnorm:
         x = BatchNormalization()(x)
@@ -27,7 +72,6 @@ def conv2d_block(input_tensor, n_filters, kernel_size=3, batchnorm=True):
     return x
 
 def get_unet(input_img, n_filters=16, dropout=0.5, batchnorm=True):
-    # down we go
     c1 = conv2d_block(input_img, n_filters=n_filters*1, kernel_size=3, batchnorm=batchnorm)
     p1 = MaxPooling2D((2, 2)) (c1)
     p1 = Dropout(dropout)(p1)
@@ -46,34 +90,34 @@ def get_unet(input_img, n_filters=16, dropout=0.5, batchnorm=True):
     
     c5 = conv2d_block(p4, n_filters=n_filters*16, kernel_size=3, batchnorm=batchnorm)
    
-    # build it back up
-    u6 = Conv2DTranspose(n_filters*16, (3, 3), strides=(2, 2), padding='same') (c5)
+    u6 = Conv2DTranspose(n_filters*8, (3, 3), strides=(2, 2), padding='same') (c5)
     u6 = concatenate([u6, c4])
     u6 = Dropout(dropout)(u6)
-    c6 = conv2d_block(u6, n_filters=n_filters*16, kernel_size=3, batchnorm=batchnorm)
+    c6 = conv2d_block(u6, n_filters=n_filters*8, kernel_size=3, batchnorm=batchnorm)
 
-    u7 = Conv2DTranspose(n_filters*8, (3, 3), strides=(2, 2), padding='same') (c6)
+    u7 = Conv2DTranspose(n_filters*4, (3, 3), strides=(2, 2), padding='same') (c6)
     u7 = concatenate([u7, c3])
     u7 = Dropout(dropout)(u7)
     c7 = conv2d_block(u7, n_filters=n_filters*4, kernel_size=3, batchnorm=batchnorm)
 
-    u8 = Conv2DTranspose(n_filters*4, (3, 3), strides=(2, 2), padding='same') (c7)
+    u8 = Conv2DTranspose(n_filters*2, (3, 3), strides=(2, 2), padding='same') (c7)
     u8 = concatenate([u8, c2])
     u8 = Dropout(dropout)(u8)
     c8 = conv2d_block(u8, n_filters=n_filters*2, kernel_size=3, batchnorm=batchnorm)
 
-    u9 = Conv2DTranspose(n_filters*2, (3, 3), strides=(2, 2), padding='same') (c8)
+    u9 = Conv2DTranspose(n_filters*1, (3, 3), strides=(2, 2), padding='same') (c8)
     u9 = concatenate([u9, c1], axis=3)
     u9 = Dropout(dropout)(u9)
     c9 = conv2d_block(u9, n_filters=n_filters*1, kernel_size=3, batchnorm=batchnorm)
     
-    outputs = Conv2D(1, (1, 1), activation='sigmoid') (c9)
+    outputs = Conv2D(4, (1, 1), activation='softmax') (c9)
     model = Model(inputs=[input_img], outputs=[outputs])
     return model
 
 def build_google_unet():
-    output_channels = 3
+    output_channels = 1
     base_model = tf.keras.applications.MobileNetV2(input_shape=[128, 128, 3], include_top=False)
+    base_model.trainable = False
 
     # Use the activations of these layers
     layer_names = [
@@ -100,7 +144,7 @@ def build_google_unet():
     # This is the last layer of the model
     last = tf.keras.layers.Conv2DTranspose(
       output_channels, 3, strides=2,
-      padding='same', activation='softmax')  #64x64 -> 128x128
+      padding='same', activation='sigmoid')  #64x64 -> 128x128
 
     inputs = tf.keras.layers.Input(shape=[128, 128, 3])
     x = inputs

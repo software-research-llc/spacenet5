@@ -25,8 +25,10 @@ from keras.applications import xception
 import interactatscope
 import random
 import preprocess
+import logging
+log = logging.getLogger(__name__)
 
-BATCH_SIZE = 45
+BATCH_SIZE = 2
 
 # Accuracy of the multiprecision floating point arithmetic library
 mpmath.dps = 100
@@ -35,18 +37,25 @@ CHIP_CANVAS_SIZE = [1300,1300,3]
 # The target image size for input to the network
 IMSHAPE = [256,256,3]
 # The image size for skeletonized path networks (training TARGET images, not input samples)
-TARGET_IMSHAPE = [256,256,1]
+TARGET_IMSHAPE = [IMSHAPE[0], IMSHAPE[1], 1]
 # The shape of the decoder output
-DECODER_OUTPUT_SHAPE = IMSHAPE
+DECODER_OUTPUT_SHAPE = TARGET_IMSHAPE
 
 # The file containing descriptions of road networks (linestrings) for training
-TARGETFILES = [ "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv",
-                "train_AOI_8_Mumbai_geojson_roads_speed_wkt_weighted_simp.csv" ]
+TARGETFILES = [ 
+           #     "train_AOI_4_Shanghai_geojson_roads_speed_wkt_weighted_simp.csv",
+                "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv",
+                "train_AOI_8_Mumbai_geojson_roads_speed_wkt_weighted_simp.csv"
+              ]
 # The dataset we use (PS-RGB is panchromatic sharpened red-green-blue data)
 DATASET = "PS-RGB"
 # The directory of this file
 MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
-CITIES = [ "AOI_7_Moscow", "AOI_8_Mumbai" ]#, "AOI_9_San_Juan" ]
+CITIES = [
+           #"AOI_4_Shanghai", 
+           "AOI_7_Moscow",
+           "AOI_8_Mumbai"
+         ]#, "AOI_9_San_Juan" ]
 
 # Where the satellite images are
 BASEDIR = "%s/data/train/" % MYDIR
@@ -54,11 +63,14 @@ BASEDIR = "%s/data/train/" % MYDIR
 
 class SpacenetSequence(keras.utils.Sequence):
     def __init__(self, x_set: "List of paths to images",
-                 y_set: "Associated targets", batch_size, transform=False):
+                 y_set: "Associated targets", batch_size,
+                 transform=False,
+                 test=None):
         self.x, self.y = x_set, y_set
-        random.shuffle(self.x)
+#        random.shuffle(self.x)
         self.batch_size = batch_size
         self.transform = transform
+        self.test = test
 
     def __len__(self):
         return int(np.ceil(len(self.x) / float(self.batch_size)))
@@ -71,7 +83,7 @@ class SpacenetSequence(keras.utils.Sequence):
                 try:
                     file_name = os.path.join(BASEDIR, city, DATASET, ex)
                     image = get_image(file_name)
-                    x.append(resize(image, IMSHAPE))
+                    x.append(image)
                 except Exception as exc:
                     pass
 
@@ -79,10 +91,6 @@ class SpacenetSequence(keras.utils.Sequence):
 #               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
         x = np.array(x)
         y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
-        for idx in range(len(x)):
-            if self.transform:
-                if random.random() > self.transform:
-                    x[idx] = preprocess.transform(x[idx])
         return x,y
 
     @staticmethod
@@ -97,6 +105,7 @@ def get_npy(filename=None, dataset="PS-RGB"):
     return np.asarray(imageio.imread(filename))
 
 def get_image(filename=None, dataset="PS-RGB"):
+    requested = filename
     if not os.path.exists(str(filename)):
         for city in CITIES:
             trying = get_file(filename=filename, dataset=dataset, datadir=BASEDIR + city)
@@ -104,8 +113,9 @@ def get_image(filename=None, dataset="PS-RGB"):
                 filename = trying
                 break
     if not os.path.exists(str(filename)):
+        log.info("Returning contents of {} for requested file {}".format(filename, requested))
         raise Exception("File not found: %s" % filename)
-    return io.imread(filename)
+    return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
 
 def get_file(filename=None, dataset="PS-RGB", datadir=BASEDIR + CITIES[0]):
     if os.path.exists(str(filename)):
@@ -145,13 +155,14 @@ def get_imageids(datadir=BASEDIR + CITIES[0], dataset="PS-RGB"):
 class TargetBundle:
     def __init__(self, transform=False):
         self.targets = {}
+        self.max_speed = 0
         i = 0
         imageids = []
         for city in CITIES:
             imageids += get_imageids(datadir=BASEDIR + city)
         for imageid in imageids:
             imageid = Target.expand_imageid(imageid)
-            self.targets[imageid] = Target(imageid)
+            self.targets[imageid] = Target(imageid, tb=self)
             i += 1
         self.add_df(Target.df)
 
@@ -161,9 +172,9 @@ class TargetBundle:
                 continue
             imageid = Target.expand_imageid(df['ImageId'][idx])
             try:
-                weight = mpmath.mpf(df['length_m'][idx]) / mpmath.mpf(df['travel_time_s'][idx])
+                weight = float(df['travel_time_s'][idx])
             except ZeroDivisionError:
-                print("ZeroDivisionError: %s, %s, length = %s, time = %s" % (imageid,
+                log.error("ZeroDivisionError: %s, %s, length = %s, time = %s" % (imageid,
                       linestring,
                       df['length_m'][idx],
                       df['travel_time_s'][idx]))
@@ -201,9 +212,10 @@ class Target:
     for targetfile in TARGETFILES[1:]:
         df.append(pd.read_csv(targetfile))
 
-    def __init__(self, imageid):
+    def __init__(self, imageid, tb):
         self.graph = networkx.Graph()
         self.imageid = imageid
+        self.tb = tb
 
     @staticmethod
     def expand_imageid(imageid):
@@ -223,6 +235,8 @@ class Target:
     def add_linestring(self, string, weight):
         if string.lower().find("empty") != -1:
             return
+        elif weight > self.tb.max_speed:
+            self.tb.max_speed = weight
         edges = re.findall(Target.regex, string)
         for i in range(len(edges) - 1):
             x1,y1 = edges[i].split(" ")
@@ -235,20 +249,23 @@ class Target:
     def chip(self):
         return re.search("_(chip\d+)", self.imageid).groups()[0]
 
+    def pixel(self, weight):
+        """Injection, set of observed speeds to the set [1,n_classes]"""
+        n_classes = 4
+        ret = min(1, n_classes / self.tb.max_speed * weight)
+        return ret * (255 / n_classes)
+
     def image(self):
-        img = np.zeros(CHIP_CANVAS_SIZE, dtype=np.int32)
+        img = np.zeros((CHIP_CANVAS_SIZE[0], CHIP_CANVAS_SIZE[1]), dtype=np.uint8)
         for edge in self.graph.edges():
-            origin_x, origin_y = 0, 0
+            weight = self.graph[edge[0]][edge[1]]['weight']
+            pix = self.pixel(weight)
             x1,y1 = edge[0]
             x2,y2 = edge[1]
             x1,y1 = round(x1), round(y1)
             x2,y2 = round(x2), round(y2)
-            cv2.line(img, (x1, y1), (x2, y2), (255,255,255), 25)
-#            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 0), 10)
-#        kernel = np.ones((1, 75))
-#        img = cv2.dilate(img, kernel, iterations=1)
-#        img = cv2.erode(img, kernel, iterations=1)
+            cv2.line(img, (x1, y1), (x2, y2), pix, 10)
         img = img / 255
-        img = resize(img, IMSHAPE)
-        status, ret = cv2.threshold(img, 0.25, 1, cv2.THRESH_BINARY)
-        return np.array(cv2.cvtColor(np.cast['float32'](ret), cv2.COLOR_RGB2GRAY)).reshape(TARGET_IMSHAPE)
+        img = resize(img, TARGET_IMSHAPE)
+#        status, ret = cv2.threshold(img, 0.05, 1, cv2.THRESH_BINARY)
+        return np.array(img, dtype=np.float64)

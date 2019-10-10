@@ -6,6 +6,7 @@ import snmodel
 from keras.applications import xception
 import time
 import tensorflow as tf
+import loss
 
 #tf.compat.v1.disable_eager_execution()
 
@@ -18,7 +19,7 @@ def train(model, seq, epochs=EPOCHS):
     iters = 0
     for x, y in seq:
         start = time.time()
-        history = model.fit(x, y, batch_size=seq.batch_size, epochs=epochs, verbose=1)
+        history = model.fit(x, y, batch_size=seq.batch_size, epochs=epochs, validation_split=0.1, verbose=1, use_multiprocessing=True)
         stop = time.time()
         steptime = stop - start
         totaltime = len(seq) * steptime / 60
@@ -39,9 +40,6 @@ def custom_loss(y_true, y_pred):
     loss = tf.constant(1, dtype=tf.float64) - tf.dtypes.cast(tp, dtype=tf.float64) / tf.maximum(tf.constant(1, dtype=tf.float64), tf.dtypes.cast(total_pos, dtype=tf.float64))
     return loss
 
-keras.metrics.custom_accuracy = custom_accuracy
-keras.losses.custom_loss = custom_loss
-
 def load(path=model_file):
     global model
     model = keras.models.load_model(model_file)
@@ -58,7 +56,7 @@ def main():
         print("Model was loaded successfully.")
         time.sleep(5)
     model.summary()
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy', 'binary_accuracy'])
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
     seq = flow.SpacenetSequence.all()
     i = 0
     while True:
@@ -73,10 +71,6 @@ if __name__ == '__main__':
         print(exc)
     try:
         main()
-    except Exception as exc:
-        print("Saving and re-raising %s..." % str(exc))
-        model.save(model_file)
-        raise exc
     except KeyboardInterrupt:
         print("Finished %d full epochs." % i)
         print("\nSaving to file in 5...")

@@ -13,25 +13,6 @@ import snflow as flow
 
 DATADIR = "%s/data/train/AOI_7_Moscow/" % os.path.abspath(os.path.dirname(getsourcefile(lambda : 0)))
 
-def get_npy(filename=None, dataset="PS-RGB"):
-    filename = get_file(filename=filename, dataset=dataset)
-    return np.asarray(imageio.imread(filename))
-
-def get_image(filename=None, dataset="PS-RGB"):
-    filename = get_file(filename=filename, dataset=dataset)
-    return flow.resize(io.imread(filename), flow.IMSHAPE)
-
-def get_file(filename=None, dataset="PS-RGB"):
-    datadir = os.path.join(DATADIR, dataset.upper())
-    if not filename:
-        files = os.listdir(datadir)
-        filename = os.path.join(datadir, files[random.randint(0,len(files)-1)])
-    if not os.path.exists(filename):
-        filename = glob.glob("%s/*%s*" % (datadir, filename))
-        if filename:
-            return filename[0]
-    return filename
-
 def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
         *filename: "The name of the file, or a substring within the name"):
     """Leave filename blank to choose a random image"""
@@ -60,7 +41,7 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
         plt.title("Original")
         fig.add_subplot(1,2,2)
         tb = flow.TargetBundle()
-        plt.imshow(tb[os.path.basename(fpath)].image())
+        plt.imshow(tb[os.path.basename(fpath)].image()[:,:,0])
         plt.title("Target")
     plt.show()
 

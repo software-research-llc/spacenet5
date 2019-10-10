@@ -3,7 +3,7 @@ from keras.layers import MaxPooling2D, Dropout, BatchNormalization, Conv2D, Acti
 from keras.models import Model
 import keras
 import tensorflow as tf
-
+import snflow as flow
 from tensorflow_examples.models.pix2pix import pix2pix
 
 import tensorflow_datasets as tfds
@@ -110,7 +110,7 @@ def get_unet(input_img, n_filters=16, dropout=0.5, batchnorm=True):
     u9 = Dropout(dropout)(u9)
     c9 = conv2d_block(u9, n_filters=n_filters*1, kernel_size=3, batchnorm=batchnorm)
     
-    outputs = Conv2D(4, (1, 1), activation='softmax') (c9)
+    outputs = Conv2D(flow.N_CLASSES, (1, 1), activation='sigmoid') (c9)
     model = Model(inputs=[input_img], outputs=[outputs])
     return model
 

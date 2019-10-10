@@ -28,46 +28,74 @@ import preprocess
 import logging
 log = logging.getLogger(__name__)
 
-BATCH_SIZE = 2
+# We represent the target masks as N-channel images, with each channel corresponding to
+# the meaning of a pixel being "no road" (0), "slow road" (1), "midspeed road" (2),
+# or "fast road" (3).  The N_ClASSES can be <= 4 because we use image processing libs
+# to manipulate our data, and they require at most 4 channels (red, green, blue, alpha),
+# but there will probably be a couple of functions that throw exceptions b/c I didn't try
+# anything but 4.
+#
+# e.g. if there's a fast road drawn as a line from the middle of the top of a chip to the
+# middle of the bottom of the chip (here chip means a square satellite image), i.e. right
+# down its center, then the corresponding target image would have 255 in every x, y index
+# position of the alpha channel corresponding to the x,y pixel coordinates of the road.
 
-# Accuracy of the multiprecision floating point arithmetic library
+# batch size
+BATCH_SIZE = 5
+
+# see header above
+N_CLASSES = 4
+
+# Accuracy of the multiprecision floating point arithmetic library (doesn't matter in the end)
 mpmath.dps = 100
-# The size of unmodified satellite images
+
+# The shape of unmodified satellite images
 CHIP_CANVAS_SIZE = [1300,1300,3]
-# The target image size for input to the network
+
+# The shape of images that are fed to the neural network (scaled CHIP_CANVAS_SIZE)
 IMSHAPE = [256,256,3]
-# The image size for skeletonized path networks (training TARGET images, not input samples)
-TARGET_IMSHAPE = [IMSHAPE[0], IMSHAPE[1], 1]
-# The shape of the decoder output
+
+# Target image shape, i.e. shape of the neural net output.  Note that our U-net
+# doesn't like the aspect ratio being changed, so keep dims in the same proportion
+TARGET_IMSHAPE = [IMSHAPE[0], IMSHAPE[1], N_CLASSES]
+
+# The shape of the decoder output (this more or less has to equal TARGET_IMSHAPE)
 DECODER_OUTPUT_SHAPE = TARGET_IMSHAPE
 
-# The file containing descriptions of road networks (linestrings) for training
+# The files containing road network linestrings for ground truth during training
 TARGETFILES = [ 
            #     "train_AOI_4_Shanghai_geojson_roads_speed_wkt_weighted_simp.csv",
                 "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv",
                 "train_AOI_8_Mumbai_geojson_roads_speed_wkt_weighted_simp.csv"
               ]
-# The dataset we use (PS-RGB is panchromatic sharpened red-green-blue data)
+
+# The subset of the image dataset we use (PS-RGB == panchromatic sharpened RGB)
 DATASET = "PS-RGB"
-# The directory of this file
-MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
+
 CITIES = [
            #"AOI_4_Shanghai", 
            "AOI_7_Moscow",
            "AOI_8_Mumbai"
          ]#, "AOI_9_San_Juan" ]
 
-# Where the satellite images are
+
+# The directory of this file (don't change this)
+MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
+
+# The path to the satellite images (be careful when changing, very delicate)
 BASEDIR = "%s/data/train/" % MYDIR
 
 
 class SpacenetSequence(keras.utils.Sequence):
+    """A sequence object that feeds tuples of (x, y) data via __getitem__()
+       and __len__()"""
     def __init__(self, x_set: "List of paths to images",
-                 y_set: "Associated targets", batch_size,
+                 y_set: "Should be a TargetBundle object", batch_size,
                  transform=False,
-                 test=None):
+                 test=None, shuffle=True):
         self.x, self.y = x_set, y_set
-#        random.shuffle(self.x)
+        if shuffle:
+            random.shuffle(self.x)
         self.batch_size = batch_size
         self.transform = transform
         self.test = test
@@ -90,7 +118,7 @@ class SpacenetSequence(keras.utils.Sequence):
 #        x, y = np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
 #               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
         x = np.array(x)
-        y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
+        y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x], dtype=np.uint8)
         return x,y
 
     @staticmethod
@@ -100,11 +128,9 @@ class SpacenetSequence(keras.utils.Sequence):
             imageids += get_filenames(datadir=BASEDIR + CITIES[i])
         return SpacenetSequence(imageids, TargetBundle(), batch_size=batch_size, transform=transform)
 
-def get_npy(filename=None, dataset="PS-RGB"):
-    filename = get_file(filename=filename, dataset=dataset)
-    return np.asarray(imageio.imread(filename))
-
 def get_image(filename=None, dataset="PS-RGB"):
+    """Return the satellite image corresponding to a given partial pathname or chipid.
+       Returns a random (but existing) value if called w/ None."""
     requested = filename
     if not os.path.exists(str(filename)):
         for city in CITIES:
@@ -118,6 +144,8 @@ def get_image(filename=None, dataset="PS-RGB"):
     return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
 
 def get_file(filename=None, dataset="PS-RGB", datadir=BASEDIR + CITIES[0]):
+    """Return the path corresponding to a given partial chipid or path.
+       Returns a random (but existing) value if called w/ None."""
     if os.path.exists(str(filename)):
         return filename
     datadir = os.path.join(datadir, dataset.upper())
@@ -142,6 +170,7 @@ def get_file(filename=None, dataset="PS-RGB", datadir=BASEDIR + CITIES[0]):
     return filename
 
 def get_filenames(filename=None, dataset="PS-RGB", datadir=BASEDIR + CITIES[0]):
+    """Return a list of every path for every image"""
     datadir = os.path.join(datadir, dataset.upper())
     if filename is None:
         return os.listdir(datadir)
@@ -149,10 +178,12 @@ def get_filenames(filename=None, dataset="PS-RGB", datadir=BASEDIR + CITIES[0]):
         return glob.glob("%s/*%s*" % (datadir, filename))
 
 def get_imageids(datadir=BASEDIR + CITIES[0], dataset="PS-RGB"):
+    """Return the ImageIDs of all images (as opposed to the file paths)"""
     paths = get_filenames(datadir=datadir, dataset=dataset)
     return [Target.expand_imageid(path.replace(datadir + "_", "")) for path in paths]
 
 class TargetBundle:
+    """A dict-like container of Target objects"""
     def __init__(self, transform=False):
         self.targets = {}
         self.max_speed = 0
@@ -184,6 +215,10 @@ class TargetBundle:
             self.targets[imageid].add_linestring(linestring, weight)
 
     def __getitem__(self, idx):
+        """Return a target corresponding to the (possibly partial)
+           ImageID or path name given -- returns the first match w/o
+           checking for uniqueness of partial matches, but will always
+           return a unique match if the entire ID or file path is given."""
         ret = self.targets.get(idx, None)
         if not ret:
             expanded = Target.expand_imageid(idx)
@@ -202,17 +237,17 @@ class TargetBundle:
     def __len__(self, idx):
         return len(self.targets)
 
-    def __getnext__(self, idx):
-        for key in self.targets:
-            yield self.targets[key]
-
 class Target:
+    """An object representing all the information about a training target,
+       e.g. the target mask for the network output to match, the ImageID,
+       the file path to the image file, the weights for paths in the chip
+       (square satellite image), etc."""
     regex = re.compile("[\d\.]+ [\d\.]+")
     df = pd.read_csv(TARGETFILES[0])
     for targetfile in TARGETFILES[1:]:
         df.append(pd.read_csv(targetfile))
 
-    def __init__(self, imageid, tb):
+    def __init__(self, imageid, tb: "The owning TargetBundle"):
         self.graph = networkx.Graph()
         self.imageid = imageid
         self.tb = tb
@@ -225,14 +260,18 @@ class Target:
         mnum = m.groups()[0]
         ret = imageid.replace(mstr, "") + "chip" + mnum
         return ret
+        """
         if len(mnum) >= 5:
             ret = imageid
         else:
             num = "{:>5.5s}".format(mnum)
             ret = imageid.replace(mstr, "") + "chip" + num.replace(" ", "0")
         return ret
+        """
 
     def add_linestring(self, string, weight):
+        """Take a linestring + the weight for the edge it represents, and
+           add that information to what's stored in this object."""
         if string.lower().find("empty") != -1:
             return
         elif weight > self.tb.max_speed:
@@ -247,25 +286,42 @@ class Target:
         return self
 
     def chip(self):
+        """Return the chip number that this target corresponds to (only unique
+           with respect to a given city, other cities will have identical chipIDs)"""
         return re.search("_(chip\d+)", self.imageid).groups()[0]
 
     def pixel(self, weight):
-        """Injection, set of observed speeds to the set [1,n_classes]"""
-        n_classes = 4
-        ret = min(1, n_classes / self.tb.max_speed * weight)
-        return ret * (255 / n_classes)
+        """Returns the tuple of a pixel for painting, e.g. (0, 255, 0, 0)"""
+        channel = N_CLASSES / self.tb.max_speed * weight
+        channel = channel * (4 / N_CLASSES)
+        pixel = [0] * 4
+        pixel[round(channel)] = 255
+        return pixel
 
     def image(self):
-        img = np.zeros((CHIP_CANVAS_SIZE[0], CHIP_CANVAS_SIZE[1]), dtype=np.uint8)
+        """Create the mask (output for the neural network to match) for this target.
+        Format is CHANNELS LAST!
+
+        We represent the target masks as N-channel images, with each channel corresponding to
+        the meaning of a pixel being "no road" (0), "slow road" (1), "midspeed road" (2),
+        or "fast road" (3).  The N_ClASSES can be <= 4 because we use image processing libs
+        to manipulate our data, and they require at most 4 channels (red, green, blue, alpha),
+        but there will probably be a couple of functions that throw exceptions b/c I didn't try
+        anything but 1 and 4.
+    
+        e.g. if there's a fast road drawn as a line from the middle of the top of a chip to the
+        middle of the bottom of the chip (here chip means a square satellite image), i.e. right
+        down its center, then the corresponding target image would have 255 in every x, y index
+        position of the alpha channel corresponding to the x,y pixel coordinates of the road.
+        """
+        img = np.zeros((CHIP_CANVAS_SIZE[0], CHIP_CANVAS_SIZE[1], N_CLASSES), dtype=np.uint8)
         for edge in self.graph.edges():
             weight = self.graph[edge[0]][edge[1]]['weight']
-            pix = self.pixel(weight)
+            pixel = self.pixel(weight)
             x1,y1 = edge[0]
             x2,y2 = edge[1]
             x1,y1 = round(x1), round(y1)
             x2,y2 = round(x2), round(y2)
-            cv2.line(img, (x1, y1), (x2, y2), pix, 10)
-        img = img / 255
-        img = resize(img, TARGET_IMSHAPE)
-#        status, ret = cv2.threshold(img, 0.05, 1, cv2.THRESH_BINARY)
-        return np.array(img, dtype=np.float64)
+            cv2.line(img, (x1, y1), (x2, y2), pixel, 10)
+        img = resize(img, TARGET_IMSHAPE, anti_aliasing=True)
+        return np.cast['uint8'](img)

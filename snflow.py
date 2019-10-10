@@ -16,16 +16,14 @@ import logging
 log = logging.getLogger(__name__)
 
 # We represent the target masks as N-channel images, with each channel corresponding to
-# the meaning of a pixel being "no road" (0), "slow road" (1), "midspeed road" (2),
-# or "fast road" (3).  The N_ClASSES can be <= 4 because we use image processing libs
-# to manipulate our data, and they require at most 4 channels (red, green, blue, alpha),
-# but there will probably be a couple of functions that throw exceptions b/c I didn't try
-# anything but 4.
+# the meaning of a pixel being "slow road" (0), "midspeed road" (1),
+# or "fast road" (2).  The N_ClASSES can be <= 4 because we use image processing libs
+# to manipulate our data, and they require at most 4 channels (red, green, blue, alpha).
 #
 # e.g. if there's a fast road drawn as a line from the middle of the top of a chip to the
 # middle of the bottom of the chip (here chip means a square satellite image), i.e. right
 # down its center, then the corresponding target image would have 255 in every x, y index
-# position of the alpha channel corresponding to the x,y pixel coordinates of the road.
+# position of the (red? w/e) channel corresponding to the x,y pixel coordinates of the road.
 
 # batch size
 BATCH_SIZE = 5
@@ -286,20 +284,15 @@ class Target:
         return pixel
 
     def image(self):
-        """Create the mask (output for the neural network to match) for this target.
-        Format is CHANNELS LAST!
+        """We represent the target masks as N-channel images, with each channel corresponding to
+	    the meaning of a pixel being "slow road" (0), "midspeed road" (1),
+	    or "fast road" (2).  The N_ClASSES can be <= 4 because we use image processing libs
+	    to manipulate our data, and they require at most 4 channels (red, green, blue, alpha).
 
-        We represent the target masks as N-channel images, with each channel corresponding to
-        the meaning of a pixel being "no road" (0), "slow road" (1), "midspeed road" (2),
-        or "fast road" (3).  The N_ClASSES can be <= 4 because we use image processing libs
-        to manipulate our data, and they require at most 4 channels (red, green, blue, alpha),
-        but there will probably be a couple of functions that throw exceptions b/c I didn't try
-        anything but 1 and 4.
-    
-        e.g. if there's a fast road drawn as a line from the middle of the top of a chip to the
-        middle of the bottom of the chip (here chip means a square satellite image), i.e. right
-        down its center, then the corresponding target image would have 255 in every x, y index
-        position of the alpha channel corresponding to the x,y pixel coordinates of the road.
+	    e.g. if there's a fast road drawn as a line from the middle of the top of a chip to the
+	    middle of the bottom of the chip (here chip means a square satellite image), i.e. right
+	    down its center, then the corresponding target image would have 255 in every x, y index
+	    position of the (red? w/e) channel corresponding to the x,y pixel coordinates of the road.
         """
         img = np.zeros((CHIP_CANVAS_SIZE[0], CHIP_CANVAS_SIZE[1], N_CLASSES))
         for edge in self.graph.edges():

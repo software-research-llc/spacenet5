@@ -24,6 +24,8 @@ def infer_roads(mask, chipname=''):
     skel = skeletonize(img)
     graph = sknw.build_sknw(skel)
     graph.name = chipname
+    assert np.max(img) <= 1
+    assert np.max(skel) <= 1
     return graph, img, skel
 
 def prep_for_skeletonize(img):
@@ -37,6 +39,9 @@ def prep_for_skeletonize(img):
 
 def dilate_and_erode(img):
     kernel = np.ones((1,15))
+#    kernel = np.array([[1, 0, 1, 0, 1],
+#                       [0, 1, 9, 1, 0],
+#                       [1, 0, 1, 0, 1]], dtype = np.uint8)
     img = cv2.dilate(img, kernel, iterations=1)
     img = cv2.erode(img, kernel, iterations=1)
     return img

@@ -1,5 +1,5 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
-from keras.layers import Flatten, Reshape, MaxPooling2D, Dropout, BatchNormalization, Conv2D, Activation, Conv2DTranspose, Concatenate, concatenate, Conv3D, Cropping2D
+from keras.layers import Input, Flatten, Reshape, MaxPooling2D, Dropout, BatchNormalization, Conv2D, Activation, Conv2DTranspose, Concatenate, concatenate, Conv3D, Cropping2D
 from keras.models import Model
 import keras
 import tensorflow as tf
@@ -17,6 +17,16 @@ DOWN = -1
 UP = 1
 OUT = 0
 OUTPUT_CHANNELS = flow.N_CLASSES
+
+
+def build_gan():
+    generator = Generator()
+    inp = Input(flow.IMSHAPE)
+
+    return keras.models.Model(inputs=[inp], outputs=[generator(inp[tf.newaxis,...], training=True)])
+
+    discriminator = Discriminator()
+    disc_out = discriminator([inp[tf.newaxis,...], gen_output], training=True)
 
 def Discriminator():
   initializer = tf.random_normal_initializer(0., 0.02)
@@ -80,7 +90,7 @@ def upsample(filters, size, apply_dropout=False):
 
   return result
 
-def gan():
+def Generator():
   down_stack = [
     downsample(64, 4, apply_batchnorm=False), # (bs, 128, 128, 64)
     downsample(128, 4), # (bs, 64, 64, 128)

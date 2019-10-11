@@ -12,7 +12,7 @@ import loss
 
 
 def build_model():
-    return unet.gan()
+    return unet.Generator()
     return unet.get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
     return unet.build_google_unet()
     return xception_model()

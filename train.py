@@ -55,7 +55,7 @@ def main():
         time.sleep(5)
     snmodel.compile_model(model)
     model.summary()
-    seq = flow.SpacenetSequence.all()
+    seq = flow.SpacenetSequence.all(model=model)
     i = 0
     while True:
         train(model, seq)

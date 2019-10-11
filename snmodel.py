@@ -13,7 +13,7 @@ import loss
 
 def build_model():
     return unet.Generator()
-    return unet.get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
+#    return unet.get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
     return unet.build_google_unet()
     return xception_model()
 
@@ -75,7 +75,7 @@ def save_model(model, path="model.tf"):
     model.save_weights(path)
 
 def compile_model(model):
-    model.compile(optimizer=flow.OPTIMIZER, loss=flow.LOSS, metrics=['accuracy', 'binary_accuracy', 'mse', 'mae', 'hinge'])
+    model.compile(optimizer=flow.OPTIMIZER, loss=flow.LOSS, metrics=['accuracy', 'binary_accuracy', 'mae'])
 
 if __name__ == '__main__':
     try:

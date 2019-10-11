@@ -1,5 +1,8 @@
 import sys
-import snflow as flow
+if 'snflow' in sys.modules:
+    flow = sys.modules['snflow']
+else:
+    import snflow as flow
 import numpy as np
 import snmodel
 import cv2
@@ -16,7 +19,7 @@ import copy
 def infer_mask(model, image):
     assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
     output = model.predict(image.reshape([1] + flow.IMSHAPE))
-    return np.array(output)[0]
+    return np.array(output)[0]# * (1 / np.max(output[0]))
 
 def infer_roads(mask, chipname=''):
     assert mask.ndim == 3, "expected shape {}, got {}".format(flow.TARGET_IMSHAPE, mask.shape)
@@ -32,6 +35,8 @@ def prep_for_skeletonize(img):
 #    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 #    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 #    img = dilate_and_erode(img)
+    scale = 1 / np.max(img)
+    img *= scale
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     assert np.max(img) <= 1, "expected np.max(img) == 1, but is {}".format(np.max(img))
     _, img = cv2.threshold(img, 0.25, 1, cv2.THRESH_BINARY)
@@ -71,13 +76,14 @@ def infer_and_show(model, image, filename):
 
         fig.add_subplot(2,4,2)
         plt.axis('off')
-        plt.imshow(tb[chipid].image())
-        plt.title("2. Ground truth")
+        plt.imshow(mask)
+        plt.title("2. Mask (neural net output)")
 
         fig.add_subplot(2,4,3)
         plt.axis('off')
-        plt.imshow(mask)
-        plt.title("3. Mask (neural net output)")
+        plt.imshow(tb[chipid].image())
+        plt.title("3. Ground truth")
+
 
         fig.add_subplot(2,4,4)
         plt.axis('off')

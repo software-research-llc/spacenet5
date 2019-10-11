@@ -28,14 +28,22 @@ log = logging.getLogger(__name__)
 # position of the (red? w/e) channel corresponding to the x,y pixel coordinates of the road.
 
 
+# for the generator portion of the GAN
+generator_optimizer = tf.keras.optimizers.Adam()#lr=0.50, beta_1=0.9)
+discriminator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+binary_crossentropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+LAMBDA = 1
+
 # the dtype for input images and target images
 DATATYPE = np.float32
 
 # the optimizer to use
-OPTIMIZER = 'adam'
+OPTIMIZER = generator_optimizer
 
 # Loss function
-LOSS = 'mae'
+LOSS = loss.binary_focal_loss()
+#keras.losses.BinaryCrossentropy(from_logits=True)
+
 #loss.segmentation_loss
 
 # Activation of the final output layer
@@ -86,20 +94,22 @@ MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
 # The path to the satellite images (be careful when changing, very delicate)
 BASEDIR = "%s/data/train/" % MYDIR
 
-
+import infer
 class SpacenetSequence(keras.utils.Sequence):
     """A sequence object that feeds tuples of (x, y) data via __getitem__()
        and __len__()"""
     def __init__(self, x_set: "List of paths to images",
                  y_set: "Should be a TargetBundle object", batch_size,
                  transform=False,
-                 test=None, shuffle=False):
+                 test=None, shuffle=False,
+                 model=None):
         self.x, self.y = x_set, y_set
         if shuffle:
             random.shuffle(self.x)
         self.batch_size = batch_size
         self.transform = transform
         self.test = test
+        self.model = model
 
     def __len__(self):
         return int(np.ceil(len(self.x) / float(self.batch_size)))
@@ -119,15 +129,19 @@ class SpacenetSequence(keras.utils.Sequence):
 #        x, y = np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
 #               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
         x = np.array(x)
+#        y= [infer.infer_mask(self.y[Target.expand_imageid(imageid)]) for imageid in batch_x]
         y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x], dtype=DATATYPE)
         return x,y
 
     @staticmethod
-    def all(batch_size = BATCH_SIZE, transform = False):
+    def all(model=None, batch_size = BATCH_SIZE, transform = False):
         imageids = []
         for i in range(len(CITIES)):
             imageids += get_filenames(datadir=BASEDIR + CITIES[i])
-        return SpacenetSequence(imageids, TargetBundle(), batch_size=batch_size, transform=transform)
+        return SpacenetSequence(imageids, TargetBundle(), batch_size=batch_size, transform=transform, model=model)
+
+def normalize(image):
+  return (image / 127.5) - 1
 
 def get_image(filename=None, dataset="PS-RGB"):
     """Return the satellite image corresponding to a given partial pathname or chipid.
@@ -188,6 +202,7 @@ class TargetBundle:
     def __init__(self, transform=False):
         self.targets = {}
         self.max_speed = 0
+        self.mean_speed = 0
         i = 0
         imageids = []
         for city in CITIES:
@@ -199,12 +214,14 @@ class TargetBundle:
         self.add_df(Target.df)
 
     def add_df(self, df):
+        count = 0
         for idx,linestring in enumerate(df['WKT_Pix']):
             if linestring.lower().find("empty") != -1:
                 continue
             imageid = Target.expand_imageid(df['ImageId'][idx])
             try:
                 weight = float(df['travel_time_s'][idx])
+                distance = float(df['length_m'][idx])
             except ZeroDivisionError:
                 log.error("ZeroDivisionError: %s, %s, length = %s, time = %s" % (imageid,
                       linestring,
@@ -212,8 +229,10 @@ class TargetBundle:
                       df['travel_time_s'][idx]))
                 weight = 0
             if imageid not in self.targets:
+                count += 1
                 imageid = imageid.replace("_chip", "_PS-RGB_chip")
-            self.targets[imageid].add_linestring(linestring, weight)
+            self.targets[imageid].add_linestring(linestring, weight / distance)
+        self.mean_speed /= count
 
     def __getitem__(self, idx):
         """Return a target corresponding to the (possibly partial)
@@ -284,6 +303,7 @@ class Target:
             x1,y1 = float(x1), float(y1)
             x2,y2 = float(x2), float(y2)
             self.graph.add_edge((x1,y1), (x2,y2), weight=weight)
+        self.tb.mean_speed += weight
         return self
 
     def chip(self):
@@ -294,11 +314,10 @@ class Target:
     def pixel(self, weight):
         """Returns the tuple of a pixel for painting, e.g. (0, 255, 0, 0)"""
         n_classes = N_CLASSES
-        channel = (n_classes) / self.tb.max_speed * weight
-#        channel = channel * (3 / N_CLASSES)
+        channel = (n_classes - 1) / (self.tb.max_speed / weight)
         pixel = [0] * n_classes
         try:
-            pixel[round(channel)] = 255
+            pixel[round(channel)] = 1
         except Exception as exc:
             import pdb;pdb.set_trace()
         return pixel
@@ -314,7 +333,7 @@ class Target:
 	    down its center, then the corresponding target image would have 255 in every x, y index
 	    position of the (red? w/e) channel corresponding to the x,y pixel coordinates of the road.
         """
-        img = np.zeros(IMSHAPE)
+        img = np.zeros(CHIP_CANVAS_SIZE)
         for edge in self.graph.edges():
             weight = self.graph[edge[0]][edge[1]]['weight']
             pixel = self.pixel(weight)
@@ -322,7 +341,7 @@ class Target:
             x2,y2 = edge[1]
             x1,y1 = round(x1), round(y1)
             x2,y2 = round(x2), round(y2)
-            cv2.line(img, (x1, y1), (x2, y2), pixel, 10, cv2.LINE_AA, 0)
+            cv2.line(img, (x1, y1), (x2, y2), pixel, 15)#, cv2., 0)
         img = resize(img, TARGET_IMSHAPE, anti_aliasing=True)
         if DATATYPE != np.float32:
             img = img.astype(DATATYPE)

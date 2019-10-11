@@ -10,30 +10,30 @@ import keras
 import time
 import getch
 import os
+import skimage
+import copy
 
 def infer_mask(model, image):
-    if len(image.shape) == 3:
-        image = image.reshape([1,] + flow.IMSHAPE)
-    output = model.predict(image)
-    return np.array(output)
+    assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
+    output = model.predict(image.reshape([1] + flow.IMSHAPE))
+    return np.array(output)[0]
 
-def infer_roads(masks, chipname=''):
-    skels = []
-    graphs = []
-    for mask in masks:
-        img = prep_for_skeletonize(mask)
-        skel = skeletonize(img)
-        graph = sknw.build_sknw(skel)
-        graph.name = chipname
-        return graph, img, skel
+def infer_roads(mask, chipname=''):
+    assert mask.ndim == 3, "expected shape {}, got {}".format(flow.TARGET_IMSHAPE, mask.shape)
+    img = prep_for_skeletonize(mask)
+    skel = skeletonize(img)
+    graph = sknw.build_sknw(skel)
+    graph.name = chipname
+    return graph, img, skel
 
 def prep_for_skeletonize(img):
 #    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 #    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 #    img = dilate_and_erode(img)
-    _, img = cv2.threshold(img, 0.15, 1, cv2.THRESH_TRUNC)
-    img = np.array(np.ceil(img), dtype=np.float64)
-    return img.reshape(flow.TARGET_IMSHAPE[0], flow.TARGET_IMSHAPE[1])
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    assert np.max(img) <= 1, "expected np.max(img) == 1, but is {}".format(np.max(img))
+    _, img = cv2.threshold(img, 0.25, 1, cv2.THRESH_BINARY)
+    return img
 
 def dilate_and_erode(img):
     kernel = np.ones((1,15))
@@ -42,10 +42,8 @@ def dilate_and_erode(img):
     return img
 
 def infer(model, image, chipname=''):
-    if len(image.shape) == 4:
-        mask = infer_mask(model, image)
-    else:
-        mask = infer_mask(model, image.reshape([1,] + flow.IMSHAPE))
+    assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
+    mask = infer_mask(model, image)
     graph, preproc, skel = infer_roads(mask, chipname)
     return mask, graph, preproc, skel
 
@@ -54,49 +52,47 @@ def infer_and_show(model, image, filename):
     chipid = os.path.basename(filename)#.replace("PS-RGB_", "").replace(".tif", "")
     if isinstance(image, str):
         image = flow.get_image(image)
-#    mask, graph, preproc, skel = infer(model, image)
-    mask = infer_mask(model, image)
-    mask = cv2.cvtColor(mask[0], cv2.COLOR_RGBA2GRAY)
+    mask, graph, preproc, skel = infer(model, image)
+#    mask = infer_mask(model, image)
+#    mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     dilated_mask = dilate_and_erode(mask)
 #    import pdb;pdb.set_trace()
     for idx in range(1):
         fig = plt.figure()
-        fig.add_subplot(2,3,1)
+        fig.add_subplot(2,4,1)
         plt.axis('off')
         plt.imshow(image)
         plt.title("1. Satellite image (neural net input)")
 
-        fig.add_subplot(2,3,2)
-        plt.axis('off')
-        plt.imshow(mask)
-        plt.title("2. Mask (neural net output)")
-
-        fig.add_subplot(2,3,3)
+        fig.add_subplot(2,4,2)
         plt.axis('off')
         plt.imshow(tb[chipid].image())
-        plt.title("Ground truth")
-        plt.show()
-        return
-        """
-        fig.add_subplot(2,3,3)
+        plt.title("2. Ground truth")
+
+        fig.add_subplot(2,4,3)
+        plt.axis('off')
+        plt.imshow(mask)
+        plt.title("3. Mask (neural net output)")
+
+        fig.add_subplot(2,4,4)
         plt.axis('off')
         plt.imshow(dilated_mask)
-        plt.title("3. Dilated + eroded")
-        """
-        fig.add_subplot(2,3,4)
+        plt.title("4. Dilated + eroded")
+
+        fig.add_subplot(2,4,5)
         plt.axis('off')
         plt.imshow(preproc)
-        plt.title("4. Preprocessed mask")
+        plt.title("5. Preprocessed mask")
 
-        fig.add_subplot(2,3,5)
+        fig.add_subplot(2,4,6)
         plt.axis('off')
         plt.imshow(skel)
-        plt.title("5. Skeletonized mask")
+        plt.title("6. Skeletonized mask")
 
-        fig.add_subplot(2,3,6)
+        fig.add_subplot(2,4,7)
         plt.axis('off')
         plt.imshow(skel)
-        plt.title("6. Resulting graph")
+        plt.title("7. Resulting graph")
         for (s,e) in graph.edges():
             ps = graph[s][e]['pts']
             plt.plot(ps[:,1], ps[:,0], 'blue')
@@ -108,10 +104,11 @@ def infer_and_show(model, image, filename):
         except IndexError as exc:
             print("WARNING: IndexError: %s" % exc)
 
+#        import pdb; pdb.set_trace()
         plt.show()
 
 def do_all(loop=True):
-    model = keras.models.load_model("model.tf")
+    model = snmodel.load_model()
     while True:
         path = flow.get_file()
         image = flow.resize(flow.get_image(path), flow.IMSHAPE).reshape(flow.IMSHAPE)

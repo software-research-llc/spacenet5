@@ -13,6 +13,8 @@ import pandas as pd
 import mpmath
 import cv2
 import logging
+import loss
+import tensorflow as tf
 log = logging.getLogger(__name__)
 
 # We represent the target masks as N-channel images, with each channel corresponding to
@@ -24,6 +26,20 @@ log = logging.getLogger(__name__)
 # middle of the bottom of the chip (here chip means a square satellite image), i.e. right
 # down its center, then the corresponding target image would have 255 in every x, y index
 # position of the (red? w/e) channel corresponding to the x,y pixel coordinates of the road.
+
+
+# the dtype for input images and target images
+DATATYPE = np.float32
+
+# the optimizer to use
+OPTIMIZER = 'adam'
+
+# Loss function
+LOSS = 'mae'
+#loss.segmentation_loss
+
+# Activation of the final output layer
+LAST_LAYER_ACTIVATION = 'sigmoid'
 
 # batch size
 BATCH_SIZE = 5
@@ -77,7 +93,7 @@ class SpacenetSequence(keras.utils.Sequence):
     def __init__(self, x_set: "List of paths to images",
                  y_set: "Should be a TargetBundle object", batch_size,
                  transform=False,
-                 test=None, shuffle=True):
+                 test=None, shuffle=False):
         self.x, self.y = x_set, y_set
         if shuffle:
             random.shuffle(self.x)
@@ -103,7 +119,7 @@ class SpacenetSequence(keras.utils.Sequence):
 #        x, y = np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
 #               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
         x = np.array(x)
-        y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x], dtype=np.uint8)
+        y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x], dtype=DATATYPE)
         return x,y
 
     @staticmethod
@@ -277,10 +293,14 @@ class Target:
 
     def pixel(self, weight):
         """Returns the tuple of a pixel for painting, e.g. (0, 255, 0, 0)"""
-        channel = N_CLASSES / self.tb.max_speed * weight
-        channel = channel# * (4 / N_CLASSES)
-        pixel = [0] * 4
-        pixel[round(channel)] = 255
+        n_classes = N_CLASSES
+        channel = (n_classes) / self.tb.max_speed * weight
+#        channel = channel * (3 / N_CLASSES)
+        pixel = [0] * n_classes
+        try:
+            pixel[round(channel)] = 255
+        except Exception as exc:
+            import pdb;pdb.set_trace()
         return pixel
 
     def image(self):
@@ -294,7 +314,7 @@ class Target:
 	    down its center, then the corresponding target image would have 255 in every x, y index
 	    position of the (red? w/e) channel corresponding to the x,y pixel coordinates of the road.
         """
-        img = np.zeros((CHIP_CANVAS_SIZE[0], CHIP_CANVAS_SIZE[1], N_CLASSES))
+        img = np.zeros(IMSHAPE)
         for edge in self.graph.edges():
             weight = self.graph[edge[0]][edge[1]]['weight']
             pixel = self.pixel(weight)
@@ -302,6 +322,9 @@ class Target:
             x2,y2 = edge[1]
             x1,y1 = round(x1), round(y1)
             x2,y2 = round(x2), round(y2)
-            cv2.line(img, (x1, y1), (x2, y2), pixel, 10)
+            cv2.line(img, (x1, y1), (x2, y2), pixel, 10, cv2.LINE_AA, 0)
         img = resize(img, TARGET_IMSHAPE, anti_aliasing=True)
-        return np.cast['uint8'](img).reshape(TARGET_IMSHAPE)
+        if DATATYPE != np.float32:
+            img = img.astype(DATATYPE)
+        return img
+#        return np.cast['uint8'](img)#.reshape(TARGET_IMSHAPE)

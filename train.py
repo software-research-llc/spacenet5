@@ -19,7 +19,10 @@ def train(model, seq, epochs=EPOCHS):
     iters = 0
     for x, y in seq:
         start = time.time()
-        history = model.fit(x, y, batch_size=seq.batch_size, epochs=epochs, validation_split=0.1, verbose=1, use_multiprocessing=True)
+        if seq.batch_size == 1:
+            history = model.fit(x, y, epochs=epochs, verbose=1, use_multiprocessing=True)
+        else:
+            history = model.fit(x, y, batch_size=seq.batch_size, epochs=epochs, validation_split=0.1, verbose=1, use_multiprocessing=True)
         stop = time.time()
         steptime = stop - start
         totaltime = len(seq) * steptime / 60
@@ -40,11 +43,6 @@ def custom_loss(y_true, y_pred):
     loss = tf.constant(1, dtype=tf.float64) - tf.dtypes.cast(tp, dtype=tf.float64) / tf.maximum(tf.constant(1, dtype=tf.float64), tf.dtypes.cast(total_pos, dtype=tf.float64))
     return loss
 
-def load(path=model_file):
-    global model
-    model = keras.models.load_model(model_file)
-    return model
-
 def main():
     global model
     global i
@@ -55,8 +53,8 @@ def main():
     else:
         print("Model was loaded successfully.")
         time.sleep(5)
+    snmodel.compile_model(model)
     model.summary()
-    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy', 'binary_accuracy', 'mse', 'mae', 'hinge'])
     seq = flow.SpacenetSequence.all()
     i = 0
     while True:
@@ -66,7 +64,7 @@ def main():
 
 if __name__ == '__main__':
     try:
-        load()
+        model = snmodel.load_model()
     except Exception as exc:
         print(exc)
     try:
@@ -76,4 +74,4 @@ if __name__ == '__main__':
         print("\nSaving to file in 5...")
         time.sleep(5)
         print("\nSaving...")
-        model.save(model_file)
+        snmodel.save_model(model, model_file)

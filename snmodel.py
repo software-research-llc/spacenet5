@@ -12,6 +12,7 @@ import loss
 
 
 def build_model():
+    return unet.gan()
     return unet.get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
     return unet.build_google_unet()
     return xception_model()
@@ -63,7 +64,18 @@ def prep_for_skeletonize(img):
     return img
 
 def load_model(path="model.tf"):
-    return keras.models.load_model(path)
+#    losses = { flow.LOSS.__qualname__: flow.LOSS }
+#    return keras.models.load_model(path, custom_objects=losses)
+    model = build_model()
+    model.load_weights(path)
+    compile_model(model)
+    return model
+
+def save_model(model, path="model.tf"):
+    model.save_weights(path)
+
+def compile_model(model):
+    model.compile(optimizer=flow.OPTIMIZER, loss=flow.LOSS, metrics=['accuracy', 'binary_accuracy', 'mse', 'mae', 'hinge'])
 
 if __name__ == '__main__':
     try:

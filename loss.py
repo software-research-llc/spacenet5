@@ -5,6 +5,70 @@ import numpy as np
 import tensorflow as tf
 from functools import partial
 
+
+
+def image_absolute_error(y_true, y_pred):
+    c1_mask = tf.boolean_mask(y_true, y_pred[:,:,0])
+    c2_mask = tf.boolean_mask(y_true, y_pred[:,:,1])
+    c3_mask = tf.boolean_mask(y_true, y_pred[:,:,2])
+
+def segmentation_loss(seg_gt, seg_logits):
+    mask = seg_gt == seg_gt# <= flow.N_CLASSES
+    seg_logits = tf.boolean_mask(seg_logits, mask)
+    seg_gt = tf.boolean_mask(seg_gt, mask)
+    seg_predictions = tf.argmax(seg_logits, axis=0)
+
+    seg_loss_local = tf.nn.sigmoid_cross_entropy_with_logits(logits=seg_logits,
+                                                                    labels=seg_gt)
+    seg_loss = tf.reduce_mean(seg_loss_local)
+#    tf.summary.scalar('loss/segmentation', seg_loss)
+
+#    mean_iou, update_mean_iou = tf.compat.v2.streaming_mean_iou(seg_predictions, seg_gt,
+#                                                   flow.N_CLASSES)
+#    tf.summary.scalar('accuracy/mean_iou', mean_iou)
+    return seg_loss#, mean_iou, update_mean_iou
+
+def jaccard_distance(y_true, y_pred, smooth=100):
+    """ Calculates mean of Jaccard distance as a loss function """
+    intersection = tf.reduce_sum((y_true) * y_pred, axis=(1,2,3))
+    sum_ = tf.reduce_sum((y_true) + y_pred, axis=(1,2,3))
+    jac = (intersection + smooth) / (sum_ - intersection + smooth)
+    jd =  (1 - jac) * smooth
+    return tf.reduce_mean(jd)
+
+def jaccard_distance_abs(y_true, y_pred, smooth=100):
+    """Jaccard distance for semantic segmentation.
+    Also known as the intersection-over-union loss.
+    This loss is useful when you have unbalanced numbers of pixels within an image
+    because it gives all classes equal weight. However, it is not the defacto
+    standard for image segmentation.
+    For example, assume you are trying to predict if
+    each pixel is cat, dog, or background.
+    You have 80% background pixels, 10% dog, and 10% cat.
+    If the model predicts 100% background
+    should it be be 80% right (as with categorical cross entropy)
+    or 30% (with this loss)?
+    The loss has been modified to have a smooth gradient as it converges on zero.
+    This has been shifted so it converges on 0 and is smoothed to avoid exploding
+    or disappearing gradient.
+    Jaccard = (|X & Y|)/ (|X|+ |Y| - |X & Y|)
+            = sum(|A*B|)/(sum(|A|)+sum(|B|)-sum(|A*B|))
+    # Arguments
+        y_true: The ground truth tensor.
+        y_pred: The predicted tensor
+        smooth: Smoothing factor. Default is 100.
+    # Returns
+        The Jaccard distance between the two tensors.
+    # References
+        - [What is a good evaluation measure for semantic segmentation?](
+           http://www.bmva.org/bmvc/2013/Papers/paper0032/paper0032.pdf)
+    """
+    intersection = K.sum(K.abs(y_true * y_pred), axis=-1)
+    sum_ = K.sum(K.abs(y_true) + K.abs(y_pred), axis=-1)
+    jac = (intersection + smooth) / (sum_ - intersection + smooth)
+    return (1 - jac) * smooth
+
+
 def dice_xent_loss(y_true, y_pred, weight_map=1):
     """Adaptation of https://arxiv.org/pdf/1809.10486.pdf for multilabel 
     classification with overlapping pixels between classes. Dec 2018.
@@ -90,7 +154,7 @@ class Dummy:
 
 def segment_loss(y_true, y_pred):
         EPSILON = 1.0
-        mode = 0
+        mode = 1
         self = Dummy()
 
         self.targets = y_true
@@ -98,10 +162,10 @@ def segment_loss(y_true, y_pred):
 
         self.loss_numerator1 = tf.reduce_sum(self.pre_outputs * self.targets) + EPSILON
         self.loss_denominator1 = tf.reduce_sum(self.pre_outputs + self.targets - self.pre_outputs[:, :, :] * self.targets) + EPSILON
-        return 0 - self.loss_numerator1 / self.loss_denominator1
+#        return 0 - self.loss_numerator1 / self.loss_denominator1
 
-        loss_numerator2 = tf.reduce_sum(self.pre_outputs[:, :, :, 1:2] * (1 - self.targets)) + EPSILON
-        loss_denominator2 = tf.reduce_sum(self.pre_outputs[:, :, :, 1:2] + (1 - self.targets) - self.pre_outputs[:, :, :, 1:2] * (1 - self.targets)) + EPSILON
+        self.loss_numerator2 = tf.reduce_sum(self.pre_outputs[:, :, :, 1:2] * (1 - self.targets)) + EPSILON
+        self.loss_denominator2 = tf.reduce_sum(self.pre_outputs[:, :, :, 1:2] + (1 - self.targets) - self.pre_outputs[:, :, :, 1:2] * (1 - self.targets)) + EPSILON
 
         if mode == 0:
             self.loss = -(self.loss_numerator1 / self.loss_denominator1 + self.loss_numerator2 / self.loss_denominator2 / 13)
@@ -113,13 +177,7 @@ def segment_loss(y_true, y_pred):
             self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf.concat([self.targets, 1 - self.targets], axis=3), logits=self.initial_outputs))
         elif mode == 4:
             self.loss = -(self.loss_numerator1 / self.loss_denominator1 + self.loss_numerator2 / self.loss_denominator2 / 2)
-
-        with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
-
-keras.losses.dice_xent_loss = dice_xent_loss
-keras.losses.segment_loss = segment_loss
-keras.losses.dice_loss = dice_loss
-keras.losses.pixelwise_loss = pixelwise_loss
-keras.losses.ssim_metric = ssim_metric
-keras.losses.old = old
+        
+        return self.loss
+#        with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+#            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)

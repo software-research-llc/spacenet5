@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+import sys
 import glob
 import os
 import re
 import random
+import tqdm
 from inspect import getsourcefile
 from skimage import io
 from skimage.transform import resize
@@ -118,26 +120,26 @@ class SpacenetSequence(keras.utils.Sequence):
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
         x = []
         for ex in batch_x:
-            for city in CITIES:
-                try:
-                    file_name = os.path.join(BASEDIR, city, DATASET, ex)
-                    image = get_image(file_name)
-                    x.append(image)
-                except Exception as exc:
-                    log.error("{} on {}".format(str(exc), file_name))
+            try:
+                filename = get_file(ex)
+                image = get_image(filename)
+                x.append(image)
+#                    file_name = os.path.join(BASEDIR, city, DATASET, ex)
+#                    image = get_image(file_name)
+#                    x.append(image)
+            except Exception as exc:
+                log.error("{} on {}".format(str(exc), file_name))
 
 #        x, y = np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
 #               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
         x = np.array(x)
 #        y= [infer.infer_mask(self.y[Target.expand_imageid(imageid)]) for imageid in batch_x]
         y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])#, dtype=DATATYPE)
-        return x,y
+        return x,y,batch_x
 
     @staticmethod
     def all(model=None, batch_size = BATCH_SIZE, transform = False):
-        imageids = []
-        for i in range(len(CITIES)):
-            imageids += get_filenames(datadir=BASEDIR + CITIES[i])
+        imageids = get_imageids()
         return SpacenetSequence(imageids, TargetBundle(), batch_size=batch_size, transform=transform, model=model)
 
 def normalize(image):
@@ -173,6 +175,8 @@ def get_file(filename=None, datadir=None, dataset="PS-RGB"):
         trying = os.path.join(BASEDIR, city, dataset.upper())
         if os.path.exists(os.path.join(trying, filename)):
             return os.path.join(trying, filename)
+        elif os.path.exists(os.path.join(trying, filename) + ".tif"):
+            return os.path.join(trying, filename) + ".tif"
     trying = glob.glob("%s/*%s.tif" % (datadir, filename))
     if trying:
         return trying[0]
@@ -247,7 +251,10 @@ class TargetBundle:
             ret = self.targets.get(expanded, None)
             if ret:
                 return ret
-            for key in self.targets.keys():
+            raise IndexError("Cannot locate {}".format(idx))
+        else:
+            return ret
+        """    
                 if re.search(expanded, key):
                     return self.targets[key]
             for key in self.targets.keys():
@@ -255,7 +262,7 @@ class TargetBundle:
                     return self.targets[key]
         else:
             return ret
-
+        """
     def __len__(self):
         return len(self.targets)
 
@@ -351,8 +358,31 @@ class Target:
 #        return np.cast['uint8'](img)#.reshape(TARGET_IMSHAPE)
 
 if __name__ == '__main__':
+    log.warning("Running all tests...")
     allfiles = get_filenames()
     for filename in allfiles:
         got = get_file(filename)
         if os.path.basename(got) != filename:
             log.error("{} != {}".format(got, filename))
+    seq = SpacenetSequence.all(batch_size=1)
+    tb = TargetBundle()
+    iteration = 0
+    for x,y,batch_x in tqdm.tqdm(seq):
+        if len(x) != 1 or len(y) != 1:
+            log.error("Batch size is not working, should be {}, but is {}".format(seq.batch_size, len(x)))
+        img = get_image(allfiles[iteration])
+        if np.sum(img != x[0]) != 0:
+            log.error("get_file({}) != data given for file {}".format(allfiles[iteration], batch_x[0]))
+            sys.exit()
+        if allfiles[iteration].replace(".tif", "") != Target.expand_imageid(allfiles[iteration]):
+            log.error("{} maps to {}".format(allfiles[iteration], Target.expand_imageid(allfiles[iteration])))
+            sys.exit()
+        img = tb[Target.expand_imageid(allfiles[iteration])].image()
+        if img is None:
+            log.error("cannot find tb[{}]".format(Target.expand_imageid(allfiles[iteration])))
+            sys.exit()
+        if np.sum(img != y[0]) != 0:
+            log.error("tb[{}].image() != y for {}".format(Target.expand_imageid(allfiles[iteration]), batch_x[0]))
+            sys.exit()
+        iteration += 1
+    log.warning("All tests passed!")

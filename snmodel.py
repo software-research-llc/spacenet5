@@ -12,7 +12,7 @@ import loss
 
 
 def build_model(train=True):
-#    return unet.get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
+    return unet.get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
     p2p = unet.build_gan()
     if train:
         return p2p
@@ -83,7 +83,8 @@ def save_model(model, path="model.tf"):
     model.save_weights(path)
 
 def compile_model(model):
-    model.compile(optimizer=flow.OPTIMIZER, loss=flow.LOSS, metrics=['accuracy', 'binary_accuracy', 'mae'])
+    print("Compiling model...")
+    model.compile(optimizer=flow.OPTIMIZER, loss=flow.LOSS, metrics=['accuracy', 'mae', loss.ssim_metric])
 
 if __name__ == '__main__':
     try:

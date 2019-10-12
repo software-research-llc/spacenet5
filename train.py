@@ -16,6 +16,7 @@ EPOCHS = 25
 model = None
 model_file = "model.tf-2"
 i = 0
+iters = 0
 
 @tf.function
 def train_step(input_image, target):
@@ -50,7 +51,7 @@ def fit(train_ds, epochs, test_ds):
       generate_images(unet.generator, example_input, example_target)
 
 def train_gan(model, seq, epochs=EPOCHS):
-    iters = 0
+    global iters
     if isinstance(model, pix2pix.Pix2pix):
         """
         start = time.time()
@@ -67,10 +68,11 @@ def train_gan(model, seq, epochs=EPOCHS):
         totaltime = len(seq) * steptime / 60
         iters += 1
         print("{:15s} {:^20s} {:^20s} {:^15s} {:^20s}".format("Full epochs", "Secs per iteration", "Mins per full epoch", "Batch size", "Samples remaining"))
-        print("{:15s} {:^20.2f} {:^20.2f} {:^15s} {:^20s}".format(str(i), steptime, totaltime, str(len(x)), str(len(seq) * len(x) - iters * len(x))))
-        print(history.history['loss'])
+        print("{:15s} {:^20.2f} {:^20.2f} {:^15s} {:^20s}".format(str(i),        steptime,           totaltime,            str(seq.batch_size), "0"))
+        print(history)
 
 def train(model, seq, epochs=EPOCHS):
+    global iters
     for x, y in seq:
         start = time.time()
         if seq.batch_size == 1:
@@ -103,9 +105,6 @@ def main():
     if model is None:
         model = snmodel.build_model()
         print("WARNING: starting from a new model")
-        time.sleep(5)
-    else:
-        print("Model was loaded successfully.")
         time.sleep(5)
     if not isinstance(model, pix2pix.Pix2pix):
         snmodel.compile_model(model)

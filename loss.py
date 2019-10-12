@@ -1,6 +1,5 @@
 import keras.backend as K
 import keras
-import snflow as flow
 import numpy as np
 import tensorflow as tf
 from functools import partial
@@ -16,6 +15,7 @@ import dill
 
 
 def binary_focal_loss(gamma=2., alpha=.25):
+    import snflow as flow
     """
     Binary form of focal loss.
       FL(p_t) = -alpha * (1 - p_t)**gamma * log(p_t)
@@ -46,6 +46,7 @@ def binary_focal_loss(gamma=2., alpha=.25):
 
 
 def categorical_focal_loss(gamma=2., alpha=.25):
+    import snflow as flow
     """
     Softmax version of focal loss.
            m
@@ -91,6 +92,7 @@ def categorical_focal_loss(gamma=2., alpha=.25):
 
 
 def discriminator_loss(disc_real_output, disc_generated_output):
+  import snflow as flow
 #  real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
 #def discriminator_loss(disc_real_output, disc_generated_output):
   real_loss = flow.binary_crossentropy(tf.ones_like(disc_real_output), disc_real_output)
@@ -104,6 +106,7 @@ def discriminator_loss(disc_real_output, disc_generated_output):
 def generator_loss(disc_generated_output, gen_output, target):
 #  gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
 #def generator_loss(target, gen_output):
+  import snflow as flow
   gan_loss = flow.binary_crossentropy(tf.ones_like(target), target)
 
   # mean absolute error
@@ -235,8 +238,8 @@ def old(y_true, y_pred):
 def ssim_metric(y_true, y_pred):
     # source: https://gist.github.com/Dref360/a48feaecfdb9e0609c6a02590fd1f91b
 
-    y_true = tf.expand_dims(y_true, -1)
-    y_pred = tf.expand_dims(y_pred, -1)
+#    y_true = tf.expand_dims(y_true, -1)
+#    y_pred = tf.expand_dims(y_pred, -1)
     y_true = tf.transpose(y_true, [0, 2, 3, 1])
     y_pred = tf.transpose(y_pred, [0, 2, 3, 1])
     patches_true = tf.compat.v1.image.extract_image_patches(y_true, [1, 5, 5, 1], [1, 2, 2, 1], [1, 1, 1, 1], "SAME")

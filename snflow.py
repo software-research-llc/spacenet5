@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 
 # for the generator portion of the GAN
-generator_optimizer = tf.keras.optimizers.Adam()#lr=0.50, beta_1=0.9)
+generator_optimizer = tf.keras.optimizers.Adam(lr=2e-4, beta_1=0.5)
 discriminator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 binary_crossentropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)
 LAMBDA = 1
@@ -38,7 +38,7 @@ LAMBDA = 1
 DATATYPE = np.float32
 
 # the optimizer to use
-OPTIMIZER = generator_optimizer
+OPTIMIZER = tf.keras.optimizers.Adam(lr=0.0005)
 
 # Loss function
 LOSS = loss.binary_focal_loss()
@@ -50,7 +50,7 @@ LOSS = loss.binary_focal_loss()
 LAST_LAYER_ACTIVATION = 'sigmoid'
 
 # batch size
-BATCH_SIZE = 1
+BATCH_SIZE = 32
 
 # see header above
 N_CLASSES = 3
@@ -124,13 +124,13 @@ class SpacenetSequence(keras.utils.Sequence):
                     image = get_image(file_name)
                     x.append(image)
                 except Exception as exc:
-                    pass
+                    log.error("{} on {}".format(str(exc), file_name))
 
 #        x, y = np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
 #               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
         x = np.array(x)
 #        y= [infer.infer_mask(self.y[Target.expand_imageid(imageid)]) for imageid in batch_x]
-        y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x], dtype=DATATYPE)
+        y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])#, dtype=DATATYPE)
         return x,y
 
     @staticmethod
@@ -156,46 +156,50 @@ def get_image(filename=None, dataset="PS-RGB"):
     if not os.path.exists(str(filename)):
         log.info("Returning contents of {} for requested file {}".format(filename, requested))
         raise Exception("File not found: %s" % filename)
-    return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
+    return resize(io.imread(filename), IMSHAPE, anti_aliasing=False)
 
-def get_file(filename=None, dataset="PS-RGB", datadir=BASEDIR + CITIES[0]):
+def get_file(filename=None, datadir=None, dataset="PS-RGB"):
     """Return the path corresponding to a given partial chipid or path.
        Returns a random (but existing) value if called w/ None."""
     if os.path.exists(str(filename)):
         return filename
-    datadir = os.path.join(datadir, dataset.upper())
-    if filename is None:
-        files = os.listdir(datadir)
-        filename = os.path.join(datadir, files[random.randint(0,len(files)-1)])
-    if not os.path.exists(str(filename)):
-        trying = glob.glob("%s/*%s.tif" % (datadir, filename))
+    elif os.path.exists(str(filename) + ".tif"):
+        return filename + ".tif"
+    elif filename is None:
+        allfiles = get_filenames()
+        i = random.randint(0, len(allfiles))
+        return allfiles[i]
+    for city in CITIES:
+        trying = os.path.join(BASEDIR, city, dataset.upper())
+        if os.path.exists(os.path.join(trying, filename)):
+            return os.path.join(trying, filename)
+    trying = glob.glob("%s/*%s.tif" % (datadir, filename))
+    if trying:
+        return trying[0]
+    else:
+        trying = re.search("chip[0]*(\d+)$", str(filename))
         if trying:
-            return trying[0]
-        else:
-            trying = re.search("chip[0]*(\d+)$", str(filename))
+            trying = trying.groups()[0]
+            trying = glob.glob("%s/*%s*.tif" % (datadir, trying))
             if trying:
-                trying = trying.groups()[0]
-                trying = glob.glob("%s/*%s*.tif" % (datadir, trying))
-                if trying:
-                    filename = trying[0]
-                else:
-                    return None
+                filename = trying[0]
+            else:
+                return None
     if not filename:
         return None
     return filename
 
-def get_filenames(filename=None, dataset="PS-RGB", datadir=BASEDIR + CITIES[0]):
+def get_filenames(dataset="PS-RGB"):
     """Return a list of every path for every image"""
-    datadir = os.path.join(datadir, dataset.upper())
-    if filename is None:
-        return os.listdir(datadir)
-    else:
-        return glob.glob("%s/*%s*" % (datadir, filename))
+    ret = []
+    for city in CITIES:
+        ret += os.listdir(os.path.join(BASEDIR, city, dataset))
+    return ret
 
-def get_imageids(datadir=BASEDIR + CITIES[0], dataset="PS-RGB"):
+def get_imageids(dataset="PS-RGB"):
     """Return the ImageIDs of all images (as opposed to the file paths)"""
-    paths = get_filenames(datadir=datadir, dataset=dataset)
-    return [Target.expand_imageid(path.replace(datadir + "_", "")) for path in paths]
+    paths = get_filenames()
+    return [os.path.basename(path) for path in paths]#Target.expand_imageid(path.replace(datadir + "_", "")) for path in paths]
 
 class TargetBundle:
     """A dict-like container of Target objects"""
@@ -204,9 +208,7 @@ class TargetBundle:
         self.max_speed = 0
         self.mean_speed = 0
         i = 0
-        imageids = []
-        for city in CITIES:
-            imageids += get_imageids(datadir=BASEDIR + city)
+        imageids = get_imageids()
         for imageid in imageids:
             imageid = Target.expand_imageid(imageid)
             self.targets[imageid] = Target(imageid, tb=self)
@@ -347,3 +349,10 @@ class Target:
             img = img.astype(DATATYPE)
         return img
 #        return np.cast['uint8'](img)#.reshape(TARGET_IMSHAPE)
+
+if __name__ == '__main__':
+    allfiles = get_filenames()
+    for filename in allfiles:
+        got = get_file(filename)
+        if os.path.basename(got) != filename:
+            log.error("{} != {}".format(got, filename))

@@ -16,6 +16,15 @@ import os
 import skimage
 import copy
 
+def generate_images(model, test_input, tar):
+  # the training=True is intentional here since
+  # we want the batch statistics while running the model
+  # on the test dataset. If we use training=False, we will get
+  # the accumulated statistics learned from the training dataset
+  # (which we don't want)
+  prediction = model(test_input, training=True)
+  return prediction
+
 def infer_mask(model, image):
     assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
     output = model.predict(image.reshape([1] + flow.IMSHAPE))
@@ -119,7 +128,14 @@ def infer_and_show(model, image, filename):
         plt.show()
 
 def do_all(loop=True):
-    model = snmodel.load_model()
+    """
+    import tensorflow as tf
+    fullgan = snmodel.build_model()
+    cp = tf.train.Checkpoint()
+    status = cp.restore("model.tf")
+    import pdb; pdb.set_trace()
+    """
+    model = snmodel.load_model(train=False)
     while True:
         path = flow.get_file()
         image = flow.resize(flow.get_image(path), flow.IMSHAPE).reshape(flow.IMSHAPE)

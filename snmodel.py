@@ -11,9 +11,13 @@ import time
 import loss
 
 
-def build_model():
-    return unet.Generator()
+def build_model(train=True):
 #    return unet.get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
+    p2p = unet.build_gan()
+    if train:
+        return p2p
+    else:
+        return p2p.generator
     return unet.build_google_unet()
     return xception_model()
 
@@ -63,12 +67,16 @@ def prep_for_skeletonize(img):
     img = np.array(np.round(img), dtype=np.float32)
     return img
 
-def load_model(path="model.tf"):
+def load_model(path="model.tf-2", train=True):
 #    losses = { flow.LOSS.__qualname__: flow.LOSS }
 #    return keras.models.load_model(path, custom_objects=losses)
-    model = build_model()
-    model.load_weights(path)
-    compile_model(model)
+    model = build_model(train)
+    try:
+        model.load_weights(path)
+    except Exception as exc:
+        print(exc)
+#    if train:
+#        compile_model(model)
     return model
 
 def save_model(model, path="model.tf"):

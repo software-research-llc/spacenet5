@@ -6,6 +6,8 @@ import tensorflow as tf
 import snflow as flow
 from tensorflow_examples.models.pix2pix import pix2pix
 
+import numpy as np
+
 import tensorflow_datasets as tfds
 tfds.disable_progress_bar()
 
@@ -17,16 +19,37 @@ DOWN = -1
 UP = 1
 OUT = 0
 OUTPUT_CHANNELS = flow.N_CLASSES
+generator = None
+discriminator = None
 
+def load_initial_gan_inp():
+  image = tf.Variable(np.array(flow.IMSHAPE), name='gan_input')#tf.io.read_file(image_file)
+  #image = tf.image.decode_jpeg(image)
+
+  #w = tf.shape(image)[1]
+
+  #w = w // 2
+  #real_image = image[:, :w, :]
+  #input_image = image[:, w:, :]
+
+  #input_image = tf.cast(input_image, tf.float32)
+  real_image = tf.cast(image, tf.float32)
+
+  return real_image, real_image
 
 def build_gan():
+    return pix2pix.Pix2pix(enable_function=False, epochs=25)
+    global generator
+    global discriminator
+    tf.compat.v1.disable_eager_execution()
     generator = Generator()
-    inp = Input(flow.IMSHAPE)
+    inp = tf.compat.v1.placeholder(tf.float32, shape=[1] + flow.IMSHAPE)#tf.Variable(np.zeros([flow.BATCH_SIZE] + flow.IMSHAPE), shape=(flow.BATCH_SIZE, 256, 256, 3), dtype=tf.float32)#tf.keras.layers.Input(shape=[None, None, 3])
+#flow.get_image().reshape([1] + flow.IMSHAPE).astype(np.float32)
 
-    return keras.models.Model(inputs=[inp], outputs=[generator(inp[tf.newaxis,...], training=True)])
+    gen_out = keras.models.Model(inputs=inp, outputs=generator(inp))
 
     discriminator = Discriminator()
-    disc_out = discriminator([inp[tf.newaxis,...], gen_output], training=True)
+    disc_out = discriminator([inp, gen_out])
 
 def Discriminator():
   initializer = tf.random_normal_initializer(0., 0.02)

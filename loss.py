@@ -90,9 +90,9 @@ def categorical_focal_loss(gamma=2., alpha=.25):
     return categorical_focal_loss_fixed
 
 
-#def discriminator_loss(disc_real_output, disc_generated_output):
-#  real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
 def discriminator_loss(disc_real_output, disc_generated_output):
+#  real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
+#def discriminator_loss(disc_real_output, disc_generated_output):
   real_loss = flow.binary_crossentropy(tf.ones_like(disc_real_output), disc_real_output)
 
   generated_loss = loss_object(tf.zeros_like(disc_generated_output), disc_generated_output)
@@ -101,16 +101,16 @@ def discriminator_loss(disc_real_output, disc_generated_output):
 
   return total_disc_loss
 
-#def generator_loss(disc_generated_output, gen_output, target):
+def generator_loss(disc_generated_output, gen_output, target):
 #  gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
-def generator_loss(target, gen_output):
+#def generator_loss(target, gen_output):
   gan_loss = flow.binary_crossentropy(tf.ones_like(target), target)
 
   # mean absolute error
   l1_loss = tf.reduce_mean(tf.abs(target - gen_output))
 
-#  total_gen_loss = gan_loss + (flow.LAMBDA * l1_loss)
-  total_gen_loss = gan_loss + l1_loss
+  total_gen_loss = gan_loss + (flow.LAMBDA * l1_loss)
+#  total_gen_loss = gan_loss + l1_loss
 
   return total_gen_loss
 

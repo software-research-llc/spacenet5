@@ -50,7 +50,7 @@ LOSS = loss.binary_focal_loss()
 LAST_LAYER_ACTIVATION = 'sigmoid'
 
 # batch size
-BATCH_SIZE = 5
+BATCH_SIZE = 1
 
 # see header above
 N_CLASSES = 3
@@ -341,7 +341,7 @@ class Target:
             x2,y2 = edge[1]
             x1,y1 = round(x1), round(y1)
             x2,y2 = round(x2), round(y2)
-            cv2.line(img, (x1, y1), (x2, y2), pixel, 15)#, cv2., 0)
+            cv2.line(img, (x1, y1), (x2, y2), pixel, 20)#, cv2., 0)
         img = resize(img, TARGET_IMSHAPE, anti_aliasing=True)
         if DATATYPE != np.float32:
             img = img.astype(DATATYPE)

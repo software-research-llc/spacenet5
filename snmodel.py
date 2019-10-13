@@ -5,15 +5,14 @@ from scipy.ndimage.interpolation import zoom
 import snflow as flow
 import unet
 import numpy as np
-import train
 import cv2
 import time
-import loss
 
 
 def build_model(train=True):
-    return unet.get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
+    #return unet.get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
     p2p = unet.build_gan()
+    return p2p
     if train:
         return p2p
     else:
@@ -73,22 +72,20 @@ def load_model(path="model.tf-2", train=True):
     model = build_model(train)
     try:
         model.load_weights(path)
-    except Exception as exc:
-        print(exc)
-#    if train:
-#        compile_model(model)
+    except:
+        model.checkpoint.restore(path)
     return model
 
-def save_model(model, path="model.tf"):
+def save_model(model, path=flow.model_file):
     model.save_weights(path)
 
 def compile_model(model):
     print("Compiling model...")
-    model.compile(optimizer=flow.OPTIMIZER, loss=flow.LOSS, metrics=['accuracy', 'mae', loss.ssim_metric])
+    model.compile(optimizer=flow.OPTIMIZER, loss=flow.LOSS, metrics=['binary_accuracy', 'binary_crossentropy', flow.loss.ssim_metric])
 
 if __name__ == '__main__':
     try:
-        m = keras.models.load_model(train.model_file)
+        m = keras.models.load_model(flow.model_file)
     except:
         try:
             m = build_model()

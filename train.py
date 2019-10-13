@@ -72,13 +72,13 @@ def train_gan(model, seq, epochs=EPOCHS):
         print(history)
 
 def train(model, seq, epochs=EPOCHS):
-    global iters
+    iters = 0
     for x, y in seq:
         start = time.time()
         if seq.batch_size == 1:
             history = model.fit(x, y, epochs=epochs, verbose=1, use_multiprocessing=True)
         else:
-            history = model.fit(x, y, batch_size=seq.batch_size, epochs=epochs, validation_split=0.1, verbose=1, use_multiprocessing=True)
+            history = model.fit(x, y, batch_size=seq.batch_size, epochs=epochs, validation_split=0.1, verbose=1)
         stop = time.time()
         steptime = stop - start
         totaltime = len(seq) * steptime / 60
@@ -108,8 +108,8 @@ def main():
         time.sleep(5)
     if not isinstance(model, pix2pix.Pix2pix):
         snmodel.compile_model(model)
-        model.summary()
-    seq = flow.SpacenetSequence.all(model=model)
+#        model.summary()
+    seq = flow.SpacenetSequence.all(model=model, transform=0.25)
     i = 0
     while True:
         if isinstance(model, pix2pix.Pix2pix):
@@ -137,3 +137,9 @@ if __name__ == '__main__':
         except Exception as exc:
             print(exc)
             model.checkpoint.save(model_file)
+    except Exception as exc:
+        try:
+            snmodel.save_model(model, model_file)
+        except Exception as exc2:
+            model.checkpoint.save(model_file)
+        raise exc

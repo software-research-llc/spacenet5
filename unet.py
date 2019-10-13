@@ -38,6 +38,7 @@ def load_initial_gan_inp():
   return real_image, real_image
 
 def build_gan():
+    return Generator()
     return pix2pix.Pix2pix(enable_function=False, epochs=25)
     global generator
     global discriminator
@@ -127,7 +128,7 @@ def Generator():
     x = concat([x, skip])
 
   x = last(x)
-
+#  x = Conv2D(flow.N_CLASSES, (1, 1), activation=flow.LAST_LAYER_ACTIVATION) (x)
   return tf.keras.Model(inputs=inputs, outputs=x)
 
 def downsample(filters, size, apply_batchnorm=True):

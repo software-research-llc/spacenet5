@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 from skimage import io
 import matplotlib.pyplot as plt
 import sys
@@ -17,20 +18,23 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
         *filename: "The name of the file, or a substring within the name"):
     """Leave filename blank to choose a random image"""
     for f in filename:
-        im = flow.get_image(filename=f, dataset=dataset)
+        allids = flow.get_imageids()
+        path = None
+        for id in allids:
+            if re.search(re.compile(f), os.path.basename(id)):
+                path = id
+                break
+        im = flow.get_image(filename=path)
         fig = plt.figure()
         fig.add_subplot(1,2,1)
         plt.imshow(im)
         plt.title("Original")
         fig.add_subplot(1,2,2)
         tb = flow.TargetBundle()
-        binim = tb[f].image()
-        for val in tb.targets.values():
-            if f == val.imageid:
-                print("Match: %s" % f)
-        plt.imshow(binim[:,:,0])
+        binim = tb[os.path.basename(path)].image()
+        plt.imshow(binim)
         plt.imshow
-        plt.title("Target: %s" % f)
+        plt.title("Target: %s" % path)
     if not filename:
         fpath = flow.get_file(dataset=dataset)
         print("Displaying %s" % fpath)

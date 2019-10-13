@@ -20,10 +20,12 @@ def rotate(x, y, angle):
     return np.matmul(rotation_matrix(theta), mat)
 
 def tr_x(x):
+    """Translated resized target image coordinates to input image coordinates"""
     x = x * flow.CHIP_CANVAS_SIZE[0] / flow.TARGET_IMSHAPE[0]
     return x
 
 def tr_y(y):
+    """Translate resized target image coordinates to input image coordinates"""
     y = y * flow.CHIP_CANVAS_SIZE[1] / flow.TARGET_IMSHAPE[1]
     return y
 
@@ -50,11 +52,25 @@ def get_coords(graph, cn=255, ce=128):
                 points.append((x,y))
     return points, weights
 
-def graphs_to_wkt(graphs, output_csv_path):
+def get_weight_for(mask, graph, cp):
+    xs = cp[:,1]
+    ys = cp[:,0]
+
+    weight = 0
+    for x,y in zip(xs,ys):
+        channels = mask[int(x)][int(y)]
+        for i in range(flow.N_CLASSES):
+            # channel[0] * 3, channel[1] * 2, channel[2] * 1, etc.
+            weight += channels[i] * (flow.N_CLASSES - i)
+    assert weight > 0, "did not detect the color of a path for {}".format(graph.name)
+
+    return weight
+
+def graphs_to_wkt(masks, graphs, output_csv_path):
     output_csv = open(output_csv_path, "w")
     output_csv.write("ImageId,WKT_Pix,length_m,time_s\n")
 
-    for graph in tqdm.tqdm(graphs):
+    for mask, graph in tqdm.tqdm(zip(masks, graphs)):
         log.debug("Converting {} to WKT...".format(graph.name))
         chipname = os.path.basename(graph.name).replace("PS-RGB_", "").replace(".tif", "")#os.path.basename(filename).replace("PS-RGB_", "").replace(".tif", "")
         linestrings = []
@@ -70,35 +86,36 @@ def graphs_to_wkt(graphs, output_csv_path):
                 seen.add((s,e))
                 seen.add((e,s))
 
-            weight = graph[s][e]['weight']
-            weights.append(weight)
+#            weight = graph[s][e]['weight']
+#            weights.append(weight)
 
             pts = graph[s][e]['pts']
+            xs = pts[:,1]
+            ys = pts[:,0]
+
             node, nodes = graph.node, graph.nodes()
-            ps = np.array([node[i]['o'] for i in nodes])
-            xs = pts[:,1]# + ps[:,1]
-            ys = pts[:,0]# + ps[:,0]
+            cps = [node[i]['o'] for i in nodes]
+
+            weight = 0
             if len(xs) > 1:
+                # calculate time to travel this edge
+                for i in range(1, len(xs), 2):
+                    p1,q1 = tr_x(xs[i-1]), tr_y(ys[i-1])
+                    p2,q2 = tr_x(xs[i]), tr_y(ys[i])
+                    # Euclidean distance
+                    weight += np.sqrt( (p2 - p1) * (p2 - p1) + (q2 - q1) * (q2 - q1) )
+
+                # construct linestring
                 linestring = "LINESTRING ({} {}".format(tr_x(xs[0]), tr_y(ys[0]))
                 for i in range(1, len(pts)):
                     linestring += ", {} {}".format(tr_x(xs[i]), tr_y(ys[i]))
                 linestring += ")"
                 log.debug(linestring)
+
+                weights.append(weight)
                 linestrings.append(linestring)
             else:
                 log.info("{}: unconnected point".format(chipname))
-            """
-            xs = ps[:,1]
-            ys = ps[:,0]
-            if len(xs) > 1:
-                linestring = "LINESTRING ({} {}".format(tr_x(xs[0]), tr_y(ys[0]))
-                for i in range(1, len(xs)):
-                    linestring += ", {} {}".format(tr_x(xs[i]), tr_y(ys[i]))
-                linestring += ")"
-                log.debug(linestring)
-                weights.append(weight / 2)
-                linestrings.append(linestring)
-            """
         for idx,linestring in enumerate(linestrings):
             error_shown = False
             output_csv.write("{},".format(chipname))
@@ -113,25 +130,6 @@ def graphs_to_wkt(graphs, output_csv_path):
                 else:
                     log.debug("{} at idx {} / {} in {}".format(str(exc), idx, len(weights), chipname))
                 output_csv.write("0.0\n")
-        """
-            print("weight:")
-            print(weight)
-            print("xs:")
-            print(xs)
-            print("ys:")
-            print(ys)
-            print("------")
-            print("graph[s][e]:")
-            print(graph[s][e])
-            ps = graph[s][e]['pts']
-            points = (ps[:,1], ps[:,0])
-            print("ps:")
-            print(ps)
-            print("points:")
-            print(points)
-            node, nodes = graph.node, graph.nodes()
-            ps = np.array([node[i]['o'] for i in nodes])
-            print(ps[:,1], ps[:,0])
-        """
+
     output_csv.close()
     sys.exit()

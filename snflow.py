@@ -8,6 +8,7 @@ import tqdm
 from inspect import getsourcefile
 from skimage import io
 from skimage.transform import resize
+import skimage
 import networkx
 import numpy as np
 import keras
@@ -40,10 +41,11 @@ LAMBDA = 1
 DATATYPE = np.float32
 
 # the optimizer to use
-OPTIMIZER = tf.keras.optimizers.Adam(lr=0.0005)
+OPTIMIZER = generator_optimizer#tf.keras.optimizers.Adam(lr=0.0005)
 
 # Loss function
-LOSS = loss.binary_focal_loss()
+LOSS = loss.loss
+
 #keras.losses.BinaryCrossentropy(from_logits=True)
 
 #loss.segmentation_loss
@@ -52,7 +54,7 @@ LOSS = loss.binary_focal_loss()
 LAST_LAYER_ACTIVATION = 'sigmoid'
 
 # batch size
-BATCH_SIZE = 32
+BATCH_SIZE = 5
 
 # see header above
 N_CLASSES = 3
@@ -64,7 +66,7 @@ mpmath.dps = 100
 CHIP_CANVAS_SIZE = [1300,1300,3]
 
 # The shape of images that are fed to the neural network (scaled CHIP_CANVAS_SIZE)
-IMSHAPE = [256,256,3]
+IMSHAPE = [512,512,3]
 
 # Target image shape, i.e. shape of the neural net output.  Note that our U-net
 # doesn't like the aspect ratio being changed, so keep dims in the same proportion
@@ -77,7 +79,7 @@ DECODER_OUTPUT_SHAPE = TARGET_IMSHAPE
 TARGETFILES = [
            #     "train_AOI_4_Shanghai_geojson_roads_speed_wkt_weighted_simp.csv",
                 "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv",
-                "train_AOI_8_Mumbai_geojson_roads_speed_wkt_weighted_simp.csv"
+#                "train_AOI_8_Mumbai_geojson_roads_speed_wkt_weighted_simp.csv"
               ]
 
 # The subset of the image dataset we use (PS-RGB == panchromatic sharpened RGB)
@@ -86,15 +88,20 @@ DATASET = "PS-RGB"
 CITIES = [
            #"AOI_4_Shanghai", 
            "AOI_7_Moscow",
-           "AOI_8_Mumbai"
+#           "AOI_8_Mumbai"
          ]#, "AOI_9_San_Juan" ]
 
+
+model_file = "model.tf-2"
 
 # The directory of this file (don't change this)
 MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
 
 # The path to the satellite images (be careful when changing, very delicate)
 BASEDIR = "%s/data/train/" % MYDIR
+
+# Don't touch this
+RUNNING_TESTS = False
 
 import infer
 class SpacenetSequence(keras.utils.Sequence):
@@ -117,30 +124,40 @@ class SpacenetSequence(keras.utils.Sequence):
         return int(np.ceil(len(self.x) / float(self.batch_size)))
 
     def __getitem__(self, idx):
+        global RUNNING_TESTS
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
         x = []
+
         for ex in batch_x:
             try:
                 filename = get_file(ex)
                 image = get_image(filename)
                 x.append(image)
-#                    file_name = os.path.join(BASEDIR, city, DATASET, ex)
-#                    image = get_image(file_name)
-#                    x.append(image)
             except Exception as exc:
                 log.error("{} on {}".format(str(exc), file_name))
+                raise exc
+        if not x:
+            raise Exception("x is empty")
 
-#        x, y = np.array([resize(get_image(file_name), IMSHAPE) for file_name in batch_x]), \
-#               np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])
         x = np.array(x)
-#        y= [infer.infer_mask(self.y[Target.expand_imageid(imageid)]) for imageid in batch_x]
         y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])#, dtype=DATATYPE)
-        return x,y,batch_x
+
+        for idx, imageid in enumerate(batch_x):
+            if self.transform:
+                r = random.randint(0,1)
+                if self.transform < r:
+                    x[idx] = skimage.transform.rotate(x[idx], 90)
+                    y[idx] = skimage.transform.rotate(y[idx], 90)
+
+        if RUNNING_TESTS:
+            return x,y,batch_x
+        else:
+            return x,y
 
     @staticmethod
-    def all(model=None, batch_size = BATCH_SIZE, transform = False):
+    def all(model=None, batch_size=BATCH_SIZE, transform=False, shuffle=False):
         imageids = get_imageids()
-        return SpacenetSequence(imageids, TargetBundle(), batch_size=batch_size, transform=transform, model=model)
+        return SpacenetSequence(imageids, TargetBundle(), batch_size=batch_size, shuffle=shuffle, transform=transform, model=model)
 
 def normalize(image):
   return (image / 127.5) - 1
@@ -158,7 +175,7 @@ def get_image(filename=None, dataset="PS-RGB"):
     if not os.path.exists(str(filename)):
         log.info("Returning contents of {} for requested file {}".format(filename, requested))
         raise Exception("File not found: %s" % filename)
-    return resize(io.imread(filename), IMSHAPE, anti_aliasing=False)
+    return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
 
 def get_file(filename=None, datadir=None, dataset="PS-RGB"):
     """Return the path corresponding to a given partial chipid or path.
@@ -358,6 +375,7 @@ class Target:
 #        return np.cast['uint8'](img)#.reshape(TARGET_IMSHAPE)
 
 if __name__ == '__main__':
+    RUNNING_TESTS = True
     log.warning("Running all tests...")
     allfiles = get_filenames()
     for filename in allfiles:

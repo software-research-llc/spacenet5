@@ -36,18 +36,19 @@ def infer_roads(mask, chipname=''):
     skel = skeletonize(img)
     graph = sknw.build_sknw(skel)
     graph.name = chipname
-    assert np.max(img) <= 1
-    assert np.max(skel) <= 1
+    assert (np.max(img) == np.nan or np.max(img)) <= 1
+    assert (np.max(skel) == np.nan or np.max(skel)) <= 1
     return graph, img, skel
 
 def prep_for_skeletonize(img):
 #    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 #    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 #    img = dilate_and_erode(img)
-    scale = 1 / np.max(img)
-    img *= scale
+    maxval = np.max(img)
+    if maxval != np.nan and maxval != 0:
+        scale = 1 / maxval
+        img *= scale
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    assert np.max(img) <= 1, "expected np.max(img) == 1, but is {}".format(np.max(img))
     _, img = cv2.threshold(img, 0.25, 1, cv2.THRESH_BINARY)
     return img
 

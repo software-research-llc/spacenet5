@@ -1,5 +1,3 @@
-import keras.backend as K
-import keras
 import numpy as np
 import tensorflow as tf
 from functools import partial
@@ -8,11 +6,18 @@ from functools import partial
 """
 Define our custom loss function.
 """
-from keras import backend as K
-import tensorflow as tf
+from tensorflow.keras import backend as K
 
 import dill
 
+def loss(y_true, y_pred):
+    clipped_true = tf.compat.v1.clip_by_value(y_true, clip_value_min=0, clip_value_max=1)
+#    clipped_pred = tf.compat.v1.clip_by_value(y_pred, clip_value_min=0, clip_value_max=1)
+    weight = tf.reduce_sum(clipped_true)
+    maxweight = tf.reduce_sum(tf.ones_like(y_true))
+    return (weighted_dice(y_true, y_pred) * 0.25 \
+           + binary_focal_loss_fixed(y_true, y_pred)) \
+           * (tf.math.maximum(1e-5, weight / maxweight))
 
 def binary_focal_loss(gamma=2., alpha=.25):
     import snflow as flow
@@ -25,12 +30,16 @@ def binary_focal_loss(gamma=2., alpha=.25):
     Usage:
      model.compile(loss=[binary_focal_loss(alpha=.25, gamma=2)], metrics=["accuracy"], optimizer=adam)
     """
-    def binary_focal_loss_fixed(y_true, y_pred):
+    return binary_focal_loss_fixed
+
+def binary_focal_loss_fixed(y_true, y_pred):
         """
         :param y_true: A tensor of the same shape as `y_pred`
         :param y_pred:  A tensor resulting from a sigmoid
         :return: Output tensor.
         """
+        gamma = 2.0
+        alpha = 0.25
         pt_1 = tf.where(tf.equal(y_true, 1), y_pred, tf.ones_like(y_pred))
         pt_0 = tf.where(tf.equal(y_true, 0), y_pred, tf.zeros_like(y_pred))
 
@@ -42,7 +51,6 @@ def binary_focal_loss(gamma=2., alpha=.25):
         return -K.sum(alpha * K.pow(1. - pt_1, gamma) * K.log(pt_1)) \
                -K.sum((1 - alpha) * K.pow(pt_0, gamma) * K.log(1. - pt_0))
 
-    return binary_focal_loss_fixed
 
 
 def categorical_focal_loss(gamma=2., alpha=.25):
@@ -193,13 +201,15 @@ def weighted_binary_crossentropy(y_true, y_pred, weight_map):
     return tf.reduce_mean((K.binary_crossentropy(y_true, 
                                                  y_pred)*weight_map)) / (tf.reduce_sum(weight_map) + K.epsilon())
 
-def weighted_dice(y_true, y_pred, weight_map):
-
+def weighted_dice(y_true, y_pred, weight_map=None):
+    if weight_map is None:
+        weight_map = tf.ones_like(y_true)
+    """
     if weight_map is None:
         raise ValueError("Weight map cannot be None")
     if not isinstance(weight_map, int) and y_true.shape != weight_map.shape:
         raise ValueError("Weight map must be the same size as target vector: {} != {}".format(y_true.shape, weight_map.shape))
-    
+    """
     dice_numerator = 2.0 * K.sum(y_pred * y_true * weight_map, axis=[1,2,3])
     dice_denominator = K.sum(weight_map * y_true, axis=[1,2,3]) + \
                                                              K.sum(y_pred * weight_map, axis=[1,2,3])
@@ -210,7 +220,6 @@ def weighted_dice(y_true, y_pred, weight_map):
             tf.reduce_mean(h1)*10 + \
             tf.reduce_mean(h2)*10
 
-@tf.function
 def dice_loss(y_true, y_pred):
     ys_sum = K.sum(y_true) + K.sum(y_pred)
     if tf.math.equal(ys_sum, tf.constant(0.0)):

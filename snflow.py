@@ -66,7 +66,7 @@ mpmath.dps = 100
 CHIP_CANVAS_SIZE = [1300,1300,3]
 
 # The shape of images that are fed to the neural network (scaled CHIP_CANVAS_SIZE)
-IMSHAPE = [512,512,3]
+IMSHAPE = [128,128,3]
 
 # Target image shape, i.e. shape of the neural net output.  Note that our U-net
 # doesn't like the aspect ratio being changed, so keep dims in the same proportion
@@ -77,18 +77,20 @@ DECODER_OUTPUT_SHAPE = TARGET_IMSHAPE
 
 # The files containing road network linestrings for ground truth during training
 TARGETFILES = [
-           #     "train_AOI_4_Shanghai_geojson_roads_speed_wkt_weighted_simp.csv",
-                "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv",
+#                "train_AOI_4_Shanghai_geojson_roads_speed_wkt_weighted_simp.csv",
+#                "train_AOI_7_Moscow_geojson_roads_speed_wkt_weighted_simp.csv",
 #                "train_AOI_8_Mumbai_geojson_roads_speed_wkt_weighted_simp.csv"
               ]
+
+TARGETFILE = "targets.csv"
 
 # The subset of the image dataset we use (PS-RGB == panchromatic sharpened RGB)
 DATASET = "PS-RGB"
 
 CITIES = [
-           #"AOI_4_Shanghai", 
+#           "AOI_4_Shanghai", 
            "AOI_7_Moscow",
-#           "AOI_8_Mumbai"
+           "AOI_8_Mumbai"
          ]#, "AOI_9_San_Juan" ]
 
 
@@ -289,9 +291,7 @@ class Target:
        the file path to the image file, the weights for paths in the chip
        (square satellite image), etc."""
     regex = re.compile("[\d\.]+ [\d\.]+")
-    df = pd.read_csv(TARGETFILES[0])
-    for targetfile in TARGETFILES[1:]:
-        df.append(pd.read_csv(targetfile))
+    df = pd.read_csv(TARGETFILE)
 
     def __init__(self, imageid, tb: "The owning TargetBundle"):
         self.graph = networkx.Graph()

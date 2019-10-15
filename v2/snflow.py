@@ -16,18 +16,38 @@ import pandas as pd
 import mpmath
 import cv2
 import logging
-import loss
 import tensorflow as tf
 log = logging.getLogger(__name__)
 
+CLASSES = [ 'background', 'slow', 'medium', 'fast' ]
+BACKBONE = 'seresnext50'
+BATCH_SIZE = 3
+N_CLASSES = len(CLASSES)
+IMSHAPE = [512,512,3]
+ORIG_IMSHAPE = [1300,1300,3]
 
-N_CLASSES = 5
 # The directory of this file (don't change this)
 MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
 # The path to the satellite images (be careful when changing, very delicate)
-BASEDIR = "%s/data/train/" % MYDIR
+BASEDIR = "%s/../data/train/" % MYDIR
 # Don't touch this
 RUNNING_TESTS = False
+TARGETFILE = os.path.join(MYDIR, "..", "targets.csv")
+CITIES = ["AOI_7_Moscow",
+          "AOI_8_Mumbai"]
+#          "AOI_9_San_Juan",
+DATATYPE=int
+
+
+def trup(x,y):
+    x = x * (ORIG_IMSHAPE[0] / IMSHAPE[0])
+    y = y * (ORIG_IMSHAPE[1] / IMSHAPE[1])
+    return round(x), round(y)
+
+def trdown(x,y):
+    x = x * (IMSHAPE[0] / ORIG_IMSHAPE[0])
+    y = y * (IMSHAPE[1] / ORIG_IMSHAPE[1])
+    return round(x), round(y)
 
 class SpacenetSequence(keras.utils.Sequence):
     """A sequence object that feeds tuples of (x, y) data via __getitem__()
@@ -101,6 +121,7 @@ def get_image(filename=None, dataset="PS-RGB"):
         log.info("Returning contents of {} for requested file {}".format(filename, requested))
         raise Exception("File not found: %s" % filename)
     return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
+#    return io.imread(filename)
 
 def get_file(filename=None, datadir=None, dataset="PS-RGB"):
     """Return the path corresponding to a given partial chipid or path.
@@ -240,32 +261,29 @@ class Target:
         self.tb.mean_speed += weight
         return self
 
-    def pixel(self, weight):
+    def pixel_by_class(self, weight):
         """Returns the tuple of a pixel for painting, e.g. (0, 255, 0, 0)"""
         n_classes = N_CLASSES
-        if n_classes == 1 or n_classes == 2:
-            return 1.0
-        channel = (n_classes - 1) / (self.tb.max_speed / weight)
-        return round(channel)
+        channel = (n_classes - 2) / (self.tb.max_speed / weight)
+        return round(channel) + 1
 
     def image(self):
         if self._img is not None:
             return self._img
-        img = np.zeros([CHIP_CANVAS_SIZE[0], CHIP_CANVAS_SIZE[1]])
+        img = np.zeros((IMSHAPE[0], IMSHAPE[1]), dtype=np.uint8)
         for edge in self.graph.edges():
             weight = self.graph[edge[0]][edge[1]]['weight']
-            pixel = self.pixel(weight)
+            klass = self.pixel_by_class(weight)
             x1,y1 = edge[0]
             x2,y2 = edge[1]
-            x1,y1 = round(x1), round(y1)
-            x2,y2 = round(x2), round(y2)
-            cv2.line(img, (x1, y1), (x2, y2), pixel, 10)#, cv2., 0)
-        img = resize(img, TARGET_IMSHAPE, anti_aliasing=True)
-        if DATATYPE != np.float32:
-            img = img.astype(DATATYPE)
-        img = img.reshape((-1,1)).astype(int)
+            x1,y1 = trdown(x1,y1)
+            x2,y2 = trdown(x2,y2)
+            # draw road line
+            cv2.line(img, (x1, y1), (x2, y2), klass, 5)
+        #img = resize(img, [IMSHAPE[0], IMSHAPE[1]], anti_aliasing=True)
+        #img = img.reshape((IMSHAPE[0] * IMSHAPE[1], -1))
         self._img = img
-        return img
+        return self._img.reshape((IMSHAPE[0], IMSHAPE[1], 1))
 #        return np.cast['uint8'](img)#.reshape(TARGET_IMSHAPE)
 
 if __name__ == '__main__':

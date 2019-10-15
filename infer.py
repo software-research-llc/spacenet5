@@ -4,8 +4,9 @@ if 'snflow' in sys.modules:
 else:
     import snflow as flow
 import numpy as np
-import snmodel
+import unet
 import cv2
+import skimage
 from skimage.morphology import skeletonize
 import matplotlib.pyplot as plt
 import sknw
@@ -48,7 +49,12 @@ def prep_for_skeletonize(img):
     if maxval != np.nan and maxval != 0:
         scale = 1 / maxval
         img *= scale
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if img.shape[-1] == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    elif img.shape[-1] == 1:
+        img = img[:,:,0]
+    else:
+        raise Exception("bad image shape: %s" % str(img.shape))
     _, img = cv2.threshold(img, 0.25, 1, cv2.THRESH_BINARY)
     return img
 
@@ -74,8 +80,12 @@ def infer_and_show(model, image, filename):
         image = flow.get_image(image)
     mask, graph, preproc, skel = infer(model, image)
 #    mask = infer_mask(model, image)
-#    mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
-    dilated_mask = dilate_and_erode(mask)
+    if mask.shape[-1] == 3:
+        graymask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    else:
+        mask = mask.squeeze()
+    _, graymask = cv2.threshold(mask, 0.10, 1, cv2.THRESH_BINARY)
+    filled_mask = skimage.morphology.remove_small_holes(graymask.astype(np.bool), connectivity=20)
 #    import pdb;pdb.set_trace()
     for idx in range(1):
         fig = plt.figure()
@@ -91,14 +101,14 @@ def infer_and_show(model, image, filename):
 
         fig.add_subplot(2,4,3)
         plt.axis('off')
-        plt.imshow(tb[chipid].image())
+        plt.imshow(tb[chipid].image().squeeze())
         plt.title("3. Ground truth")
 
 
         fig.add_subplot(2,4,4)
         plt.axis('off')
-        plt.imshow(dilated_mask)
-        plt.title("4. Dilated + eroded")
+        plt.imshow(filled_mask.astype(np.float32))
+        plt.title("4. Filled mask")
 
         fig.add_subplot(2,4,5)
         plt.axis('off')
@@ -131,12 +141,12 @@ def infer_and_show(model, image, filename):
 def do_all(loop=True):
     """
     import tensorflow as tf
-    fullgan = snmodel.build_model()
+    fullgan = unet.build_model()
     cp = tf.train.Checkpoint()
     status = cp.restore("model.tf")
     import pdb; pdb.set_trace()
     """
-    model = snmodel.load_model(train=False)
+    model = unet.load_model(train=False)
     while True:
         path = flow.get_file()
         image = flow.resize(flow.get_image(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
@@ -144,7 +154,12 @@ def do_all(loop=True):
             ret = infer(model, image) + (path,)
             return ret
         infer_and_show(model, image, path)
-        time.sleep(1)
+        try:
+            time.sleep(1)
+        except KeyboardInterrupt:
+            sys.exit()
 
 if __name__ == "__main__":
+    import logging
+    logging.getLogger().setLevel(logging.ERROR)
     do_all()

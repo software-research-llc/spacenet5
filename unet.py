@@ -22,6 +22,39 @@ OUTPUT_CHANNELS = flow.N_CLASSES
 generator = None
 discriminator = None
 
+def build_model(train=True):
+#    return build_google_unet()
+    return get_unet(input_img=keras.layers.Input(flow.IMSHAPE))
+    p2p = build_gan()
+    return p2p
+    if train:
+        return p2p
+    else:
+        return p2p.generator
+    return build_google_unet()
+    return xception_model()
+
+def load_model(path="model.tf-2", train=True):
+#    losses = { flow.LOSS.__qualname__: flow.LOSS }
+#    return keras.models.load_model(path, custom_objects=losses)
+    model = build_model(train)
+    try:
+        model.load_weights(path)
+    except:
+        stat = model.checkpoint.restore(path)
+        stat.expect_partial()
+    return model
+
+def save_model(model, path=flow.model_file):
+    try:
+        model.save_weights(path)
+    except:
+        model.checkpoint.save(path)
+
+def compile_model(model):
+    print("Compiling model...")
+    model.compile(optimizer=flow.OPTIMIZER, loss=flow.LOSS, metrics=['binary_accuracy', flow.loss.jaccard_distance, flow.loss.binary_focal_loss_fixed, flow.loss.ssim_metric])
+
 def load_initial_gan_inp():
   image = tf.Variable(np.array(flow.IMSHAPE), name='gan_input')#tf.io.read_file(image_file)
   #image = tf.image.decode_jpeg(image)
@@ -39,7 +72,7 @@ def load_initial_gan_inp():
 
 def build_gan():
     return Generator()
-    return pix2pix.Pix2pix(enable_function=False, epochs=25)
+    return pix2pix.Pix2pix(enable_function=False, epochs=flow.EPOCHS)
     global generator
     global discriminator
     tf.compat.v1.disable_eager_execution()
@@ -264,8 +297,8 @@ def get_unet(input_img, n_filters=16, dropout=0.5, batchnorm=True):
 
 def build_google_unet():
     output_channels = 3
-    base_model = tf.keras.applications.MobileNetV2(input_shape=[128, 128, 3], include_top=False)
-    base_model.trainable = False
+    base_model = tf.keras.applications.MobileNetV2(input_shape=flow.IMSHAPE, include_top=False)
+#    base_model.trainable = True
 
     # Use the activations of these layers
     layer_names = [

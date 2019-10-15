@@ -93,9 +93,29 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
             xs = pts[:,1]
             ys = pts[:,0]
 
-            node, nodes = graph.node, graph.nodes()
-            cps = [node[i]['o'] for i in nodes]
+#            node, nodes = graph.node, graph.nodes()
+#            cps = [node[i]['o'] for i in nodes]
+            # add nodes
+            for xy in graph.node[s]['pts']:
+                if len(xy) < 4:
+                    continue
+                linestring = "LINESTRING ({} {}".format(tr_x(xy[0][0]), tr_y(xy[0][1]))
+                for x,y in xy[1:]:
+                    linestring += ", {} {}".format(tr_x(x), tr_y(y))
+                linestring += ")"
+                linestrings.append(linestring)
+                weights.append(0.01)
+            for xy in graph.node[s]['pts']:
+                if len(xy) < 4:
+                    continue
+                linestring = "LINESTRING ({} {}".format(tr_x(xy[0][0]), tr_y(xy[0][1]))
+                for x,y in xy[1:]:
+                    linestring += ", {} {}".format(tr_x(x), tr_y(y))
+                linestring += ")"
+                linestrings.append(linestring)
+                weights.append(0.01)
 
+            # add edges
             weight = 0
             if len(xs) > 1:
                 # calculate time to travel this edge
@@ -116,6 +136,7 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
                 linestrings.append(linestring)
             else:
                 log.info("{}: unconnected point".format(chipname))
+
         for idx,linestring in enumerate(linestrings):
             error_shown = False
             output_csv.write("{},".format(chipname))

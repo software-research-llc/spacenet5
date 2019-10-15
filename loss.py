@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import keras
 from functools import partial
 
 
@@ -13,11 +14,14 @@ import dill
 def loss(y_true, y_pred):
     clipped_true = tf.compat.v1.clip_by_value(y_true, clip_value_min=0, clip_value_max=1)
 #    clipped_pred = tf.compat.v1.clip_by_value(y_pred, clip_value_min=0, clip_value_max=1)
-    weight = tf.reduce_sum(clipped_true)
+    weight = tf.cast(tf.reduce_sum(clipped_true), dtype=tf.float32)
     maxweight = tf.reduce_sum(tf.ones_like(y_true))
+    return weight * keras.losses.binary_crossentropy(y_true, y_pred)
+    """
     return (weighted_dice(y_true, y_pred) * 0.25 \
            + binary_focal_loss_fixed(y_true, y_pred)) \
            * (tf.math.maximum(1e-5, weight / maxweight))
+    """
 
 def binary_focal_loss(gamma=2., alpha=.25):
     import snflow as flow
@@ -111,9 +115,9 @@ def discriminator_loss(disc_real_output, disc_generated_output):
 
   return total_disc_loss
 
-def generator_loss(disc_generated_output, gen_output, target):
+#def generator_loss(disc_generated_output, gen_output, target):
 #  gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
-#def generator_loss(target, gen_output):
+def generator_loss(target, gen_output):
   import snflow as flow
   gan_loss = flow.binary_crossentropy(tf.ones_like(target), target)
 

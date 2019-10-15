@@ -4,7 +4,7 @@ import snflow as flow
 import pandas as pd
 import numpy as np
 import plac
-import snmodel
+import unet
 import keras
 import tqdm
 import create_submission
@@ -12,7 +12,7 @@ import infer
 
 #flow.CITIES += ["AOI_9_San_Juan"]
 #flow.CITIES = sorted(flow.CITIES)[1:]
-model = snmodel.load_model(flow.model_file)
+model = unet.load_model(flow.model_file)
 graphs = []
 masks = []
 filenames = []

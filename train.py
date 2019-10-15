@@ -2,7 +2,6 @@ import snflow as flow
 import keras
 import keras.backend as K
 import numpy as np
-import snmodel
 from keras.applications import xception
 import time
 import tensorflow as tf
@@ -12,7 +11,7 @@ from tensorflow_examples.models.pix2pix import pix2pix
 
 #tf.compat.v1.disable_eager_execution()
 
-EPOCHS = 25
+EPOCHS = flow.EPOCHS
 model = None
 model_file = "model.tf-2"
 i = 0
@@ -73,6 +72,7 @@ def train_gan(model, seq, epochs=EPOCHS):
 
 def train(model, seq, epochs=EPOCHS):
     iters = 0
+    print("{:10s}: {:10f}".format("Transforms", seq.transform))
     for x, y in seq:
         start = time.time()
         if seq.batch_size == 1:
@@ -103,13 +103,12 @@ def main():
     global model
     global i
     if model is None:
-        model = snmodel.build_model()
+        model = unet.build_model()
         print("WARNING: starting from a new model")
         time.sleep(5)
-    if not isinstance(model, pix2pix.Pix2pix):
-        snmodel.compile_model(model)
+    unet.compile_model(model)
 #        model.summary()
-    seq = flow.SpacenetSequence.all(model=model, transform=0.25)
+    seq = flow.SpacenetSequence.all(model=model, transform=0.00)
     i = 0
     while True:
         if isinstance(model, pix2pix.Pix2pix):
@@ -118,11 +117,13 @@ def main():
             train(model, seq)
         i += 1
         print("Loops through training data: %d" % i)
+        print("Saving...")
+        unet.save_model(model, model_file)
 
 if __name__ == '__main__':
     try:
-        model = snmodel.load_model()
-        model.checkpoint.restore(model_file)
+        model = unet.load_model()
+        #model.checkpoint.restore(model_file)
     except Exception as exc:
         print(exc)
     try:
@@ -133,13 +134,13 @@ if __name__ == '__main__':
         time.sleep(5)
         print("\nSaving...")
         try:
-            snmodel.save_model(model, model_file)
+            unet.save_model(model, model_file)
         except Exception as exc:
             print(exc)
             model.checkpoint.save(model_file)
     except Exception as exc:
         try:
-            snmodel.save_model(model, model_file)
+            unet.save_model(model, model_file)
         except Exception as exc2:
             model.checkpoint.save(model_file)
         raise exc

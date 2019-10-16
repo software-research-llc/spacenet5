@@ -49,7 +49,7 @@ def prep_for_skeletonize(img):
         img = img.squeeze()
     else:
         raise Exception("bad image shape: %s" % str(img.shape))
-    _, img = cv2.threshold(img, 0.05, 1, cv2.THRESH_BINARY)
+    _, img = cv2.threshold(img, 0.01, 1.0, cv2.THRESH_BINARY)
     return img
 
 def dilate_and_erode(img):

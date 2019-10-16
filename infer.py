@@ -4,7 +4,6 @@ if 'snflow' in sys.modules:
 else:
     import snflow as flow
 import numpy as np
-import unet
 import cv2
 import skimage
 from skimage.morphology import skeletonize
@@ -17,22 +16,15 @@ import os
 import skimage
 import copy
 
-def generate_images(model, test_input, tar):
-  # the training=True is intentional here since
-  # we want the batch statistics while running the model
-  # on the test dataset. If we use training=False, we will get
-  # the accumulated statistics learned from the training dataset
-  # (which we don't want)
-  prediction = model(test_input, training=True)
-  return prediction
-
 def infer_mask(model, image):
     assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
     output = model.predict(image.reshape([1] + flow.IMSHAPE))
-    return np.array(output)[0]# * (1 / np.max(output[0]))
+    output = output.squeeze()
+    output = output[:,:,1:]
+    return output
 
 def infer_roads(mask, chipname=''):
-    assert mask.ndim == 3, "expected shape {}, got {}".format(flow.TARGET_IMSHAPE, mask.shape)
+    assert mask.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, mask.shape)
     img = prep_for_skeletonize(mask)
     skel = skeletonize(img)
     graph = sknw.build_sknw(skel)
@@ -138,15 +130,7 @@ def infer_and_show(model, image, filename):
 #        import pdb; pdb.set_trace()
         plt.show()
 
-def do_all(loop=True):
-    """
-    import tensorflow as tf
-    fullgan = unet.build_model()
-    cp = tf.train.Checkpoint()
-    status = cp.restore("model.tf")
-    import pdb; pdb.set_trace()
-    """
-    model = unet.load_model(train=False)
+def do_all(model, loop=True):
     while True:
         path = flow.get_file()
         image = flow.resize(flow.get_image(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
@@ -161,5 +145,8 @@ def do_all(loop=True):
 
 if __name__ == "__main__":
     import logging
+    import train
+    model = train.build_model()
+    train.load_weights(model)
     logging.getLogger().setLevel(logging.ERROR)
-    do_all()
+    do_all(model)

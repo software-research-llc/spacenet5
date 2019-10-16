@@ -29,10 +29,10 @@ ORIG_IMSHAPE = [1300,1300,3]
 # The directory of this file (don't change this)
 MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
 # The path to the satellite images (be careful when changing, very delicate)
-BASEDIR = "%s/../data/train/" % MYDIR
+BASEDIR = "%s/data/train/" % MYDIR
 # Don't touch this
 RUNNING_TESTS = False
-TARGETFILE = os.path.join(MYDIR, "..", "targets.csv")
+TARGETFILE = os.path.join(MYDIR, "targets.csv")
 CITIES = ["AOI_7_Moscow",
           "AOI_8_Mumbai"]
 #          "AOI_9_San_Juan",
@@ -57,12 +57,21 @@ class SpacenetSequence(keras.utils.Sequence):
                  transform=False,
                  test=None, shuffle=False,
                  model=None):
-        self.x, self.y = x_set, y_set
+        self.test = test
+        if self.test == False:
+            self.x = x_set[:int(np.floor(len(x_set) * 0.95))]
+            self.y = y_set
+        elif self.test == True:
+            self.x = x_set[int(round(len(x_set) * 0.95)):]
+            self.y = y_set
+        else:
+            self.x = x_set
+            self.y = y_set
+
         if shuffle:
             random.shuffle(self.x)
         self.batch_size = batch_size
         self.transform = transform
-        self.test = test
         self.model = model
 
     def __len__(self):
@@ -70,9 +79,15 @@ class SpacenetSequence(keras.utils.Sequence):
 
     def __getitem__(self, idx):
         global RUNNING_TESTS
+        if idx >= len(self) or idx < 0:
+            return
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
-        x = []
+        if len(batch_x) < 1:
+            return
+        while len(batch_x) < self.batch_size:
+            batch_x.append(self.x[idx * self.batch_size])
 
+        x = []
         for ex in batch_x:
             try:
                 filename = get_file(ex)
@@ -81,16 +96,15 @@ class SpacenetSequence(keras.utils.Sequence):
             except Exception as exc:
                 log.error("{} on {}".format(str(exc), file_name))
                 raise exc
-        if not x:
-            raise Exception("x is empty")
 
         x = np.array(x)
         y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])#, dtype=DATATYPE)
-
+        if len(y.shape) < 4:
+            y = y.reshape([1, y.shape[0], y.shape[1], y.shape[2]])
         for idx, imageid in enumerate(batch_x):
             if self.transform:
                 r = random.randint(0,1)
-                if self.transform < r:
+                if random.randint(0,1) > self.transform:
                     x[idx] = skimage.transform.rotate(x[idx], 90)
                     y[idx] = skimage.transform.rotate(y[idx], 90)
 
@@ -99,10 +113,21 @@ class SpacenetSequence(keras.utils.Sequence):
         else:
             return x,y
 
+    def get_generator(self):
+        def _gen():
+            while True:
+                for i in range(len(self)):
+                    yield self[i]
+                raise StopIteration
+
+        return _gen
+
     @staticmethod
-    def all(model=None, batch_size=BATCH_SIZE, transform=False, shuffle=False):
+    def all(model=None, batch_size=BATCH_SIZE, transform=False, shuffle=False, test=None):
         imageids = get_imageids()
-        return SpacenetSequence(imageids, TargetBundle(), batch_size=batch_size, shuffle=shuffle, transform=transform, model=model)
+        return SpacenetSequence(imageids, TargetBundle(), batch_size=batch_size,
+                                shuffle=shuffle, transform=transform, model=model,
+                                test=test)
 
 def Sequence(**kwargs):
     return SpacenetSequence.all(**kwargs)
@@ -166,7 +191,7 @@ def get_filenames(dataset="PS-RGB"):
 def get_imageids(dataset="PS-RGB"):
     """Return the ImageIDs of all images (as opposed to the file paths)"""
     paths = get_filenames()
-    return [os.path.basename(path) for path in paths]#Target.expand_imageid(path.replace(datadir + "_", "")) for path in paths]
+    return [Target.expand_imageid(os.path.basename(path)) for path in paths]#Target.expand_imageid(path.replace(datadir + "_", "")) for path in paths]
 
 class TargetBundle:
     """A dict-like container of Target objects"""
@@ -185,7 +210,6 @@ class TargetBundle:
         self.add_df(Target.df)
 
     def add_df(self, df):
-        count = 0
         for idx,linestring in enumerate(df['WKT_Pix']):
             if linestring.lower().find("empty") != -1:
                 continue
@@ -199,11 +223,7 @@ class TargetBundle:
                       df['length_m'][idx],
                       df['travel_time_s'][idx]))
                 weight = 0
-            if imageid not in self.targets:
-                count += 1
-                imageid = imageid.replace("_chip", "_PS-RGB_chip")
             self.targets[imageid].add_linestring(linestring, weight / distance)
-        self.mean_speed /= count
 
     def __getitem__(self, idx):
         """Return a target corresponding to the (possibly partial)
@@ -246,6 +266,7 @@ class Target:
         mstr = m.string[m.start():m.end()]
         mnum = m.groups()[0]
         ret = imageid.replace(mstr, "") + "chip" + mnum
+        ret = ret.replace("PS-RGB_", "").replace(".tif", "")
         return ret
 
     def add_linestring(self, string, weight):
@@ -289,7 +310,7 @@ class Target:
         self._img = img
         return self._img.reshape((IMSHAPE[0], IMSHAPE[1], 1))
 #        return np.cast['uint8'](img)#.reshape(TARGET_IMSHAPE)
-
+    
 if __name__ == '__main__':
     RUNNING_TESTS = True
     log.warning("Running all tests...")

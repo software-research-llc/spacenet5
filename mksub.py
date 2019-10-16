@@ -8,18 +8,23 @@ import keras
 import tqdm
 import sngraph
 import train
+import infer
+import create_submission
 
-if __name__ == '__main__':
-    model = train.build_model()
-    train.load_weights(model)
-    flow.RUNNING_TESTS = True
-    seq = flow.Sequence(batch_size=1)
-    for x,y,name in tqdm.tqdm(seq):
-#        img = model.predict(x)
-        graph = sngraph.SNGraph()
-        graph.name = flow.Target.expand_imageid(name[0])
-        graph.add_channel(y[0])
-        linestrings = graph.toWKT()
-        with open("solution/solution.csv", "a") as f:
-            f.writelines(linestrings)
-        import pdb; pdb.set_trace()
+flow.CITIES += ["AOI_9_San_Juan"]
+model = train.build_model()
+train.load_weights(model)
+graphs = []
+masks = []
+for filename in tqdm.tqdm(flow.get_test_filenames()):
+    image = flow.get_image(filename)
+    try:
+        mask, graph, preproc, skel = infer.infer(model, image, chipname=flow.Target.expand_imageid(filename))
+        graphs.append(graph)
+        masks.append(image[0])
+    except KeyboardInterrupt:
+        break
+
+print("Creating submission")
+create_submission.graphs_to_wkt(masks, graphs,
+                                output_csv_path='solution/solution.csv')

@@ -89,7 +89,10 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
 #            weight = graph[s][e]['weight']
 #            weights.append(weight)
 
-            pts = graph[s][e]['pts']
+            pts = [graph.node[s]['o'].tolist()]
+            pts += graph[s][e]['pts'].tolist()
+            pts += [graph.node[e]['o'].tolist()]
+            pts = np.array(pts)
             xs = pts[:,1]
             ys = pts[:,0]
 
@@ -136,6 +139,11 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
                 linestrings.append(linestring)
             else:
                 log.info("{}: unconnected point".format(chipname))
+
+        if len(linestrings) < 1:
+            output_csv.write("{},".format(chipname))
+            output_csv.write('"LINESTRING EMPTY",')
+            output_csv.write("0.0,0.0")
 
         for idx,linestring in enumerate(linestrings):
             error_shown = False

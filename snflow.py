@@ -11,16 +11,17 @@ from skimage.transform import resize
 import skimage
 import networkx
 import numpy as np
-import keras
+import tensorflow.keras as keras
 import pandas as pd
 import mpmath
 import cv2
 import logging
 import tensorflow as tf
+import segmentation_models as sm
 log = logging.getLogger(__name__)
 
 CLASSES = [ 'background', 'slow', 'medium', 'fast' ]
-BACKBONE = 'seresnext50'
+BACKBONE = 'resnet34'
 BATCH_SIZE = 3
 N_CLASSES = len(CLASSES)
 IMSHAPE = [512,512,3]
@@ -49,6 +50,9 @@ def trdown(x,y):
     y = y * (IMSHAPE[1] / ORIG_IMSHAPE[1])
     return round(x), round(y)
 
+def preprocess(imgs):
+    return sm.get_preprocessing(BACKBONE)(imgs)
+
 class SpacenetSequence(keras.utils.Sequence):
     """A sequence object that feeds tuples of (x, y) data via __getitem__()
        and __len__()"""
@@ -75,7 +79,8 @@ class SpacenetSequence(keras.utils.Sequence):
         self.model = model
 
     def __len__(self):
-        return int(np.ceil(len(self.x) / float(self.batch_size)))
+        length = int(np.ceil(len(self.x) / float(self.batch_size)))
+        return length
 
     def __getitem__(self, idx):
         global RUNNING_TESTS
@@ -94,13 +99,15 @@ class SpacenetSequence(keras.utils.Sequence):
                 image = get_image(filename)
                 x.append(image)
             except Exception as exc:
-                log.error("{} on {}".format(str(exc), file_name))
+                import pdb; pdb.set_trace()
+                log.error("{} on {}".format(str(exc), filename))
                 raise exc
 
         x = np.array(x)
+#        x = preprocess(x)
         y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])#, dtype=DATATYPE)
-        if len(y.shape) < 4:
-            y = y.reshape([1, y.shape[0], y.shape[1], y.shape[2]])
+#        if len(y.shape) < 4:
+#            y = y.reshape([1, y.shape[0], y.shape[1], y.shape[2]])
         for idx, imageid in enumerate(batch_x):
             if self.transform:
                 r = random.randint(0,1)
@@ -124,7 +131,7 @@ class SpacenetSequence(keras.utils.Sequence):
 
     @staticmethod
     def all(model=None, batch_size=BATCH_SIZE, transform=False, shuffle=False, test=None):
-        imageids = get_imageids()
+        imageids = get_filenames()
         return SpacenetSequence(imageids, TargetBundle(), batch_size=batch_size,
                                 shuffle=shuffle, transform=transform, model=model,
                                 test=test)
@@ -159,6 +166,12 @@ def get_file(filename=None, datadir=None, dataset="PS-RGB"):
         allfiles = get_filenames()
         i = random.randint(0, len(allfiles))
         return allfiles[i]
+    match = re.search("(AOI_\d_.+)_(PS-RGB|chip)", filename)
+    if match:
+        city = match.groups(0)[0]
+        found = os.path.join(BASEDIR, city, "PS-RGB", filename)
+        if os.path.exists(found):
+            return found
     for city in CITIES:
         trying = os.path.join(BASEDIR, city, dataset.upper())
         if os.path.exists(os.path.join(trying, filename)):
@@ -185,7 +198,7 @@ def get_filenames(dataset="PS-RGB"):
     """Return a list of every path for every image"""
     ret = []
     for city in CITIES:
-        ret += os.listdir(os.path.join(BASEDIR, city, dataset))
+        ret += [os.path.join(BASEDIR, city, dataset, f) for f in os.listdir(os.path.join(BASEDIR, city, dataset))]
     return ret
 
 def get_imageids(dataset="PS-RGB"):
@@ -261,6 +274,7 @@ class Target:
 
     @staticmethod
     def expand_imageid(imageid):
+        imageid = os.path.basename(imageid)
         regex = re.compile("chip(\d+)(.tif)?")
         m = re.search(regex, imageid)
         mstr = m.string[m.start():m.end()]
@@ -293,8 +307,8 @@ class Target:
         return round(channel) + 1
 
     def image(self):
-        if self._img is not None:
-            return self._img
+        #if self._img is not None:
+        #    return self._img
         img = np.zeros((IMSHAPE[0], IMSHAPE[1]), dtype=np.uint8)
         for edge in self.graph.edges():
             weight = self.graph[edge[0]][edge[1]]['weight']
@@ -307,8 +321,8 @@ class Target:
             cv2.line(img, (x1, y1), (x2, y2), klass, 5)
         #img = resize(img, [IMSHAPE[0], IMSHAPE[1]], anti_aliasing=True)
         #img = img.reshape((IMSHAPE[0] * IMSHAPE[1], -1))
-        self._img = img
-        return self._img.reshape((IMSHAPE[0], IMSHAPE[1], 1))
+        #self._img = img
+        return np.expand_dims(img, 2)
 #        return np.cast['uint8'](img)#.reshape(TARGET_IMSHAPE)
     
 if __name__ == '__main__':
@@ -316,8 +330,8 @@ if __name__ == '__main__':
     log.warning("Running all tests...")
     allfiles = get_filenames()
     for filename in allfiles:
-        got = get_file(filename)
-        if os.path.basename(got) != filename:
+        got = get_file(os.path.basename(filename))
+        if got != filename:
             log.error("{} != {}".format(got, filename))
     seq = SpacenetSequence.all(batch_size=1)
     tb = TargetBundle()
@@ -329,7 +343,7 @@ if __name__ == '__main__':
         if np.sum(img != x[0]) != 0:
             log.error("get_file({}) != data given for file {}".format(allfiles[iteration], batch_x[0]))
             sys.exit()
-        if allfiles[iteration].replace(".tif", "") != Target.expand_imageid(allfiles[iteration]):
+        if os.path.basename(allfiles[iteration]).replace(".tif", "").replace("PS-RGB_","") != Target.expand_imageid(allfiles[iteration]):
             log.error("{} maps to {}".format(allfiles[iteration], Target.expand_imageid(allfiles[iteration])))
             sys.exit()
         img = tb[Target.expand_imageid(allfiles[iteration])].image()

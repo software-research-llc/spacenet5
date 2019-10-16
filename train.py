@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 callbacks = [
     keras.callbacks.ModelCheckpoint('./best_model.h5', save_weights_only=True, save_best_only=True, mode='min'),
-    keras.callbacks.ReduceLROnPlateau(),
 ]
 
 dice_loss = sm.losses.DiceLoss(class_weights=np.array([0.2, 1, 1, 1]))
@@ -29,6 +28,17 @@ def save_model(model, save_path="model.hdf5", pause=0):
     sys.stderr.write("Saving...\n")
     return model.save_weights(save_path)
 
+def load_weights(model, save_path="model.hdf5"):
+    try:
+        model.load_weights(save_path)
+        logger.warning("Model loaded successfully.")
+    except OSError as exc:
+        sys.stderr.write("!! ERROR LOADING WEIGHTS:")
+        sys.stderr.write(str(exc) + "\n")
+
+def build_model():
+    return sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES, activation='softmax')
+
 def main(save_path="model.hdf5",
          optimizer='adam',
          loss='sparse_categorical_crossentropy',
@@ -36,32 +46,47 @@ def main(save_path="model.hdf5",
          verbose=1,
          epochs=20,
          validation_split=0.1):
-    model = sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES, activation='softmax')
-
+    model = build_model()
     if restore:
-        try:
-            model.load_weights(save_path)
-            logger.info("Model loaded successfully.")
-        except OSError as exc:
-            sys.stderr.write(str(exc) + "\n")
+        load_weights(model)
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-#    model.summary()
 
-    seq = flow.Sequence()
-    while True:
+    train_seq = flow.Sequence(batch_size=3, transform=0.25, test=False)
+    val_seq = flow.Sequence(batch_size=3, test=True)
+
+    for i in range(epochs):
         try:
-            for x,y in seq:
-                model.fit(x, y, batch_size=seq.batch_size,
-                          validation_split=validation_split,
-                          epochs=epochs, verbose=verbose,
-                          callbacks=callbacks)
-        except KeyboardInterrupt:
-                save_model(model, save_path, pause=1)
-                sys.exit()
+            train_step(model, train_seq, verbose, 1, callbacks, save_path, val_seq)
         except Exception as exc:
-            save_model(model, save_path)
-            raise(exc)
+            raise exc
+
+    save_model(model, save_path)
+
+def train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq):
+    try:
+        model.fit(train_seq, validation_data=val_seq, epochs=epochs,
+                            verbose=verbose, callbacks=callbacks)
+                            #use_multiprocessing=True)
+    except KeyboardInterrupt:
+            save_model(model, save_path, pause=1)
+            sys.exit()
+    except Exception as exc:
+        save_model(model, save_path)
+        raise(exc)
+
+
+def train_step_generator(model, train_seq, verbose, epochs, callbacks, save_path, val_seq=None):
+    try:
+        model.fit_generator(train_seq, validation_data=val_seq, epochs=epochs,
+                            verbose=verbose, callbacks=callbacks)
+                            #use_multiprocessing=True)
+    except KeyboardInterrupt:
+            save_model(model, save_path, pause=1)
+            sys.exit()
+    except Exception as exc:
+        save_model(model, save_path)
+        raise(exc)
 
 if __name__ == "__main__":
     plac.call(main)

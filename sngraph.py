@@ -11,13 +11,14 @@ class SNGraph(nx.Graph):
                     self.insertEdgesFor(img, x, y)
 
     def insertEdgesFor(self, img, x, y):
-        for i in [x+1]:
-            for j in [y+1]:
+        for i in [x, x+1]:
+            for j in [y, y+1]:
                 if i >= len(img) or j >= len(img[i]):
                     continue
                 if img[i][j] > 0:
-                    self.add_node((i,j))
-                    self.add_edge((x,y), (i,j), weight=img[x][y])
+                    if (i,j) != (x,y):
+                        self.add_node((i,j))
+                        self.add_edge((x,y), (i,j), weight=img[x][y])
 
     def _tr(self, x, y):
         return flow.trup(x, y)
@@ -45,11 +46,14 @@ class SNGraph(nx.Graph):
 
 if __name__ == '__main__':
     import time
-    graph = SNGraph()
     seq = flow.SpacenetSequence.all(batch_size=1)
     x,y = seq[0]
+    graph = SNGraph(name=seq.y[0].imageid)
     print("Processing...")
     start = time.time()
     graph.add_image(y)
-    print(graph.toWKT())
-    print("Wall time: {}".format(time.time() - start))
+    wkt = graph.toWKT()
+    end = time.time()
+    for line in wkt[:5]:
+        print(line)
+    print("Number of linestrings: {}\nWall time: {}".format(len(wkt), end - start))

@@ -1,146 +1,67 @@
-import snflow as flow
-import keras
-import keras.backend as K
-import numpy as np
-from keras.applications import xception
 import time
+import sys
+import snflow as flow
+import plac
 import tensorflow as tf
-import loss
-import unet
-from tensorflow_examples.models.pix2pix import pix2pix
+import segmentation_models as sm
+import keras
+import numpy as np
+import logging
+logger = logging.getLogger(__name__)
 
-#tf.compat.v1.disable_eager_execution()
+callbacks = [
+    keras.callbacks.ModelCheckpoint('./best_model.h5', save_weights_only=True, save_best_only=True, mode='min'),
+    keras.callbacks.ReduceLROnPlateau(),
+]
 
-EPOCHS = flow.EPOCHS
-model = None
-model_file = "model.tf-2"
-i = 0
-iters = 0
+dice_loss = sm.losses.DiceLoss(class_weights=np.array([0.2, 1, 1, 1]))
+focal_loss = sm.losses.BinaryFocalLoss() if flow.N_CLASSES == 1 else sm.losses.CategoricalFocalLoss()
+total_loss = dice_loss + (1 * focal_loss)
+metrics = ['accuracy', sm.metrics.IOUScore(threshold=0.5), sm.metrics.FScore(threshold=0.5)]
+optim = keras.optimizers.Adam()
 
-@tf.function
-def train_step(input_image, target):
-  with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-    gen_output = unet.generator(input_image, training=True)
+def save_model(model, save_path="model.hdf5", pause=0):
+    if pause > 0:
+        sys.stderr.write("Saving in")
+        for i in list(range(1,6))[::-1]:
+            sys.stderr.write(" %d...\n" % i)
+            time.sleep(pause)
+    sys.stderr.write("Saving...\n")
+    return model.save_weights(save_path)
 
-    disc_real_output = unet.discriminator([input_image, target], training=True)
-    disc_generated_output = unet.discriminator([input_image, gen_output], training=True)
+def main(save_path="model.hdf5",
+         optimizer='adam',
+         loss='sparse_categorical_crossentropy',
+         restore=True,
+         verbose=1,
+         epochs=20,
+         validation_split=0.1):
+    model = sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES, activation='softmax')
 
-    gen_loss = unet.generator_loss(disc_generated_output, gen_output, target)
-    disc_loss = unet.discriminator_loss(disc_real_output, disc_generated_output)
+    if restore:
+        try:
+            model.load_weights(save_path)
+            logger.info("Model loaded successfully.")
+        except OSError as exc:
+            sys.stderr.write(str(exc) + "\n")
 
-  unet.generator_gradients = gen_tape.gradient(gen_loss,
-                                          unet.generator.trainable_variables)
-  unet.discriminator_gradients = disc_tape.gradient(disc_loss,
-                                               unet.discriminator.trainable_variables)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+#    model.summary()
 
-  unet.generator_optimizer.apply_gradients(zip(unet.generator_gradients,
-                                          unet.generator.trainable_variables))
-  unet.discriminator_optimizer.apply_gradients(zip(unet.discriminator_gradients,
-                                              unet.discriminator.trainable_variables))
-
-def fit(train_ds, epochs, test_ds):
-  for epoch in range(epochs):
-    # Train
-    for input_image, target in train_ds:
-      train_step(input_image, target)
-
-    # Test on the same image so that the progress of the model can be 
-    # easily seen.
-    for example_input, example_target in test_ds.take(1):
-      generate_images(unet.generator, example_input, example_target)
-
-def train_gan(model, seq, epochs=EPOCHS):
-    global iters
-    if isinstance(model, pix2pix.Pix2pix):
-        """
-        start = time.time()
-        totaltime = time.time() - start
-        print("{:15s} {:^20s} {:^20s} {:^15s} {:^20s}".format("Full epochs", "Secs per iteration", "Mins per full epoch", "Batch size", "Samples remaining"))
-        print("{:15s} {:^20.2f} {:^20.2f} {:^15s} {:^20s}".format(str(i), steptime / len(seq), steptime, str(len(x)), str(len(seq) * len(x) - iters * len(x))))
-        iters += 1
-        """
-        model.epochs = 1
-        start = time.time()
-        history = model.train(seq, model_file)
-        stop = time.time()
-        steptime = stop - start
-        totaltime = len(seq) * steptime / 60
-        iters += 1
-        print("{:15s} {:^20s} {:^20s} {:^15s} {:^20s}".format("Full epochs", "Secs per iteration", "Mins per full epoch", "Batch size", "Samples remaining"))
-        print("{:15s} {:^20.2f} {:^20.2f} {:^15s} {:^20s}".format(str(i),        steptime,           totaltime,            str(seq.batch_size), "0"))
-        print(history)
-
-def train(model, seq, epochs=EPOCHS):
-    iters = 0
-    print("{:10s}: {:10f}".format("Transforms", seq.transform))
-    for x, y in seq:
-        start = time.time()
-        if seq.batch_size == 1:
-            history = model.fit(x, y, epochs=epochs, verbose=1, use_multiprocessing=True)
-        else:
-            history = model.fit(x, y, batch_size=seq.batch_size, epochs=epochs, validation_split=0.1, verbose=1)
-        stop = time.time()
-        steptime = stop - start
-        totaltime = len(seq) * steptime / 60
-        iters += 1
-        print("{:15s} {:^20s} {:^20s} {:^15s} {:^20s}".format("Full epochs", "Secs per iteration", "Mins per full epoch", "Batch size", "Samples remaining"))
-        print("{:15s} {:^20.2f} {:^20.2f} {:^15s} {:^20s}".format(str(i), steptime, totaltime, str(len(x)), str(len(seq) * len(x) - iters * len(x))))
-    print(history.history['loss'])
-
-def custom_accuracy(y_true, y_pred):
-    """Return the percentage of pixels that were correctly predicted as belonging to a road"""
-    tp = tf.math.count_nonzero(y_true * y_pred)
-    total_pos = tf.math.count_nonzero(y_true)
-    return tf.dtypes.cast(tp, dtype=tf.float64) / tf.maximum(tf.constant(1, dtype=tf.float64), tf.dtypes.cast(total_pos, dtype=tf.float64))
-
-def custom_loss(y_true, y_pred):
-    tp = tf.math.count_nonzero(y_true * y_pred)
-    total_pos = tf.math.count_nonzero(y_true)
-    loss = tf.constant(1, dtype=tf.float64) - tf.dtypes.cast(tp, dtype=tf.float64) / tf.maximum(tf.constant(1, dtype=tf.float64), tf.dtypes.cast(total_pos, dtype=tf.float64))
-    return loss
-
-def main():
-    global model
-    global i
-    if model is None:
-        model = unet.build_model()
-        print("WARNING: starting from a new model")
-        time.sleep(5)
-    unet.compile_model(model)
-#        model.summary()
-    seq = flow.SpacenetSequence.all(model=model, transform=0.00)
-    i = 0
+    seq = flow.Sequence()
     while True:
-        if isinstance(model, pix2pix.Pix2pix):
-            train_gan(model, seq)
-        else:
-            train(model, seq)
-        i += 1
-        print("Loops through training data: %d" % i)
-        print("Saving...")
-        unet.save_model(model, model_file)
-
-if __name__ == '__main__':
-    try:
-        model = unet.load_model()
-        #model.checkpoint.restore(model_file)
-    except Exception as exc:
-        print(exc)
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("Finished %d full epochs." % i)
-        print("\nSaving to file in 5...")
-        time.sleep(5)
-        print("\nSaving...")
         try:
-            unet.save_model(model, model_file)
+            for x,y in seq:
+                model.fit(x, y, batch_size=seq.batch_size,
+                          validation_split=validation_split,
+                          epochs=epochs, verbose=verbose,
+                          callbacks=callbacks)
+        except KeyboardInterrupt:
+                save_model(model, save_path, pause=1)
+                sys.exit()
         except Exception as exc:
-            print(exc)
-            model.checkpoint.save(model_file)
-    except Exception as exc:
-        try:
-            unet.save_model(model, model_file)
-        except Exception as exc2:
-            model.checkpoint.save(model_file)
-        raise exc
+            save_model(model, save_path)
+            raise(exc)
+
+if __name__ == "__main__":
+    plac.call(main)

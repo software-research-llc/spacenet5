@@ -21,8 +21,8 @@ for x, image, fn in tqdm.tqdm(seq):
         graph, _, skel = infer.infer_roads(image[0].astype(np.float32), chipname=fn[0])
         graphs.append(graph)
         masks.append(image[0])
-#        if len(graphs) > 100:
-#            break
+        if len(graphs) > 100:
+            break
     except KeyboardInterrupt:
         break
 

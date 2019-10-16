@@ -15,7 +15,7 @@ callbacks = [
 
 dice_loss = sm.losses.DiceLoss()#class_weights=np.array([1, 1, 1, 1]))
 focal_loss = sm.losses.BinaryFocalLoss() if flow.N_CLASSES == 1 else sm.losses.CategoricalFocalLoss()
-total_loss = dice_loss + (1 * focal_loss)
+total_loss = 0.25 * dice_loss + (1.0 * focal_loss)
 metrics = ['accuracy', 'sparse_categorical_crossentropy', sm.metrics.IOUScore(), sm.metrics.FScore()]
 optim = keras.optimizers.Adam()
 preprocess_input = sm.get_preprocessing(flow.BACKBONE)
@@ -53,7 +53,7 @@ def main(save_path="model.hdf5",
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    train_seq = flow.Sequence(batch_size=3, transform=0.00, test=False)
+    train_seq = flow.Sequence(batch_size=5, transform=0.25, test=False)
     val_seq = flow.Sequence(batch_size=1, test=True)
 
     train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
@@ -73,6 +73,9 @@ def main(save_path="model.hdf5",
                 print("Epoch %d / %d, step %d / %d" % (epoch, epochs, stepnum, len(train_seq)))
                 model.fit(x, y, validation_data=[vx, vy], epochs=1,
                             verbose=verbose, batch_size=3)
+            except KeyboardInterrupt:
+                save_model(model, save_path, pause=1)
+                sys.exit()
             except Exception as exc:
                 save_model(model, save_path)
                 raise exc

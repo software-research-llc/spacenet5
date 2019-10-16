@@ -31,7 +31,7 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
         plt.title("Original")
         fig.add_subplot(1,2,2)
         tb = flow.TargetBundle()
-        binim = tb[os.path.basename(path)].image()
+        binim = tb[os.path.basename(path)].image().squeeze()
         plt.imshow(binim)
         plt.imshow
         plt.title("Target: %s" % path)
@@ -45,7 +45,7 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
         plt.title("Original")
         fig.add_subplot(1,2,2)
         tb = flow.TargetBundle()
-        plt.imshow(tb[os.path.basename(fpath)].image())
+        plt.imshow(tb[os.path.basename(fpath)].image().squeeze())
         plt.title("Target")
     plt.show()
 

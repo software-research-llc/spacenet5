@@ -21,7 +21,7 @@ import segmentation_models as sm
 log = logging.getLogger(__name__)
 
 CLASSES = [ 'background', 'slow', 'medium', 'fast' ]
-BACKBONE = 'resnet34'
+BACKBONE = 'seresnet50'
 BATCH_SIZE = 3
 N_CLASSES = len(CLASSES)
 IMSHAPE = [512,512,3]
@@ -91,12 +91,25 @@ class SpacenetSequence(keras.utils.Sequence):
             return
         while len(batch_x) < self.batch_size:
             batch_x.append(self.x[idx * self.batch_size])
+        y = [self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x]
 
         x = []
-        for ex in batch_x:
+        for idx,ex in enumerate(batch_x):
             try:
                 filename = get_file(ex)
                 image = get_image(filename)
+                if random.randint(0,1) < self.transform:
+                    image = np.fliplr(image)
+                    y[idx] = np.fliplr(y[idx])
+                elif random.randint(0,1) < self.transform:
+                    image = np.flipud(image)
+                    y[idx] = np.flipud(y[idx])
+#                elif random.randint(0,1) < self.transform:
+#                    image = cv2.GaussianBlur(image, (3, 3), 0)
+#                    y[idx] = cv2.GaussianBlur(image, (3, 3), 0)
+#                elif random.randint(0,1) < self.transform:
+#                    image = tf.image.rot90(image)
+#                    y[idx] = tf.image.rot90(y[idx])
                 x.append(image)
             except Exception as exc:
                 import pdb; pdb.set_trace()
@@ -104,16 +117,10 @@ class SpacenetSequence(keras.utils.Sequence):
                 raise exc
 
         x = np.array(x)
+        y = np.array(y)
 #        x = preprocess(x)
-        y = np.array([self.y[Target.expand_imageid(imageid)].image() for imageid in batch_x])#, dtype=DATATYPE)
 #        if len(y.shape) < 4:
 #            y = y.reshape([1, y.shape[0], y.shape[1], y.shape[2]])
-        for idx, imageid in enumerate(batch_x):
-            if self.transform:
-                r = random.randint(0,1)
-                if random.randint(0,1) > self.transform:
-                    x[idx] = skimage.transform.rotate(x[idx], 90)
-                    y[idx] = skimage.transform.rotate(y[idx], 90)
 
         if RUNNING_TESTS:
             return x,y,batch_x
@@ -228,15 +235,15 @@ class TargetBundle:
                 continue
             imageid = Target.expand_imageid(df['ImageId'][idx])
             try:
-                weight = float(df['travel_time_s'][idx])
-                distance = float(df['length_m'][idx])
+                travel_time_s = float(df['travel_time_s'][idx])
+                length_m = float(df['length_m'][idx])
             except ZeroDivisionError:
                 log.error("ZeroDivisionError: %s, %s, length = %s, time = %s" % (imageid,
                       linestring,
                       df['length_m'][idx],
                       df['travel_time_s'][idx]))
                 weight = 0
-            self.targets[imageid].add_linestring(linestring, weight / distance)
+            self.targets[imageid].add_linestring(linestring, travel_time_s, length_m)
 
     def __getitem__(self, idx):
         """Return a target corresponding to the (possibly partial)
@@ -283,21 +290,21 @@ class Target:
         ret = ret.replace("PS-RGB_", "").replace(".tif", "")
         return ret
 
-    def add_linestring(self, string, weight):
+    def add_linestring(self, string, travel_time_s, length_m):
         """Take a linestring + the weight for the edge it represents, and
            add that information to what's stored in this object."""
         if string.lower().find("empty") != -1:
             return
-        elif weight > self.tb.max_speed:
-            self.tb.max_speed = weight
+        elif travel_time_s > self.tb.max_speed:
+            self.tb.max_speed = travel_time_s
         edges = re.findall(Target.regex, string)
         for i in range(len(edges) - 1):
             x1,y1 = edges[i].split(" ")
             x2,y2 = edges[i+1].split(" ")
             x1,y1 = float(x1), float(y1)
             x2,y2 = float(x2), float(y2)
-            self.graph.add_edge((x1,y1), (x2,y2), weight=weight)
-        self.tb.mean_speed += weight
+            self.graph.add_edge((x1,y1), (x2,y2), travel_time_s=travel_time_s, length_m=length_m)
+        self.tb.mean_speed += travel_time_s
         return self
 
     def pixel_by_class(self, weight):
@@ -311,7 +318,7 @@ class Target:
         #    return self._img
         img = np.zeros((IMSHAPE[0], IMSHAPE[1]), dtype=np.uint8)
         for edge in self.graph.edges():
-            weight = self.graph[edge[0]][edge[1]]['weight']
+            weight = self.graph[edge[0]][edge[1]]['length_m'] / self.graph[edge[0]][edge[1]]['travel_time_s']
             klass = self.pixel_by_class(weight)
             x1,y1 = edge[0]
             x2,y2 = edge[1]

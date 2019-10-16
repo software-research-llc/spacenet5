@@ -21,17 +21,17 @@ def rotate(x, y, angle):
 
 def tr_x(x):
     """Translated resized target image coordinates to input image coordinates"""
-    x = x * flow.CHIP_CANVAS_SIZE[0] / flow.TARGET_IMSHAPE[0]
+    x = x * flow.ORIG_IMSHAPE[0] / flow.IMSHAPE[0]
     return x
 
 def tr_y(y):
     """Translate resized target image coordinates to input image coordinates"""
-    y = y * flow.CHIP_CANVAS_SIZE[1] / flow.TARGET_IMSHAPE[1]
+    y = y * flow.ORIG_IMSHAPE[1] / flow.IMSHAPE[1]
     return y
 
 def get_coords(graph, cn=255, ce=128):
     acc = np.cumprod((1,)+tuple([256,256])[::-1][:-1])[::-1]
-    img = np.zeros([flow.TARGET_IMSHAPE[0], flow.TARGET_IMSHAPE[1]])
+    img = np.zeros([flow.IMSHAPE[0], flow.IMSHAPE[1]])
     img = img.ravel()
     weights = []
 

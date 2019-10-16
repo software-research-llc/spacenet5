@@ -37,17 +37,19 @@ def prep_for_skeletonize(img):
 #    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 #    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 #    img = dilate_and_erode(img)
+    """
     maxval = np.max(img)
     if maxval != np.nan and maxval != 0:
         scale = 1 / maxval
         img *= scale
+    """
     if img.shape[-1] == 3:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img = cv2.cvtColor(img.astype(np.float32), cv2.COLOR_BGR2GRAY)
     elif img.shape[-1] == 1:
-        img = img[:,:,0]
+        img = img.squeeze()
     else:
         raise Exception("bad image shape: %s" % str(img.shape))
-    _, img = cv2.threshold(img, 0.25, 1, cv2.THRESH_BINARY)
+    _, img = cv2.threshold(img, 0.05, 1, cv2.THRESH_BINARY)
     return img
 
 def dilate_and_erode(img):
@@ -70,14 +72,16 @@ def infer_and_show(model, image, filename):
     chipid = os.path.basename(filename)#.replace("PS-RGB_", "").replace(".tif", "")
     if isinstance(image, str):
         image = flow.get_image(image)
-    mask, graph, preproc, skel = infer(model, image)
+    mask = infer_mask(model, image)
 #    mask = infer_mask(model, image)
     if mask.shape[-1] == 3:
         graymask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     else:
         mask = mask.squeeze()
-    _, graymask = cv2.threshold(mask, 0.10, 1, cv2.THRESH_BINARY)
+    _, graymask = cv2.threshold(mask, 0.15, 1, cv2.THRESH_BINARY)
     filled_mask = skimage.morphology.remove_small_holes(graymask.astype(np.bool), connectivity=20)
+    filled_mask = skimage.morphology.remove_small_objects(graymask.astype(np.bool))
+    _, graph, preproc, skel = infer(model, image)
 #    import pdb;pdb.set_trace()
     for idx in range(1):
         fig = plt.figure()

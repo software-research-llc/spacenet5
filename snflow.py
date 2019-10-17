@@ -35,7 +35,8 @@ TESTDIR = "%s/data/test/" % MYDIR
 # Don't touch this
 RUNNING_TESTS = False
 TARGETFILE = os.path.join(MYDIR, "targets.csv")
-CITIES = ["AOI_7_Moscow",
+CITIES = ["AOI_4_Shanghai",
+          "AOI_7_Moscow",
           "AOI_8_Mumbai"]
 #          "AOI_9_San_Juan",
 DATATYPE=int
@@ -147,12 +148,25 @@ class SpacenetSequence(keras.utils.Sequence):
 def Sequence(**kwargs):
     return SpacenetSequence.all(**kwargs)
 
+def cvt_16bit_to_8bit(img):
+    ch1 = img[:,:,0]
+    ch2 = img[:,:,1]
+    ch3 = img[:,:,2]
+    ch1 = ch1 / (np.max(ch1) - np.min(ch1))
+    ch2 = ch2 / (np.max(ch2) - np.min(ch2))
+    ch3 = ch3 / (np.max(ch3) - np.min(ch3))
+    return np.stack([ch1,ch2,ch3], axis=2)
+
 def get_image(filename=None, dataset="PS-RGB"):
     """Return the satellite image corresponding to a given partial pathname or chipid.
        Returns a random (but existing) value if called w/ None."""
     requested = filename
     filename = get_file(requested)
-    return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
+    img = io.imread(filename)
+    if img.dtype == np.uint16:
+        img = cvt_16bit_to_8bit(img)
+    return resize(img, IMSHAPE, anti_aliasing=True)
+    #return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
     """
     if not os.path.exists(str(filename)):
         for city in CITIES:
@@ -352,7 +366,15 @@ class Target:
         #self._img = img
         return np.expand_dims(img, 2)
 #        return np.cast['uint8'](img)#.reshape(TARGET_IMSHAPE)
-    
+
+def get_speed_channel(weight):
+    return Target.get_speed_channel(__name__, weight)
+
+def get_channel_speed(channel):
+    for i in range(7,29):
+        if get_speed_channel(i) == channel:
+            return i
+
 if __name__ == '__main__':
     RUNNING_TESTS = True
     log.warning("Running all tests...")

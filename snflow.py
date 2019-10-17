@@ -31,6 +31,7 @@ ORIG_IMSHAPE = [1300,1300,3]
 MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
 # The path to the satellite images (be careful when changing, very delicate)
 BASEDIR = "%s/data/train/" % MYDIR
+TESTDIR = "%s/data/test/" % MYDIR
 # Don't touch this
 RUNNING_TESTS = False
 TARGETFILE = os.path.join(MYDIR, "targets.csv")
@@ -206,6 +207,12 @@ def get_filenames(dataset="PS-RGB"):
     ret = []
     for city in CITIES:
         ret += [os.path.join(BASEDIR, city, dataset, f) for f in os.listdir(os.path.join(BASEDIR, city, dataset))]
+    return ret
+
+def get_test_filenames(dataset="PS-RGB"):
+    ret = []
+    for city in CITIES:
+        ret += [os.path.join(TESTDIR, city, dataset, f) for f in os.listdir(os.path.join(TESTDIR, city, dataset))]
     return ret
 
 def get_imageids(dataset="PS-RGB"):

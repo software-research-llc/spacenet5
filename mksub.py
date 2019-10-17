@@ -21,7 +21,7 @@ for filename in tqdm.tqdm(flow.get_test_filenames()):
     try:
         mask, graph, preproc, skel = infer.infer(model, image, chipname=flow.Target.expand_imageid(filename))
         graphs.append(graph)
-        masks.append(image[0])
+        masks.append(mask.squeeze())
     except KeyboardInterrupt:
         break
 

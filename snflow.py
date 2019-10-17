@@ -151,6 +151,9 @@ def get_image(filename=None, dataset="PS-RGB"):
     """Return the satellite image corresponding to a given partial pathname or chipid.
        Returns a random (but existing) value if called w/ None."""
     requested = filename
+    filename = get_file(requested)
+    return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
+    """
     if not os.path.exists(str(filename)):
         for city in CITIES:
             trying = get_file(filename=filename, dataset=dataset, datadir=BASEDIR + city)
@@ -160,6 +163,7 @@ def get_image(filename=None, dataset="PS-RGB"):
     if not os.path.exists(str(filename)):
         log.info("Returning contents of {} for requested file {}".format(filename, requested))
         raise Exception("File not found: %s" % filename)
+    """
     return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
 #    return io.imread(filename)
 
@@ -174,6 +178,11 @@ def get_file(filename=None, datadir=None, dataset="PS-RGB"):
         allfiles = get_filenames()
         i = random.randint(0, len(allfiles))
         return allfiles[i]
+    filename = filename.replace(".tif", "")
+    allfiles = get_filenames()
+    for f in allfiles:
+        if filename + ".tif" in f:
+            return f
     match = re.search("(AOI_\d_.+)_(PS-RGB|chip)", filename)
     if match:
         city = match.groups(0)[0]
@@ -186,18 +195,22 @@ def get_file(filename=None, datadir=None, dataset="PS-RGB"):
             return os.path.join(trying, filename)
         elif os.path.exists(os.path.join(trying, filename) + ".tif"):
             return os.path.join(trying, filename) + ".tif"
-    trying = glob.glob("%s/*%s.tif" % (datadir, filename))
+    trying = glob.glob("%s/*/PS-RGB/*%s.tif" % (BASEDIR, filename))
     if trying:
         return trying[0]
     else:
-        trying = re.search("chip[0]*(\d+)$", str(filename))
+        trying = re.search("chip(\d+)(.tif)?$", str(filename))
         if trying:
             trying = trying.groups()[0]
-            trying = glob.glob("%s/*%s*.tif" % (datadir, trying))
+            trying = glob.glob("%s/*/PS-RGB/*%s*.tif" % (BASEDIR, trying))
             if trying:
                 filename = trying[0]
             else:
                 return None
+        else:
+            trying = glob.glob("%s/*/PS-RGB/*%s*.tif" % (BASEDIR, trying))
+            if trying:
+                return trying[0]
     if not filename:
         return None
     return filename

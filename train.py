@@ -53,7 +53,7 @@ def main(save_path="model.hdf5",
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    train_seq = flow.Sequence(batch_size=5, transform=0.25, test=False)
+    train_seq = flow.Sequence(batch_size=5, transform=0.00, test=False)
     val_seq = flow.Sequence(batch_size=1, test=True)
 
     train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)

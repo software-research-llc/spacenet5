@@ -136,7 +136,10 @@ def infer_and_show(model, image, filename):
 
 def do_all(model, loop=True):
     while True:
-        path = flow.get_file()
+        if sys.argv[1]:
+            path = flow.get_file(sys.argv[1])
+        else:
+            path = flow.get_file()
         image = flow.resize(flow.get_image(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
         if not loop:
             ret = infer(model, image) + (path,)

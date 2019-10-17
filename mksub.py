@@ -16,7 +16,7 @@ model = train.build_model()
 train.load_weights(model)
 graphs = []
 masks = []
-for filename in tqdm.tqdm(flow.get_test_filenames()):
+for filename in tqdm.tqdm(flow.get_filenames()):
     image = flow.get_image(filename)
     try:
         mask, graph, preproc, skel = infer.infer(model, image, chipname=flow.Target.expand_imageid(filename))

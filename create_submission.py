@@ -58,8 +58,8 @@ def get_weight_for(mask, graph, cp):
 
     weight = 0
     for x,y in zip(xs,ys):
-        channels = mask[int(x)][int(y)]
-        for i in range(flow.N_CLASSES):
+        channels = mask[int(round(x))][int(round(y))]
+        for i in range(1, mask.shape[-1]):
             # channel[0] * 3, channel[1] * 2, channel[2] * 1, etc.
             weight += channels[i] * (flow.N_CLASSES - i)
     assert weight > 0, "did not detect the color of a path for {}".format(graph.name)
@@ -89,9 +89,9 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
 #            weight = graph[s][e]['weight']
 #            weights.append(weight)
 
-            pts = [graph.node[s]['o'].tolist()]
+            pts = [graph.node[s]['o'].tolist()][::-1]
             pts += graph[s][e]['pts'].tolist()
-            pts += [graph.node[e]['o'].tolist()]
+            pts += [graph.node[e]['o'].tolist()][::-1]
             pts = np.array(pts)
             xs = pts[:,1]
             ys = pts[:,0]
@@ -99,6 +99,7 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
 #            node, nodes = graph.node, graph.nodes()
 #            cps = [node[i]['o'] for i in nodes]
             # add nodes
+            """
             for xy in graph.node[s]['pts']:
                 if len(xy) < 4:
                     continue
@@ -117,7 +118,7 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
                 linestring += ")"
                 linestrings.append(linestring)
                 weights.append(0.01)
-
+            """
             # add edges
             weight = 0
             if len(xs) > 1:
@@ -126,7 +127,7 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
                     p1,q1 = tr_x(xs[i-1]), tr_y(ys[i-1])
                     p2,q2 = tr_x(xs[i]), tr_y(ys[i])
                     # Euclidean distance
-                    weight += np.sqrt( (p2 - p1) * (p2 - p1) + (q2 - q1) * (q2 - q1) )
+                    #+= np.sqrt( (p2 - p1) * (p2 - p1) + (q2 - q1) * (q2 - q1) )
 
                 # construct linestring
                 linestring = "LINESTRING ({} {}".format(tr_x(xs[0]), tr_y(ys[0]))
@@ -135,11 +136,11 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
                 linestring += ")"
                 log.debug(linestring)
 
-                weights.append(weight)
+                weights.append(get_weight_for(mask, graph, pts))
                 linestrings.append(linestring)
             else:
                 log.info("{}: unconnected point".format(chipname))
-
+#        import pdb; pdb.set_trace()
         if len(linestrings) < 1:
             output_csv.write("{},".format(chipname))
             output_csv.write('"LINESTRING EMPTY",')
@@ -151,7 +152,7 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
             output_csv.write('"{}",'.format(linestring))
             output_csv.write("0.0,")
             try:
-                output_csv.write("{}\n".format(weights[idx]))
+                output_csv.write("{:f}\n".format(weights[idx]))
             except Exception as exc:
                 if not error_shown:
                     error_shown = True
@@ -161,4 +162,3 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
                 output_csv.write("0.0\n")
 
     output_csv.close()
-    sys.exit()

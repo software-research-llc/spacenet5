@@ -18,23 +18,17 @@ def cli(dataset: ("One of MS, PAN, PS-RGB, or PS-MS", "option", "d")="PS-RGB",
         *filename: "The name of the file, or a substring within the name"):
     """Leave filename blank to choose a random image"""
     for f in filename:
-        allids = flow.get_imageids()
-        path = None
-        for id in allids:
-            if re.search(re.compile(f), os.path.basename(id)):
-                path = id
-                break
-        im = flow.get_image(filename=path)
+        im = flow.get_image(f)
         fig = plt.figure()
         fig.add_subplot(1,2,1)
         plt.imshow(im)
         plt.title("Original")
         fig.add_subplot(1,2,2)
         tb = flow.TargetBundle()
-        binim = tb[os.path.basename(path)].image().squeeze()
+        binim = tb[flow.Target.expand_imageid(flow.get_file(f))].image().squeeze()
         plt.imshow(binim)
         plt.imshow
-        plt.title("Target: %s" % path)
+        plt.title("Target: %s" % flow.get_file(f))
     if not filename:
         fpath = flow.get_file(dataset=dataset)
         print("Displaying %s" % fpath)

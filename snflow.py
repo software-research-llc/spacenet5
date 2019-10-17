@@ -35,12 +35,14 @@ TESTDIR = "%s/data/test/" % MYDIR
 # Don't touch this
 RUNNING_TESTS = False
 TARGETFILE = os.path.join(MYDIR, "targets.csv")
-CITIES = ["AOI_4_Shanghai",
+CITIES = ["AOI_2_Vegas",
+          "AOI_3_Paris",
+          "AOI_4_Shanghai",
           "AOI_7_Moscow",
           "AOI_8_Mumbai"]
 #          "AOI_9_San_Juan",
 DATATYPE=int
-
+TRANSFORM = False
 
 def trup(x,y):
     x = x * (ORIG_IMSHAPE[0] / IMSHAPE[0])
@@ -63,6 +65,7 @@ class SpacenetSequence(keras.utils.Sequence):
                  transform=False,
                  test=None, shuffle=False,
                  model=None):
+        global TRANSFORM
         self.test = test
         if self.test == False:
             self.x = x_set[:int(np.floor(len(x_set) * 0.95))]
@@ -78,6 +81,7 @@ class SpacenetSequence(keras.utils.Sequence):
             random.shuffle(self.x)
         self.batch_size = batch_size
         self.transform = transform
+        TRANSFORM = transform
         self.model = model
 
     def __len__(self):
@@ -152,9 +156,12 @@ def cvt_16bit_to_8bit(img):
     ch1 = img[:,:,0]
     ch2 = img[:,:,1]
     ch3 = img[:,:,2]
-    ch1 = ch1 / (np.max(ch1) - np.min(ch1))
-    ch2 = ch2 / (np.max(ch2) - np.min(ch2))
-    ch3 = ch3 / (np.max(ch3) - np.min(ch3))
+    if np.max(ch1) - np.min(ch1) != 0:
+        ch1 = ch1 / (np.max(ch1) - np.min(ch1))
+    if np.max(ch2) - np.min(ch2) != 0:
+        ch2 = ch2 / (np.max(ch2) - np.min(ch2))
+    if np.max(ch3) - np.min(ch3) != 0:
+        ch3 = ch3 / (np.max(ch3) - np.min(ch3))
     return np.stack([ch1,ch2,ch3], axis=2)
 
 def get_image(filename=None, dataset="PS-RGB"):
@@ -165,7 +172,11 @@ def get_image(filename=None, dataset="PS-RGB"):
     img = io.imread(filename)
     if img.dtype == np.uint16:
         img = cvt_16bit_to_8bit(img)
-    return resize(img, IMSHAPE, anti_aliasing=True)
+    if random.random() < TRANSFORM:
+        antialias = True
+    else:
+        antialias = False
+    return resize(img, IMSHAPE, anti_aliasing=antialias)
     #return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
     """
     if not os.path.exists(str(filename)):
@@ -233,13 +244,18 @@ def get_filenames(dataset="PS-RGB"):
     """Return a list of every path for every image"""
     ret = []
     for city in CITIES:
-        ret += [os.path.join(BASEDIR, city, dataset, f) for f in os.listdir(os.path.join(BASEDIR, city, dataset))]
+        try:
+            ret += [os.path.join(BASEDIR, city, dataset, f) for f in os.listdir(os.path.join(BASEDIR, city, dataset))]
+        except Exception as exc:
+            print(exc)
+            import pdb; pdb.set_trace()
     return ret
 
 def get_test_filenames(dataset="PS-RGB"):
     ret = []
-    for city in CITIES:
-        ret += [os.path.join(TESTDIR, city, dataset, f) for f in os.listdir(os.path.join(TESTDIR, city, dataset))]
+    for city in os.listdir(TESTDIR):
+        ret += [os.path.join(TESTDIR, city, "PS-RGB", f) for \
+                f in os.listdir(os.path.join(TESTDIR, city, "PS-RGB"))]
     return ret
 
 def get_imageids(dataset="PS-RGB"):
@@ -316,11 +332,11 @@ class Target:
     @staticmethod
     def expand_imageid(imageid):
         imageid = os.path.basename(imageid)
-        regex = re.compile("chip(\d+)(.tif)?")
+        regex = re.compile("(chip|img)(\d+)(.tif)?")
         m = re.search(regex, imageid)
         mstr = m.string[m.start():m.end()]
-        mnum = m.groups()[0]
-        ret = imageid.replace(mstr, "") + "chip" + mnum
+        mnum = m.groups()[1]
+        ret = imageid.replace(mstr, "") + m.groups()[0] + mnum
         ret = ret.replace("PS-RGB_", "").replace(".tif", "")
         return ret
 

@@ -50,6 +50,9 @@ def prep_for_skeletonize(img):
     else:
         raise Exception("bad image shape: %s" % str(img.shape))
     _, img = cv2.threshold(img, 0.003, 1.0, cv2.THRESH_BINARY)
+    img = skimage.morphology.remove_small_holes(img.astype(bool), connectivity=2,
+                                                area_threshold=120)
+    img = skimage.morphology.remove_small_objects(img, min_size=64, connectivity=1)
     return img
 
 def dilate_and_erode(img):
@@ -138,6 +141,7 @@ def infer_and_show(model, image, filename):
         plt.show()
 
 def do_all(model, loop=True):
+    import random
     while True:
         if len(sys.argv) > 1:
             if os.path.exists(sys.argv[1]):
@@ -146,7 +150,9 @@ def do_all(model, loop=True):
                 path = flow.get_file(sys.argv[1])
         else:
             path = flow.get_file()
-        image = flow.resize(skimage.io.imread(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
+        #path = flow.get_test_filenames()[random.randint(0,100)]
+        print(path)
+        image = flow.get_image(path)#resize(skimage.io.imread(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
         if not loop:
             ret = infer(model, image) + (path,)
             return ret

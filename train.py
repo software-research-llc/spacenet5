@@ -16,7 +16,7 @@ callbacks = [
 dice_loss = sm.losses.DiceLoss()#class_weights=np.array([1, 1, 1, 1]))
 focal_loss = sm.losses.BinaryFocalLoss() if flow.N_CLASSES == 1 else sm.losses.CategoricalFocalLoss()
 total_loss = dice_loss#keras.losses.sparse_categorical_crossentropy + dice_loss
-metrics = ['accuracy', 'sparse_categorical_crossentropy', sm.metrics.IOUScore(), sm.metrics.FScore()]
+metrics = ['accuracy', 'sparse_categorical_crossentropy', sm.metrics.IOUScore(0.5), sm.metrics.FScore(0.5)]
 optim = keras.optimizers.Adam()
 preprocess_input = sm.get_preprocessing(flow.BACKBONE)
 

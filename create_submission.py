@@ -62,6 +62,8 @@ def get_weight_for(mask, graph, cp):
         for i in range(1, mask.shape[-1]):
             # channel[0] * 3, channel[1] * 2, channel[2] * 1, etc.
             weight += channels[i] * (flow.N_CLASSES - i)
+    if weight == 0:
+        weight += 1
     assert weight > 0, "did not detect the color of a path for {}".format(graph.name)
 
     return weight

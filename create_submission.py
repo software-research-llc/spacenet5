@@ -135,7 +135,10 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
                     linestring += ", {} {}".format(tr_x(xs[i]), tr_y(ys[i]))
                 linestring += ")"
                 log.debug(linestring)
-
+               
+                # skip cycles starting and ending at the same node
+                if xs[0] == xs[-1] and ys[0] == ys[-1]:
+                    continue
                 weights.append(get_weight_for(mask, graph, pts))
                 linestrings.append(linestring)
             else:

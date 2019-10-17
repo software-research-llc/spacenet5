@@ -99,10 +99,10 @@ class SpacenetSequence(keras.utils.Sequence):
             try:
                 filename = get_file(ex)
                 image = get_image(filename)
-                if random.randint(0,1) < self.transform:
+                if random.random() < self.transform:
                     image = np.fliplr(image)
                     y[idx] = np.fliplr(y[idx])
-                elif random.randint(0,1) < self.transform:
+                elif random.random() < self.transform:
                     image = np.flipud(image)
                     y[idx] = np.flipud(y[idx])
 #                elif random.randint(0,1) < self.transform:
@@ -327,11 +327,12 @@ class Target:
         self.tb.mean_speed += travel_time_s
         return self
 
-    def pixel_by_class(self, weight):
-        """Returns the tuple of a pixel for painting, e.g. (0, 255, 0, 0)"""
-        n_classes = N_CLASSES
-        channel = (n_classes - 2) / (self.tb.max_speed / weight)
-        return round(channel) + 1
+    def get_speed_channel(self, weight):
+        mean_speed = 11.944045
+        stddev = 7.639668
+        sp_max = 29
+        sp_min = 7
+        return int(round( (N_CLASSES - 2) / (sp_max - sp_min) * (weight - sp_min) )) + 1
 
     def image(self):
         #if self._img is not None:
@@ -339,13 +340,13 @@ class Target:
         img = np.zeros((IMSHAPE[0], IMSHAPE[1]), dtype=np.uint8)
         for edge in self.graph.edges():
             weight = self.graph[edge[0]][edge[1]]['length_m'] / self.graph[edge[0]][edge[1]]['travel_time_s']
-            klass = self.pixel_by_class(weight)
+            klass = self.get_speed_channel(weight)
             x1,y1 = edge[0]
             x2,y2 = edge[1]
             x1,y1 = trdown(x1,y1)
             x2,y2 = trdown(x2,y2)
             # draw road line
-            cv2.line(img, (x1, y1), (x2, y2), klass, 5)
+            cv2.line(img, (x1, y1), (x2, y2), klass, 3)
         #img = resize(img, [IMSHAPE[0], IMSHAPE[1]], anti_aliasing=True)
         #img = img.reshape((IMSHAPE[0] * IMSHAPE[1], -1))
         #self._img = img

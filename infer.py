@@ -49,7 +49,7 @@ def prep_for_skeletonize(img):
         img = img.squeeze()
     else:
         raise Exception("bad image shape: %s" % str(img.shape))
-    _, img = cv2.threshold(img, 0.01, 1.0, cv2.THRESH_BINARY)
+    _, img = cv2.threshold(img, 0.003, 1.0, cv2.THRESH_BINARY)
     return img
 
 def dilate_and_erode(img):
@@ -97,7 +97,10 @@ def infer_and_show(model, image, filename):
 
         fig.add_subplot(2,4,3)
         plt.axis('off')
-        plt.imshow(tb[chipid].image().squeeze())
+        try:
+            plt.imshow(tb[chipid].image().squeeze())
+        except:
+            pass
         plt.title("3. Ground truth")
 
 
@@ -136,11 +139,14 @@ def infer_and_show(model, image, filename):
 
 def do_all(model, loop=True):
     while True:
-        if sys.argv[1]:
-            path = flow.get_file(sys.argv[1])
+        if len(sys.argv) > 1:
+            if os.path.exists(sys.argv[1]):
+                path = sys.argv[1]
+            else:
+                path = flow.get_file(sys.argv[1])
         else:
             path = flow.get_file()
-        image = flow.resize(flow.get_image(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
+        image = flow.resize(skimage.io.imread(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
         if not loop:
             ret = infer(model, image) + (path,)
             return ret

@@ -13,10 +13,11 @@ callbacks = [
     keras.callbacks.ModelCheckpoint('./best_model.h5', save_weights_only=True, save_best_only=True, mode='min'),
 ]
 
+BATCH_SIZE = 10
 dice_loss = sm.losses.DiceLoss()#class_weights=np.array([1, 1, 1, 1]))
 focal_loss = sm.losses.BinaryFocalLoss() if flow.N_CLASSES == 1 else sm.losses.CategoricalFocalLoss()
 total_loss = dice_loss#keras.losses.sparse_categorical_crossentropy + dice_loss
-metrics = ['accuracy', 'sparse_categorical_crossentropy', sm.metrics.IOUScore(0.5), sm.metrics.FScore(0.5)]
+metrics = ['accuracy', 'sparse_categorical_crossentropy', sm.metrics.IOUScore(), sm.metrics.FScore()]
 optim = keras.optimizers.Adam()
 preprocess_input = sm.get_preprocessing(flow.BACKBONE)
 
@@ -57,8 +58,8 @@ def main(save_path="model.hdf5",
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    train_seq = flow.Sequence(batch_size=3, transform=0.30, test=False)
-    val_seq = flow.Sequence(batch_size=3, test=True)
+    train_seq = flow.Sequence(batch_size=BATCH_SIZE, transform=0.30, test=False)
+    val_seq = flow.Sequence(batch_size=BATCH_SIZE, test=True)
 
     train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
     save_model(model, save_path)
@@ -76,7 +77,7 @@ def main(save_path="model.hdf5",
             try:
                 print("Epoch %d / %d, step %d / %d" % (epoch, epochs, stepnum, len(train_seq)))
                 model.fit(x, y, validation_data=[vx, vy], epochs=1,
-                            verbose=verbose, batch_size=3)
+                            verbose=verbose, batch_size=BATCH_SIZE)
             except KeyboardInterrupt:
                 save_model(model, save_path, pause=1)
                 sys.exit()

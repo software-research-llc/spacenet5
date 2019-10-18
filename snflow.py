@@ -21,7 +21,7 @@ import segmentation_models as sm
 log = logging.getLogger(__name__)
 
 CLASSES = [ 'background', 'slow', 'medium', 'fast' ]
-BACKBONE = 'seresnet50'
+BACKBONE = 'mobilenet'
 BATCH_SIZE = 3
 N_CLASSES = len(CLASSES)
 IMSHAPE = [512,512,3]
@@ -38,6 +38,7 @@ TARGETFILE = os.path.join(MYDIR, "targets.csv")
 CITIES = ["AOI_2_Vegas",
           "AOI_3_Paris",
           "AOI_4_Shanghai",
+          "AOI_5_Khartoum",
           "AOI_7_Moscow",
           "AOI_8_Mumbai"]
 #          "AOI_9_San_Juan",
@@ -156,13 +157,13 @@ def cvt_16bit_to_8bit(img):
     ch1 = img[:,:,0]
     ch2 = img[:,:,1]
     ch3 = img[:,:,2]
-    if np.max(ch1) - np.min(ch1) != 0:
-        ch1 = ch1 / (np.max(ch1) - np.min(ch1))
-    if np.max(ch2) - np.min(ch2) != 0:
-        ch2 = ch2 / (np.max(ch2) - np.min(ch2))
-    if np.max(ch3) - np.min(ch3) != 0:
-        ch3 = ch3 / (np.max(ch3) - np.min(ch3))
-    return np.stack([ch1,ch2,ch3], axis=2)
+    stk = []
+    for ch in [ch1,ch2,ch3]:
+        ch = ch - np.min(ch)
+        if np.max(ch) > 0:
+            ch = ch / np.max(ch)
+        stk.append(ch)
+    return np.stack(stk, axis=2)
 
 def get_image(filename=None, dataset="PS-RGB"):
     """Return the satellite image corresponding to a given partial pathname or chipid.
@@ -172,7 +173,7 @@ def get_image(filename=None, dataset="PS-RGB"):
     img = io.imread(filename)
     if img.dtype == np.uint16:
         img = cvt_16bit_to_8bit(img)
-    if random.random() < TRANSFORM:
+    if random.random() < TRANSFORM / 2:
         antialias = True
     else:
         antialias = False
@@ -292,7 +293,7 @@ class TargetBundle:
                       linestring,
                       df['length_m'][idx],
                       df['travel_time_s'][idx]))
-                weight = 0
+                weight = float(df['weight'])
             self.targets[imageid].add_linestring(linestring, travel_time_s, length_m)
 
     def __getitem__(self, idx):
@@ -345,8 +346,8 @@ class Target:
            add that information to what's stored in this object."""
         if string.lower().find("empty") != -1:
             return
-        elif travel_time_s > self.tb.max_speed:
-            self.tb.max_speed = travel_time_s
+#        elif travel_time_s > self.tb.max_speed:
+#            self.tb.max_speed = travel_time_s
         edges = re.findall(Target.regex, string)
         for i in range(len(edges) - 1):
             x1,y1 = edges[i].split(" ")
@@ -354,6 +355,8 @@ class Target:
             x1,y1 = float(x1), float(y1)
             x2,y2 = float(x2), float(y2)
             self.graph.add_edge((x1,y1), (x2,y2), travel_time_s=travel_time_s, length_m=length_m)
+#            self.graph[(x1,y1)]['pts'] = [x1,y1]
+#            self.graph[(x2,y2)]['pts'] = [x2,y2]
         self.tb.mean_speed += travel_time_s
         return self
 
@@ -369,7 +372,14 @@ class Target:
         #    return self._img
         img = np.zeros((IMSHAPE[0], IMSHAPE[1]), dtype=np.uint8)
         for edge in self.graph.edges():
-            weight = self.graph[edge[0]][edge[1]]['length_m'] / self.graph[edge[0]][edge[1]]['travel_time_s']
+            num = self.graph[edge[0]][edge[1]]['length_m']
+            denom = self.graph[edge[0]][edge[1]]['travel_time_s']
+            if denom > 0:
+                weight = num / denom
+            else:
+                weight = num
+                log.warning("zero travel_time_s for {}".format(self.imageid))
+                import pdb; pdb.set_trace()
             klass = self.get_speed_channel(weight)
             x1,y1 = edge[0]
             x2,y2 = edge[1]

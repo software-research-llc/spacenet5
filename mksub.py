@@ -1,3 +1,4 @@
+import random
 import os
 import sys
 import snflow as flow
@@ -13,14 +14,22 @@ import create_submission
 from skimage.transform import resize
 from skimage import io
 
-flow.CITIES += ["AOI_9_San_Juan"]
+USE_TRAINING_IMAGES = True 
+
+if not USE_TRAINING_IMAGES:
+    flow.CITIES += ["AOI_9_San_Juan"]
+    get_files = flow.get_test_filenames
+else:
+    get_files = flow.get_filenames
+
 model = train.build_model()
 train.load_weights(model)
 graphs = []
 masks = []
-for filename in tqdm.tqdm(flow.get_test_filenames()):
-    image = resize(io.imread(filename), flow.IMSHAPE, anti_aliasing=True)
+allfiles = get_files()
+for filename in tqdm.tqdm(allfiles):
     try:
+        image = resize(io.imread(filename), flow.IMSHAPE, anti_aliasing=True)
         mask, graph, preproc, skel = infer.infer(model, image, chipname=flow.Target.expand_imageid(filename))
         graphs.append(graph)
         masks.append(mask.squeeze())

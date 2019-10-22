@@ -149,7 +149,7 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
         if len(linestrings) < 1:
             output_csv.write("{},".format(chipname))
             output_csv.write('"LINESTRING EMPTY",')
-            output_csv.write("0.0,0.0")
+            output_csv.write("0.0,0.0\n")
 
         for idx,linestring in enumerate(linestrings):
             error_shown = False

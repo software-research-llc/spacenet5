@@ -15,11 +15,12 @@ import getch
 import os
 import skimage
 import copy
+#import cresi_skeletonize
 
 threshold_min = 0.03
 threshold_max = 1.0
 area_threshold=2
-connectivity=3
+connectivity=5
 
 def infer_mask(model, image):
     assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
@@ -97,6 +98,7 @@ def infer_and_show(model, image, filename):
         graymask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     else:
         mask = mask.squeeze()
+#    mask = cresi_skeletonize.preprocess(mask, threshold_min)
     _, graymask = cv2.threshold(mask, threshold_min, threshold_max, cv2.THRESH_BINARY)
     filled_mask = skimage.morphology.remove_small_holes(graymask.astype(bool), connectivity=connectivity)
     filled_mask = skimage.morphology.remove_small_objects(graymask.astype(bool), connectivity=connectivity)

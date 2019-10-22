@@ -10,22 +10,22 @@ import logging
 logger = logging.getLogger(__name__)
 
 callbacks = [
-    keras.callbacks.ModelCheckpoint('./best_model.h5', save_weights_only=True, save_best_only=True, mode='min'),
+    keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True, mode='min'),
 ]
 
-BATCH_SIZE = 10
+BATCH_SIZE = 3
 dice_loss = sm.losses.DiceLoss()#class_weights=np.array([1, 1, 1, 1]))
 focal_loss = sm.losses.BinaryFocalLoss() if flow.N_CLASSES == 1 else sm.losses.CategoricalFocalLoss()
-total_loss = dice_loss#keras.losses.sparse_categorical_crossentropy + dice_loss
-metrics = ['accuracy', 'sparse_categorical_crossentropy', sm.metrics.IOUScore(), sm.metrics.FScore()]
+total_loss = dice_loss + sm.losses.BinaryFocalLoss()#focal_loss#keras.losses.sparse_categorical_crossentropy + dice_loss
+metrics = ['accuracy', sm.losses.CategoricalFocalLoss(class_indexes=[1,2,3]), sm.metrics.IOUScore(), sm.metrics.FScore()]
 optim = keras.optimizers.Adam()
 preprocess_input = sm.get_preprocessing(flow.BACKBONE)
 
 def loss(y_true, y_pred):
     dice = dice_loss(y_true, y_pred)
-    return dice + keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
+    return dice# + keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
 
-def save_model(model, save_path="model.hdf5", pause=0):
+def save_model(model, save_path="model-%s.hdf5" % flow.BACKBONE, pause=0):
     if pause > 0:
         sys.stderr.write("Saving in")
         for i in list(range(1,6))[::-1]:
@@ -34,32 +34,33 @@ def save_model(model, save_path="model.hdf5", pause=0):
     sys.stderr.write("Saving...\n")
     return model.save_weights(save_path)
 
-def load_weights(model, save_path="model.hdf5"):
+def load_weights(model, save_path="model-%s.hdf5" % flow.BACKBONE):
     try:
         model.load_weights(save_path)
-        logger.warning("Model loaded successfully.")
+        logger.warning("Model file %s loaded successfully." % save_path)
     except OSError as exc:
-        sys.stderr.write("!! ERROR LOADING WEIGHTS:")
+        sys.stderr.write("!! ERROR LOADING %s:" % save_path)
         sys.stderr.write(str(exc) + "\n")
 
 def build_model():
-    return sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES, activation='softmax', encoder_weights='imagenet')
+    return sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES, activation='sigmoid', encoder_weights='imagenet')
 
-def main(save_path="model.hdf5",
+def main(save_path="model-%s.hdf5" % flow.BACKBONE,
          optimizer='adam',
-         loss='sparse_categorical_crossentropy',
+         loss='sparse_categorical_crossentropy',#loss,#'sparse_categorical_crossentropy',
          restore=True,
          verbose=1,
-         epochs=50,
+         epochs=500,
          validation_split=0.1):
     model = build_model()
     if restore:
         load_weights(model)
 
+    sm.utils.set_trainable(model, recompile=False)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    train_seq = flow.Sequence(batch_size=BATCH_SIZE, transform=0.30, test=False)
-    val_seq = flow.Sequence(batch_size=BATCH_SIZE, test=True)
+    train_seq = flow.Sequence(batch_size=BATCH_SIZE, transform=0.30, test=False, shuffle=True)
+    val_seq = flow.Sequence(batch_size=BATCH_SIZE, test=True, shuffle=True)
 
     train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
     save_model(model, save_path)

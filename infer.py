@@ -99,6 +99,7 @@ def infer_and_show(model, image, filename):
     else:
         mask = mask.squeeze()
 #    mask = cresi_skeletonize.preprocess(mask, threshold_min)
+    mask = flow.normalize(mask)
     _, graymask = cv2.threshold(mask, threshold_min, threshold_max, cv2.THRESH_BINARY)
     filled_mask = skimage.morphology.remove_small_holes(graymask.astype(bool), connectivity=connectivity)
     filled_mask = skimage.morphology.remove_small_objects(graymask.astype(bool), connectivity=connectivity)
@@ -168,7 +169,7 @@ def do_all(model, loop=True):
                 path = flow.get_file(sys.argv[1])
         else:
             path = flow.get_file()
-        path = flow.get_test_filenames()[random.randint(0,100)]
+        path = flow.get_filenames()[random.randint(0,100)]
         print(path)
         image = flow.get_image(path)#resize(skimage.io.imread(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
         if not loop:

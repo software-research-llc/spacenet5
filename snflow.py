@@ -18,14 +18,17 @@ import cv2
 import logging
 import tensorflow as tf
 import segmentation_models as sm
+import keras
+from keras.preprocessing.image import ImageDataGenerator
 log = logging.getLogger(__name__)
 
 CLASSES = [ 'background', 'slow', 'medium', 'fast' ]
-BACKBONE = 'mobilenet'
+BACKBONE = 'resnext101'
 BATCH_SIZE = 3
 N_CLASSES = len(CLASSES)
 IMSHAPE = [512,512,3]
 ORIG_IMSHAPE = [1300,1300,3]
+ROAD_LINE_WIDTH = 6
 
 # The directory of this file (don't change this)
 MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
@@ -44,6 +47,7 @@ CITIES = ["AOI_2_Vegas",
 #          "AOI_9_San_Juan",
 DATATYPE=int
 TRANSFORM = False
+keras.backend.set_image_data_format('channels_last')
 
 def trup(x,y):
     x = x * (ORIG_IMSHAPE[0] / IMSHAPE[0])
@@ -85,6 +89,18 @@ class SpacenetSequence(keras.utils.Sequence):
         TRANSFORM = transform
         self.model = model
 
+        # we create two instances with the same arguments
+        self.datagen_args = dict(rotation_range=25,
+                                 width_shift_range=0.1,
+                                 height_shift_range=0.1,
+                                 zoom_range=0.2,
+                                 shear_range=0.2,
+                                 )
+        self.image_datagen = ImageDataGenerator(**data_gen_args)
+        self.mask_datagen = ImageDataGenerator(**data_gen_args)
+        # Provide the same seed and keyword arguments to the fit and flow methods
+        #mask_datagen.fit(masks, augment=True, seed=seed)
+
     def __len__(self):
         length = int(np.ceil(len(self.x) / float(self.batch_size)))
         return length
@@ -106,6 +122,9 @@ class SpacenetSequence(keras.utils.Sequence):
                 filename = get_file(ex)
                 image = get_image(filename)
                 if random.random() < self.transform:
+                    image = self.image_datagen.apply_transform(image, {'theta': 25,
+                                                                       'shear': 0.2})
+                elif random.random() < self.transform:
                     image = np.fliplr(image)
                     y[idx] = np.fliplr(y[idx])
                 elif random.random() < self.transform:
@@ -117,10 +136,11 @@ class SpacenetSequence(keras.utils.Sequence):
 #                elif random.randint(0,1) < self.transform:
 #                    image = tf.image.rot90(image)
 #                    y[idx] = tf.image.rot90(y[idx])
-                x.append(image)
+                procd_image = normalize(image)
+                x.append(procd_image)
             except Exception as exc:
-                import pdb; pdb.set_trace()
                 log.error("{} on {}".format(str(exc), filename))
+                import pdb; pdb.set_trace()
                 raise exc
 
         x = np.array(x)
@@ -153,6 +173,34 @@ class SpacenetSequence(keras.utils.Sequence):
 def Sequence(**kwargs):
     return SpacenetSequence.all(**kwargs)
 
+# we create two instances with the same arguments
+data_gen_args = dict(featurewise_center=True,
+                     featurewise_std_normalization=True,
+                     rotation_range=90,
+                     width_shift_range=0.1,
+                     height_shift_range=0.1,
+                     zoom_range=0.2)
+image_datagen = ImageDataGenerator(**data_gen_args)
+mask_datagen = ImageDataGenerator(**data_gen_args)
+# Provide the same seed and keyword arguments to the fit and flow methods
+seed = 1
+#image_datagen.fit(images, augment=True, seed=seed)
+#mask_datagen.fit(masks, augment=True, seed=seed)
+#image_generator = image_datagen.flow_from_directory(
+#    'data/images',
+#    class_mode=None,
+#    seed=seed)
+#mask_generator = mask_datagen.flow_from_directory(
+#    'data/masks',
+#    class_mode=None,
+#    seed=seed)
+# combine generators into one which yields image and masks
+#train_generator = zip(image_generator, mask_generator)
+#model.fit_generator(
+#    train_generator,
+#    steps_per_epoch=2000,
+#    epochs=50)
+
 def cvt_16bit_to_8bit(img):
     ch1 = img[:,:,0]
     ch2 = img[:,:,1]
@@ -165,6 +213,28 @@ def cvt_16bit_to_8bit(img):
         stk.append(ch)
     return np.stack(stk, axis=2)
 
+def normalize(img, max=1.0):
+    if img.max() > 0:
+        return img * (max/img.max())
+    else:
+        return img
+
+def erosion(imagearg):
+    from skimage.morphology import erosion, dilation, opening, closing, white_tophat
+    from skimage.morphology import black_tophat, skeletonize, convex_hull_image
+    from skimage.morphology import disk
+
+    selem = disk(6)
+    eroded = erosion(orig_phantom, selem)
+    plot_comparison(orig_phantom, eroded, 'erosion')
+
+def threshold(image, block_size = 15, off = 10):
+    global_thresh = skimage.filters.threshold_otsu(image)
+    binary_global = image > global_thresh
+    adaptive_thresh = skimage.filters.threshold_local(binary_global, block_size, offset=off)
+    return adaptive_thresh
+
+
 def get_image(filename=None, dataset="PS-RGB"):
     """Return the satellite image corresponding to a given partial pathname or chipid.
        Returns a random (but existing) value if called w/ None."""
@@ -173,10 +243,13 @@ def get_image(filename=None, dataset="PS-RGB"):
     img = io.imread(filename)
     if img.dtype == np.uint16:
         img = cvt_16bit_to_8bit(img)
+    """
     if random.random() < TRANSFORM / 2:
-        antialias = True
+        antialias = False 
     else:
-        antialias = False
+        antialias = True 
+    """
+    antialias = True
     return resize(img, IMSHAPE, anti_aliasing=antialias)
     #return resize(io.imread(filename), IMSHAPE, anti_aliasing=True)
     """
@@ -386,7 +459,7 @@ class Target:
             x1,y1 = trdown(x1,y1)
             x2,y2 = trdown(x2,y2)
             # draw road line
-            cv2.line(img, (x1, y1), (x2, y2), klass, 3)
+            cv2.line(img, (x1, y1), (x2, y2), klass, ROAD_LINE_WIDTH)
         #img = resize(img, [IMSHAPE[0], IMSHAPE[1]], anti_aliasing=True)
         #img = img.reshape((IMSHAPE[0] * IMSHAPE[1], -1))
         #self._img = img

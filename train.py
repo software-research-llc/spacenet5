@@ -43,9 +43,21 @@ def load_weights(model, save_path="model-%s.hdf5" % flow.BACKBONE):
         sys.stderr.write(str(exc) + "\n")
 
 def build_model():
-    return sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES,
+    segm = sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES,
                    input_shape=flow.IMSHAPE, activation='softmax',
                    encoder_weights='imagenet')
+    
+    x = keras.layers.Conv2D(4, (3,3), use_bias=True)(segm)
+    x = keras.layers.Conv2D(2, (3,3), use_bias=True)(x)
+    x = keras.layers.MaxPooling2D((2,2))(x)
+    x = keras.layers.Conv2D(2, (3,3), dilation_rate=2, use_bias=True)(x)
+    x = keras.layers.Conv2D(2, (3,3), dilation_rate=2, use_bias=True)(x)
+    x = keras.layers.MaxPooling2D((2,2))(x)
+    x = keras.layers.Flatten()(x)
+    x = keras.layers.Dense(flow.IMSHAPE[0], activation='softmax')(x)
+
+    trans = keras.models.Model(inputs=segm.output, outputs=x)
+    return keras.models.Model(inputs=segm.input, outputs=trans.output)
 
 def main(save_path="model-%s.hdf5" % flow.BACKBONE,
          optimizer='adam',
@@ -115,4 +127,6 @@ def train_step_generator(model, train_seq, verbose, epochs, callbacks, save_path
         raise(exc)
 
 if __name__ == "__main__":
+    build_model()
+    sys.exit()
     plac.call(main)

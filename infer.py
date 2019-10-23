@@ -6,7 +6,7 @@ else:
 import numpy as np
 import cv2
 import skimage
-from skimage.morphology import skeletonize
+from skimage.morphology import skeletonize, medial_axis
 import matplotlib.pyplot as plt
 import sknw
 import keras
@@ -17,7 +17,7 @@ import skimage
 import copy
 #import cresi_skeletonize
 
-threshold_min = 0.01
+threshold_min = 0.05
 threshold_max = 1.0
 area_threshold=1
 connectivity=7
@@ -51,18 +51,18 @@ def prep_for_skeletonize(img):
         img *= scale
     """
     if img.shape[-1] == 3:
-        img = cv2.cvtColor(img.astype(np.float32), cv2.COLOR_BGR2GRAY)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     elif img.shape[-1] == 1:
         img = img.squeeze()
     else:
         raise Exception("bad image shape: %s" % str(img.shape))
-    _, img = cv2.threshold(img, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+    _, gray = cv2.threshold(img, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
 #    img = skimage.filters.threshold_local(img, method='gaussian', block_size=25)
 #    img = hysteresis_threshold(img)
-    img = skimage.morphology.remove_small_holes(img.astype(bool), connectivity=connectivity,
-                                                area_threshold=area_threshold)
-    img = skimage.morphology.remove_small_objects(img.astype(bool), connectivity=connectivity)
-    return img
+#    filled = skimage.morphology.remove_small_holes(gray.astype(bool), connectivity=connectivity,
+#                                                area_threshold=area_threshold)
+#    filled = skimage.morphology.remove_small_objects(filled.astype(bool), connectivity=connectivity)
+    return gray
 
 def infer_mask(model, image):
     assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
@@ -75,6 +75,7 @@ def infer_mask(model, image):
 def infer_roads(mask, chipname=''):
     assert mask.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, mask.shape)
     img = prep_for_skeletonize(mask)#.astype(np.uint8))
+    #skel = skeletonize(img)
     skel = skeletonize(img)
     graph = sknw.build_sknw(skel)
     graph.name = chipname
@@ -105,8 +106,10 @@ def infer_and_show(model, image, filename):
 #    mask = flow.normalize(mask)
     _, graymask = cv2.threshold(mask, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
     filled_mask = skimage.morphology.remove_small_holes(graymask.astype(bool), connectivity=connectivity, area_threshold=area_threshold)
-    filled_mask = skimage.morphology.remove_small_objects(graymask.astype(bool), connectivity=connectivity)
+    filled_mask = skimage.morphology.remove_small_objects(filled_mask.astype(bool), connectivity=connectivity)
     _, graph, preproc, skel = infer(model, image)
+    medial = prep_for_skeletonize(filled_mask.astype(np.float32))
+    medial = medial_axis(medial)
 #    import pdb;pdb.set_trace()
     for idx in range(1):
         fig = plt.figure()
@@ -122,27 +125,23 @@ def infer_and_show(model, image, filename):
 
         fig.add_subplot(2,4,3)
         plt.axis('off')
-        try:
-            plt.imshow(tb[chipid].image().squeeze())
-        except:
-            pass
-        plt.title("3. Ground truth")
-
+        plt.imshow(filled_mask.astype(np.float32))
+        plt.title("3. Filled mask")
 
         fig.add_subplot(2,4,4)
         plt.axis('off')
-        plt.imshow(filled_mask.astype(np.float32))
-        plt.title("4. Filled mask")
+        plt.imshow(preproc)
+        plt.title("4. Preprocessed mask")
 
         fig.add_subplot(2,4,5)
         plt.axis('off')
-        plt.imshow(preproc)
-        plt.title("5. Preprocessed mask")
+        plt.imshow(skel)
+        plt.title("5. Skeletonized mask")
 
         fig.add_subplot(2,4,6)
         plt.axis('off')
-        plt.imshow(skel)
-        plt.title("6. Skeletonized mask")
+        plt.imshow(medial)
+        plt.title("6. Medial axis mask")
 
         fig.add_subplot(2,4,7)
         plt.axis('off')
@@ -159,7 +158,13 @@ def infer_and_show(model, image, filename):
         except IndexError as exc:
             print("WARNING: IndexError: %s" % exc)
 
-#        import pdb; pdb.set_trace()
+        fig.add_subplot(2,4,8)
+        try:
+            plt.imshow(tb[chipid].image().squeeze())
+        except:
+            pass
+        plt.title("8. Ground truth")
+
         plt.show()
 
 def do_all(model, loop=True):

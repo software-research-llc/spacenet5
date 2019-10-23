@@ -157,7 +157,10 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
             output_csv.write('"{}",'.format(linestring))
             output_csv.write("0.0,")
             try:
-                output_csv.write("{:f}\n".format(weights[idx]))
+                if float("{:10.10f}".format(weights[idx])) == 0:
+                    output_csv.write("1.0\n")
+                else:
+                    output_csv.write("{:10.10f}\n".format(weights[idx]))
             except Exception as exc:
                 if not error_shown:
                     error_shown = True

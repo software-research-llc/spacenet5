@@ -17,7 +17,7 @@ import skimage
 import copy
 #import cresi_skeletonize
 
-threshold_min = 0.05
+threshold_min = 0.03
 threshold_max = 1.0
 area_threshold=1
 connectivity=7
@@ -74,7 +74,7 @@ def infer_mask(model, image):
 
 def infer_roads(mask, chipname=''):
     assert mask.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, mask.shape)
-    img = prep_for_skeletonize(mask)#.astype(np.uint8))
+    img = prep_for_skeletonize(mask.astype(np.float32))#.astype(np.uint8))
     #skel = skeletonize(img)
     skel = skeletonize(img)
     graph = sknw.build_sknw(skel)
@@ -104,13 +104,13 @@ def infer_and_show(model, image, filename):
         mask = mask.squeeze()
 #    mask = cresi_skeletonize.preprocess(mask, threshold_min)
 #    mask = flow.normalize(mask)
-    _, graymask = cv2.threshold(mask, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
     filled_mask = skimage.morphology.remove_small_holes(graymask.astype(bool), connectivity=connectivity, area_threshold=area_threshold)
     filled_mask = skimage.morphology.remove_small_objects(filled_mask.astype(bool), connectivity=connectivity)
     _, graph, preproc, skel = infer(model, image)
-    medial = prep_for_skeletonize(filled_mask.astype(np.float32))
-    medial = medial_axis(medial)
-#    import pdb;pdb.set_trace()
+#    medial = prep_for_skeletonize(filled_mask.astype(np.float32))
+#    medial = medial_axis(medial)
+    import pdb;pdb.set_trace()
     for idx in range(1):
         fig = plt.figure()
         fig.add_subplot(2,4,1)
@@ -140,7 +140,10 @@ def infer_and_show(model, image, filename):
 
         fig.add_subplot(2,4,6)
         plt.axis('off')
-        plt.imshow(medial)
+        try:
+            plt.imshow(medial)
+        except Exception as exc:
+            pass
         plt.title("6. Medial axis mask")
 
         fig.add_subplot(2,4,7)

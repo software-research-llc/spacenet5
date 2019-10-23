@@ -17,9 +17,9 @@ BATCH_SIZE = 3
 dice_loss = sm.losses.DiceLoss()#class_weights=np.array([1, 1, 1, 1]))
 focal_loss = sm.losses.BinaryFocalLoss() if flow.N_CLASSES == 1 else sm.losses.CategoricalFocalLoss()
 total_loss = dice_loss + sm.losses.BinaryFocalLoss()#focal_loss#keras.losses.sparse_categorical_crossentropy + dice_loss
-metrics = ['accuracy', sm.losses.CategoricalFocalLoss(class_indexes=[1,2,3]), sm.metrics.IOUScore(), sm.metrics.FScore()]
+metrics = ['accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
 optim = keras.optimizers.Adam()
-preprocess_input = sm.get_preprocessing(flow.BACKBONE)
+#preprocess_input = sm.get_preprocessing(flow.BACKBONE)
 
 def loss(y_true, y_pred):
     dice = dice_loss(y_true, y_pred)
@@ -43,11 +43,13 @@ def load_weights(model, save_path="model-%s.hdf5" % flow.BACKBONE):
         sys.stderr.write(str(exc) + "\n")
 
 def build_model():
-    return sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES, activation='sigmoid', encoder_weights='imagenet')
+    return sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES,
+                   input_shape=flow.IMSHAPE, activation='softmax',
+                   encoder_weights='imagenet')
 
 def main(save_path="model-%s.hdf5" % flow.BACKBONE,
          optimizer='adam',
-         loss='sparse_categorical_crossentropy',#loss,#'sparse_categorical_crossentropy',
+         loss='sparse_categorical_crossentropy',#'sparse_categorical_crossentropy',#loss,#'sparse_categorical_crossentropy',
          restore=True,
          verbose=1,
          epochs=500,

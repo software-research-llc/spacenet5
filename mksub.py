@@ -14,7 +14,7 @@ import create_submission
 from skimage.transform import resize
 from skimage import io
 
-USE_TRAINING_IMAGES = True 
+USE_TRAINING_IMAGES = False
 
 if not USE_TRAINING_IMAGES:
     flow.CITIES += ["AOI_9_San_Juan"]
@@ -30,6 +30,7 @@ allfiles = get_files()
 for filename in tqdm.tqdm(allfiles):
     try:
         image = resize(io.imread(filename), flow.IMSHAPE, anti_aliasing=True)
+        image = flow.normalize(image)
         mask, graph, preproc, skel = infer.infer(model, image, chipname=flow.Target.expand_imageid(filename))
         graphs.append(graph)
         masks.append(mask.squeeze())

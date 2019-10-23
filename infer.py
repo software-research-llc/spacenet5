@@ -17,27 +17,10 @@ import skimage
 import copy
 #import cresi_skeletonize
 
-threshold_min = 0.03
+threshold_min = 0.01
 threshold_max = 1.0
-area_threshold=2
-connectivity=5
-
-def infer_mask(model, image):
-    assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
-    output = model.predict(image.reshape([1] + flow.IMSHAPE))
-    output = output.squeeze()
-    output = output[:,:,1:]
-    return output
-
-def infer_roads(mask, chipname=''):
-    assert mask.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, mask.shape)
-    img = prep_for_skeletonize(mask)#.astype(np.uint8))
-    skel = skeletonize(img)
-    graph = sknw.build_sknw(skel)
-    graph.name = chipname
-    assert (np.max(img) == np.nan or np.max(img)) <= 1
-    assert (np.max(skel) == np.nan or np.max(skel)) <= 1
-    return graph, img, skel
+area_threshold=1
+connectivity=7
 
 def hysteresis_threshold(img):
     low = 0.003
@@ -47,6 +30,15 @@ def hysteresis_threshold(img):
     hight = (edges > high).astype(int)
     hyst = skimage.filters.apply_hysteresis_threshold(edges, low, high)
     return hight + hyst
+
+def dilate_and_erode(img):
+    kernel = np.ones((1,15))
+#    kernel = np.array([[1, 0, 1, 0, 1],
+#                       [0, 1, 9, 1, 0],
+#                       [1, 0, 1, 0, 1]], dtype = np.uint8)
+    img = cv2.dilate(img, kernel, iterations=1)
+    img = cv2.erode(img, kernel, iterations=1)
+    return img
 
 def prep_for_skeletonize(img):
 #    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
@@ -64,7 +56,7 @@ def prep_for_skeletonize(img):
         img = img.squeeze()
     else:
         raise Exception("bad image shape: %s" % str(img.shape))
-    _, img = cv2.threshold(img, threshold_min, threshold_max, cv2.THRESH_BINARY)
+    _, img = cv2.threshold(img, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
 #    img = skimage.filters.threshold_local(img, method='gaussian', block_size=25)
 #    img = hysteresis_threshold(img)
     img = skimage.morphology.remove_small_holes(img.astype(bool), connectivity=connectivity,
@@ -72,14 +64,24 @@ def prep_for_skeletonize(img):
     img = skimage.morphology.remove_small_objects(img.astype(bool), connectivity=connectivity)
     return img
 
-def dilate_and_erode(img):
-    kernel = np.ones((1,15))
-#    kernel = np.array([[1, 0, 1, 0, 1],
-#                       [0, 1, 9, 1, 0],
-#                       [1, 0, 1, 0, 1]], dtype = np.uint8)
-    img = cv2.dilate(img, kernel, iterations=1)
-    img = cv2.erode(img, kernel, iterations=1)
-    return img
+def infer_mask(model, image):
+    assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
+    output = model.predict(np.expand_dims(image, axis=0))
+   # .reshape([1] + flow.IMSHAPE))
+    output = output.squeeze()
+    output = output[:,:,1:]
+    return flow.normalize(output)
+
+def infer_roads(mask, chipname=''):
+    assert mask.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, mask.shape)
+    img = prep_for_skeletonize(mask)#.astype(np.uint8))
+    skel = skeletonize(img)
+    graph = sknw.build_sknw(skel)
+    graph.name = chipname
+    assert (np.max(img) == np.nan or np.max(img)) <= 1
+    assert (np.max(skel) == np.nan or np.max(skel)) <= 1
+    return graph, img, skel
+
 
 def infer(model, image, chipname=''):
     assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
@@ -93,15 +95,16 @@ def infer_and_show(model, image, filename):
     if isinstance(image, str):
         image = flow.get_image(image)
     mask = infer_mask(model, image)
+#    import pdb;pdb.set_trace()
 #    mask = infer_mask(model, image)
     if mask.shape[-1] == 3:
         graymask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     else:
         mask = mask.squeeze()
 #    mask = cresi_skeletonize.preprocess(mask, threshold_min)
-    mask = flow.normalize(mask)
-    _, graymask = cv2.threshold(mask, threshold_min, threshold_max, cv2.THRESH_BINARY)
-    filled_mask = skimage.morphology.remove_small_holes(graymask.astype(bool), connectivity=connectivity)
+#    mask = flow.normalize(mask)
+    _, graymask = cv2.threshold(mask, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+    filled_mask = skimage.morphology.remove_small_holes(graymask.astype(bool), connectivity=connectivity, area_threshold=area_threshold)
     filled_mask = skimage.morphology.remove_small_objects(graymask.astype(bool), connectivity=connectivity)
     _, graph, preproc, skel = infer(model, image)
 #    import pdb;pdb.set_trace()
@@ -169,7 +172,7 @@ def do_all(model, loop=True):
                 path = flow.get_file(sys.argv[1])
         else:
             path = flow.get_file()
-        path = flow.get_filenames()[random.randint(0,100)]
+        path = flow.get_test_filenames()[random.randint(0,len(flow.get_test_filenames()))]
         print(path)
         image = flow.get_image(path)#resize(skimage.io.imread(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
         if not loop:

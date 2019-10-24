@@ -17,7 +17,7 @@ import skimage
 import copy
 #import cresi_skeletonize
 
-threshold_min = 0.005
+threshold_min = 0.03
 threshold_max = 1.0
 area_threshold=1
 connectivity=15
@@ -56,8 +56,8 @@ def prep_for_skeletonize(img):
         img = img.squeeze()
     else:
         raise Exception("bad image shape: %s" % str(img.shape))
-#    _, gray = cv2.threshold(img, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
-    _, gray = cv2.threshold(img, threshold_min, threshold_max, cv2.ADAPTIVE_THRESH_MEAN_C)
+    _, gray = cv2.threshold(img, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+#    _, gray = cv2.threshold(img, threshold_min, threshold_max, cv2.ADAPTIVE_THRESH_MEAN_C)
 #    img = skimage.filters.threshold_local(img, method='gaussian', block_size=25)
 #    img = hysteresis_threshold(img)
 #    filled = skimage.morphology.remove_small_holes(gray.astype(bool), connectivity=connectivity,
@@ -105,8 +105,8 @@ def infer_and_show(model, image, filename):
         mask = mask.squeeze()
 #    mask = cresi_skeletonize.preprocess(mask, threshold_min)
 #    mask = flow.normalize(mask)
-#    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
-    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, cv2.ADAPTIVE_THRESH_MEAN_C)
+    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+#    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, cv2.ADAPTIVE_THRESH_MEAN_C)
     filled_mask = skimage.morphology.remove_small_holes(graymask.astype(bool), connectivity=connectivity, area_threshold=area_threshold)
     filled_mask = skimage.morphology.remove_small_objects(filled_mask.astype(bool), connectivity=connectivity * 2.0)
     _, graph, preproc, skel = infer(model, image)

@@ -17,10 +17,10 @@ import skimage
 import copy
 #import cresi_skeletonize
 
-threshold_min = 0.03
+threshold_min = 0.005
 threshold_max = 1.0
 area_threshold=1
-connectivity=7
+connectivity=15
 
 def hysteresis_threshold(img):
     low = 0.003
@@ -56,7 +56,8 @@ def prep_for_skeletonize(img):
         img = img.squeeze()
     else:
         raise Exception("bad image shape: %s" % str(img.shape))
-    _, gray = cv2.threshold(img, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+#    _, gray = cv2.threshold(img, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+    _, gray = cv2.threshold(img, threshold_min, threshold_max, cv2.ADAPTIVE_THRESH_MEAN_C)
 #    img = skimage.filters.threshold_local(img, method='gaussian', block_size=25)
 #    img = hysteresis_threshold(img)
 #    filled = skimage.morphology.remove_small_holes(gray.astype(bool), connectivity=connectivity,
@@ -104,13 +105,14 @@ def infer_and_show(model, image, filename):
         mask = mask.squeeze()
 #    mask = cresi_skeletonize.preprocess(mask, threshold_min)
 #    mask = flow.normalize(mask)
-    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+#    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, cv2.ADAPTIVE_THRESH_MEAN_C)
     filled_mask = skimage.morphology.remove_small_holes(graymask.astype(bool), connectivity=connectivity, area_threshold=area_threshold)
-    filled_mask = skimage.morphology.remove_small_objects(filled_mask.astype(bool), connectivity=connectivity)
+    filled_mask = skimage.morphology.remove_small_objects(filled_mask.astype(bool), connectivity=connectivity * 2.0)
     _, graph, preproc, skel = infer(model, image)
 #    medial = prep_for_skeletonize(filled_mask.astype(np.float32))
 #    medial = medial_axis(medial)
-    import pdb;pdb.set_trace()
+#    import pdb;pdb.set_trace()
     for idx in range(1):
         fig = plt.figure()
         fig.add_subplot(2,4,1)
@@ -172,6 +174,7 @@ def infer_and_show(model, image, filename):
 
 def do_all(model, loop=True):
     import random
+    get_files = flow.get_test_filenames
     while True:
         if len(sys.argv) > 1:
             if os.path.exists(sys.argv[1]):
@@ -180,7 +183,10 @@ def do_all(model, loop=True):
                 path = flow.get_file(sys.argv[1])
         else:
             path = flow.get_file()
-        path = flow.get_test_filenames()[random.randint(0,len(flow.get_test_filenames()))]
+        path = get_files()[random.randint(0,len(get_files()))]
+        if len(sys.argv) > 1:
+            path = flow.get_file(sys.argv[1])
+            sys.argv = [sys.argv[0]]
         print(path)
         image = flow.get_image(path)#resize(skimage.io.imread(path), flow.IMSHAPE).reshape(flow.IMSHAPE)
         if not loop:

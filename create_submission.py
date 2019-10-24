@@ -74,6 +74,38 @@ def get_weight_for(mask, graph, cp):
 
     return weight
 
+def get_weight_for2(mask, graph, xy1, xy2):
+    weight = 0
+    max_speed = 29
+    x1,y1 = xy1
+    x2,y2 = xy2
+    x1,y1 = int(round(x1)), int(round(y1))
+    x2,y2 = int(round(x2)), int(round(y2))
+    for i in range(1, mask.shape[-1]):
+        channel_speed = flow.get_channel_speed(i)
+        weight += mask[x1,y1,i] * channel_speed
+        mean = np.mean(mask[x1:x2,y1:y2,i])
+        if np.isfinite(mean):
+            weight += mean * channel_speed
+    return weight
+
+def get_weight_for3(mask, x, y):
+    weight = 0
+    x,y = int(x), int(y)
+    for i in range(1,mask.shape[-1]):
+        try:
+            speed = mask[x,y,i] * flow.get_channel_speed(i)
+        except Exception as exc:
+            print("\nx,y,i: {},{},{}".format(x,y,i))
+            raise exc
+        if speed <= 0:
+            speed = flow.get_channel_speed(i)
+        weight += speed
+    return weight
+
+def slope(x1,y1,x2,y2):
+    return (y2 - y1) / (x2 - x1)
+
 def graphs_to_wkt(masks, graphs, output_csv_path):
     output_csv = open(output_csv_path, "w")
     output_csv.write("ImageId,WKT_Pix,length_m,time_s\n")
@@ -136,23 +168,25 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
             weight = 0
             if len(xs) > 1:
                 # calculate time to travel this edge
+
                 for i in range(1, len(xs), 2):
                     p1,q1 = tr_x(xs[i-1]), tr_y(ys[i-1])
                     p2,q2 = tr_x(xs[i]), tr_y(ys[i])
                     # Euclidean distance
-                    euclid_distance = np.sqrt( (p2 - p1) * (p2 - p1) + (q2 - q1) * (q2 - q1) )
+#                    euclid_distance = np.sqrt( (p2 - p1) * (p2 - p1) + (q2 - q1) * (q2 - q1) )
 
                 # construct linestring
                 linestring = "LINESTRING ({} {}".format(tr_x(xs[0]), tr_y(ys[0]))
                 for i in range(1, len(pts)):
                     linestring += ", {} {}".format(tr_x(xs[i]), tr_y(ys[i]))
+                    weight += get_weight_for3(mask, xs[i], ys[i])
                 linestring += ")"
                 log.debug(linestring)
                
                 # skip cycles starting and ending at the same node
                 if xs[0] == xs[-1] and ys[0] == ys[-1]:
                     continue
-                weights.append(get_weight_for(mask, graph, pts) * euclid_distance)
+                weights.append(weight)
                 linestrings.append(linestring)
             else:
                 log.warning("{}: unconnected point {}".format(chipname, str(xs)))

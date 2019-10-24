@@ -329,7 +329,7 @@ def get_filenames(dataset="PS-RGB"):
 def get_test_filenames(dataset="PS-RGB"):
     ret = []
     for city in os.listdir(TESTDIR):
-        if "AOI_8" in city or "AOI_7" in city:
+        if "AOI_8" in city or "AOI_7" in city or "AOI_9" in city or "AOI_10" in city:
             ret += [os.path.join(TESTDIR, city, "PS-RGB", f) \
                     for f in os.listdir(os.path.join(TESTDIR, city, "PS-RGB"))]
     return ret

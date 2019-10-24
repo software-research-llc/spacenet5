@@ -41,6 +41,7 @@ def load_weights(model, save_path="model-%s.hdf5" % flow.BACKBONE):
     except OSError as exc:
         sys.stderr.write("!! ERROR LOADING %s:" % save_path)
         sys.stderr.write(str(exc) + "\n")
+    return model
 
 def build_model():
     return sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES,

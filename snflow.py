@@ -48,6 +48,7 @@ CITIES = ["AOI_2_Vegas",
 DATATYPE=int
 TRANSFORM = False
 keras.backend.set_image_data_format('channels_last')
+channel_speed_dict = {}
 
 def trup(x,y):
     x = x * (ORIG_IMSHAPE[0] / IMSHAPE[0])
@@ -328,6 +329,12 @@ def get_filenames(dataset="PS-RGB"):
 def get_test_filenames(dataset="PS-RGB"):
     ret = []
     for city in os.listdir(TESTDIR):
+        if "AOI_8" in city or "AOI_7" in city:
+            ret += [os.path.join(TESTDIR, city, "PS-RGB", f) \
+                    for f in os.listdir(os.path.join(TESTDIR, city, "PS-RGB"))]
+    return ret
+    ret = []
+    for city in os.listdir(TESTDIR):
         ret += [os.path.join(TESTDIR, city, "PS-RGB", f) for \
                 f in os.listdir(os.path.join(TESTDIR, city, "PS-RGB"))]
     return ret
@@ -434,11 +441,53 @@ class Target:
         return self
 
     def get_speed_channel(self, weight):
-        mean_speed = 11.944045
-        stddev = 7.639668
-        sp_max = 29
-        sp_min = 7
-        return int(round( (N_CLASSES - 2) / (sp_max - sp_min) * (weight - sp_min) )) + 1
+        """ Total speed:  3619260.706599
+            Mean speed:   11.570896
+            Standard dev: 8.353577
+            Mode speed:   11.000000
+            Min speed:    7.000000
+            Max speed:    29.000000
+            Num roads:    312790
+            Num bins:     20
+            Speed bins:   [(23, 7), (19, 10), (24, 16), (17, 63), (14, 113), (27, 266), (15, 269), (22, 689), (12, 1086), (18, 1519), (29, 1944), (10, 6526), (25, 12595), (20, 17005), (13, 19079), (16, 32672), (7, 37082), (8, 44358), (9, 65153), (11, 72338)]
+            Ordered bins: [(7, 37082), (8, 44358), (9, 65153), (10, 6526), (11, 72338), (12, 1086), (13, 19079), (14, 113), (15, 269), (16, 32672), (17, 63), (18, 1519), (19, 10), (20, 17005), (22, 689), (23, 7), (24, 16), (25, 12595), (27, 266), (29, 1944)]
+        """
+        weight = int(round(weight))
+        if weight in range(10):
+            ret = 1
+            channel_speed_dict[1] = 9
+        elif weight in range(10,15):
+            ret = 2
+            channel_speed_dict[2] = 13
+        elif weight in range(15,99):
+            ret = 3
+            channel_speed_dict[3] = 23
+        else:
+            log.error("Unrecognized weight: {}".format(weight))
+            ret = 1
+        return ret
+#        return int(round( (N_CLASSES - 2) / (sp_max - sp_min) * (weight - sp_min) )) + 1
+
+    def points(self):
+        seen = set()
+        ary = np.zeros((IMSHAPE[0], IMSHAPE[1]), dtype=bool)
+        for s,e in self.graph.edges():
+            if (s,e) in seen:
+                continue
+            elif (e,s) in seen:
+                continue
+            else:
+                seen.add((s,e))
+                seen.add((e,s))
+
+            x1,y1 = s
+            x2,y2 = e
+            x1,y1 = trdown(x1,y1)
+            x2,y2 = trdown(x2,y2)
+            ary[x1,y1] = True
+            ary[x2,y2] = True
+        skel = skimage.morphology.skeletonize(ary)
+        return skel.reshape((-1,))
 
     def image(self):
         #if self._img is not None:
@@ -470,9 +519,12 @@ def get_speed_channel(weight):
     return Target.get_speed_channel(__name__, weight)
 
 def get_channel_speed(channel):
+    if channel_speed_dict.get(channel, None):
+        return channel_speed_dict[channel]
     for i in range(7,29):
         if get_speed_channel(i) == channel:
             return i
+    return 1
 
 if __name__ == '__main__':
     RUNNING_TESTS = True

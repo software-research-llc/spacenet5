@@ -49,6 +49,7 @@ DATATYPE=int
 TRANSFORM = False
 keras.backend.set_image_data_format('channels_last')
 channel_speed_dict = {}
+MAX_SPEED = 29
 
 def trup(x,y):
     x = x * (ORIG_IMSHAPE[0] / IMSHAPE[0])

@@ -92,9 +92,17 @@ def get_weight_for2(mask, graph, xy1, xy2):
 def get_weight_for3(mask, x, y):
     weight = 0
     x,y = int(x), int(y)
+#    for i in range(1,mask.shape[-1]):
+    max = 0
+    channel = 0
     for i in range(1,mask.shape[-1]):
+        if mask[x,y,i] > max:
+            max = mask[x,y,i]
+            channel = i
+    i = channel
+    for _ in [1]:
         try:
-            speed = mask[x,y,i] * flow.get_channel_speed(i)
+            speed = flow.get_channel_speed(i)
         except Exception as exc:
             print("\nx,y,i: {},{},{}".format(x,y,i))
             raise exc
@@ -166,6 +174,7 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
             """
             # add edges
             weight = 0
+            euclid_distance = 0
             if len(xs) > 1:
                 # calculate time to travel this edge
 
@@ -173,20 +182,24 @@ def graphs_to_wkt(masks, graphs, output_csv_path):
                     p1,q1 = tr_x(xs[i-1]), tr_y(ys[i-1])
                     p2,q2 = tr_x(xs[i]), tr_y(ys[i])
                     # Euclidean distance
-#                    euclid_distance = np.sqrt( (p2 - p1) * (p2 - p1) + (q2 - q1) * (q2 - q1) )
+                    euclid_distance += np.sqrt( (p2 - p1) * (p2 - p1) + (q2 - q1) * (q2 - q1) )
 
                 # construct linestring
                 linestring = "LINESTRING ({} {}".format(tr_x(xs[0]), tr_y(ys[0]))
+                weight = get_weight_for3(mask, xs[0], ys[0])
+                count = 0
                 for i in range(1, len(pts)):
                     linestring += ", {} {}".format(tr_x(xs[i]), tr_y(ys[i]))
                     weight += get_weight_for3(mask, xs[i], ys[i])
+                    count += 1
                 linestring += ")"
                 log.debug(linestring)
-               
-                # skip cycles starting and ending at the same node
+
+                # skip edges starting and ending at the same node
                 if xs[0] == xs[-1] and ys[0] == ys[-1]:
                     continue
-                weights.append(weight)
+                speed = weight / count
+                weights.append(euclid_distance / speed)
                 linestrings.append(linestring)
             else:
                 log.warning("{}: unconnected point {}".format(chipname, str(xs)))

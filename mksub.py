@@ -11,6 +11,7 @@ import sngraph
 import train
 import infer
 import create_submission
+import random
 from skimage.transform import resize
 from skimage import io
 
@@ -27,6 +28,7 @@ train.load_weights(model)
 graphs = []
 masks = []
 allfiles = get_files()
+random.shuffle(allfiles)
 for filename in tqdm.tqdm(allfiles):
     try:
         image = resize(io.imread(filename), flow.IMSHAPE, anti_aliasing=True)

@@ -20,7 +20,9 @@ import copy
 threshold_min = 0.03
 threshold_max = 1.0
 area_threshold=1
-connectivity=15
+connectivity=50
+THRESH_METHOD = cv2.ADAPTIVE_THRESH_MEAN_C
+THRESH_METHOD = cv2.THRESH_BINARY
 
 def hysteresis_threshold(img):
     low = 0.003
@@ -56,7 +58,7 @@ def prep_for_skeletonize(img):
         img = img.squeeze()
     else:
         raise Exception("bad image shape: %s" % str(img.shape))
-    _, gray = cv2.threshold(img, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+    _, gray = cv2.threshold(img, threshold_min, threshold_max, THRESH_METHOD)
 #    _, gray = cv2.threshold(img, threshold_min, threshold_max, cv2.ADAPTIVE_THRESH_MEAN_C)
 #    img = skimage.filters.threshold_local(img, method='gaussian', block_size=25)
 #    img = hysteresis_threshold(img)
@@ -65,6 +67,31 @@ def prep_for_skeletonize(img):
 #    filled = skimage.morphology.remove_small_objects(filled.astype(bool), connectivity=connectivity)
     return gray
 
+def get_path_points(img):
+    # i = x * len + y
+    # x = (i - y) / len
+    # y = i - x * len
+    assert img.shape == (flow.IMSHAPE[0], flow.IMSHAPE[1])
+    paths = []
+    img = skeletonize(img)
+    img = img.ravel()
+    mark(img)
+    pts = np.where(img == 2)
+    seen = set()
+    ret = []
+    nbs = sknw.neighbors(img.shape)
+    ary = img.ravel()
+    L = img.shape[0]
+    for i in range(len(ary)):
+        if ary[i] == 0:
+            continue
+        x1 = i // L
+        y1 = i - x1
+        for d in nbs:
+            if ary[i+d] > 0:
+                x2 = (i+d) // L
+                y2 = (i+d) - x2
+                
 def infer_mask(model, image):
     assert image.ndim == 3, "expected shape {}, got {}".format(flow.IMSHAPE, image.shape)
     output = model.predict(np.expand_dims(image, axis=0))
@@ -78,6 +105,8 @@ def infer_roads(mask, chipname=''):
     img = prep_for_skeletonize(mask.astype(np.float32))#.astype(np.uint8))
     #skel = skeletonize(img)
     skel = skeletonize(img)
+    skel = skimage.morphology.remove_small_holes(skel, connectivity=connectivity, area_threshold=area_threshold)
+    skel = skimage.morphology.remove_small_objects(skel, connectivity=connectivity * 3.0)
     graph = sknw.build_sknw(skel)
     graph.name = chipname
     assert (np.max(img) == np.nan or np.max(img)) <= 1
@@ -105,10 +134,10 @@ def infer_and_show(model, image, filename):
         mask = mask.squeeze()
 #    mask = cresi_skeletonize.preprocess(mask, threshold_min)
 #    mask = flow.normalize(mask)
-    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, cv2.THRESH_BINARY)#cv2.ADAPTIVE_THRESH_MEAN_C)
+    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, THRESH_METHOD)
 #    _, graymask = cv2.threshold(graymask, threshold_min, threshold_max, cv2.ADAPTIVE_THRESH_MEAN_C)
     filled_mask = skimage.morphology.remove_small_holes(graymask.astype(bool), connectivity=connectivity, area_threshold=area_threshold)
-    filled_mask = skimage.morphology.remove_small_objects(filled_mask.astype(bool), connectivity=connectivity * 2.0)
+    filled_mask = skimage.morphology.remove_small_objects(filled_mask.astype(bool), connectivity=connectivity * 3.0)
     _, graph, preproc, skel = infer(model, image)
 #    medial = prep_for_skeletonize(filled_mask.astype(np.float32))
 #    medial = medial_axis(medial)
@@ -127,18 +156,18 @@ def infer_and_show(model, image, filename):
 
         fig.add_subplot(2,4,3)
         plt.axis('off')
-        plt.imshow(filled_mask.astype(np.float32))
+        plt.imshow(filled_mask)
         plt.title("3. Filled mask")
 
         fig.add_subplot(2,4,4)
         plt.axis('off')
-        plt.imshow(preproc)
-        plt.title("4. Preprocessed mask")
+        plt.imshow(skeletonize(prep_for_skeletonize(mask)))
+        plt.title("4. Skeletonized mask")
 
         fig.add_subplot(2,4,5)
         plt.axis('off')
         plt.imshow(skel)
-        plt.title("5. Skeletonized mask")
+        plt.title("5. sknw skeleton")
 
         fig.add_subplot(2,4,6)
         plt.axis('off')

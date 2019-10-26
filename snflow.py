@@ -28,7 +28,7 @@ BATCH_SIZE = 3
 N_CLASSES = len(CLASSES)
 IMSHAPE = [512,512,3]
 ORIG_IMSHAPE = [1300,1300,3]
-ROAD_LINE_WIDTH = 6
+ROAD_LINE_WIDTH = 3
 
 # The directory of this file (don't change this)
 MYDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
@@ -124,8 +124,9 @@ class SpacenetSequence(keras.utils.Sequence):
                 filename = get_file(ex)
                 image = get_image(filename)
                 if random.random() < self.transform:
-                    image = self.image_datagen.apply_transform(image, {'theta': 25,
-                                                                       'shear': 0.2})
+                    trans_dict = { 'theta': 90, 'shear': 0.1 }
+                    image = self.image_datagen.apply_transform(image, trans_dict)
+                    y[idx] = self.image_datagen.apply_transform(y[idx], trans_dict)
                 elif random.random() < self.transform:
                     image = np.fliplr(image)
                     y[idx] = np.fliplr(y[idx])

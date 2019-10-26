@@ -15,7 +15,7 @@ import random
 from skimage.transform import resize
 from skimage import io
 
-USE_TRAINING_IMAGES = False
+USE_TRAINING_IMAGES = True
 
 if not USE_TRAINING_IMAGES:
     flow.CITIES += ["AOI_9_San_Juan"]

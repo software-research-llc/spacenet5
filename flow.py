@@ -129,6 +129,12 @@ class Target:
         with open(filename) as f:
             return Target(f.read())
 
+def get_test_files():
+    files = []
+    for d in TESTDIRS:
+        files += [os.path.join(d, ex) for ex in os.listdir(d)]
+    return files
+
 if __name__ == '__main__':
     df = Dataflow()
     fig = plt.figure()

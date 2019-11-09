@@ -102,8 +102,8 @@ class Target:
                 b.klass = 'no-damage'
 
             if b.klass not in CLASSES:
-                CLASSES.append(b.klass)
-                CLASSES.sort()
+                logger.error(f"Unrecognized building subtype: {b.klass}")
+
             b.wkt = feature['wkt']
             b.uid = prop['uid']
             self.buildings.append(b)

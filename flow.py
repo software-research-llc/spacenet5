@@ -1,3 +1,4 @@
+import random
 import os
 import cv2
 import tensorflow as tf
@@ -16,10 +17,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class Dataflow(tf.keras.utils.Sequence):
-    def __init__(self, batch_size=3, targets=None, transform=False, shuffle=False):
+    def __init__(self, batch_size=1, samples=None, transform=False, shuffle=False, validation_set=False):
         self.transform = transform
         self.shuffle = shuffle
-        self.batchsize = batch_size
+        self.batch_size = batch_size
         if transform:
             data_gen_args = dict(rotation_range=25,
                                      width_shift_range=0.1,
@@ -31,25 +32,36 @@ class Dataflow(tf.keras.utils.Sequence):
         self.image_datagen = ImageDataGenerator(**data_gen_args)
         self.mask_datagen = ImageDataGenerator(**data_gen_args)
 
-        if targets:
-            self.targets = targets
+        if samples:
+            self.samples = samples
         else:
             files = []
             for directory in LABELDIRS:
                 files += [os.path.join(directory, f) for f in os.listdir(directory)]
-            self.targets = [Target.from_file(f) for f in files]
+            length = len(files)
+            if validation_set:
+                files = files[int(length*0.9):]
+            else:
+                files = files[:int(length*0.9)]
+            self.samples = [Target.from_file(f) for f in files]
 
     def __len__(self):
-        length = int(np.ceil(len(self.x) / float(self.batch_size)))
+        """Length of this dataflow in units of batch_size"""
+        length = int(np.ceil(len(self.samples) / float(self.batch_size)))
         return length
 
     def __getitem__(self, idx):
-        x = np.array(self.targets[idx].image())
-        y = np.array(self.targets[idx].mask())
-        transform_dict = { 'theta': 90, 'shear': 0.1 }
-        if random.random() < float(self.transform):
-            x = self.image_datagen.apply_transform(x, trans_dict)
-            y = self.image_datagen.apply_transform(y, trans_dict)
+        """Return images,masks := numpy arrays of size batch_size"""
+        x = np.array([ex.image() for ex in self.samples[idx * self.batch_size:(idx + 1) * self.batch_size]])
+        #x = np.array(self.samples[idx].image())
+        y = np.array([tgt.mask() for tgt in self.samples[idx * self.batch_size:(idx + 1) * self.batch_size]])
+        """"
+        trans_dict = { 'theta': 90, 'shear': 0.1 }
+        for i in range(len(x)):
+            if random.random() < float(self.transform):
+                x[i] = self.image_datagen.apply_transform(x[i], trans_dict)
+                y[i] = self.image_datagen.apply_transform(y[i], trans_dict)
+        """
         return x,y
 
 class Building:
@@ -99,7 +111,8 @@ class Target:
     def mask(self):
         img = np.zeros(TARGETSHAPE)
         for b in self.buildings:
-            cv2.fillConvexPoly(img, b.coords(), b.color())
+            if len(b.coords() > 1):
+                cv2.fillConvexPoly(img, b.coords(), b.color())
         return img
 
     def image(self):
@@ -121,11 +134,11 @@ if __name__ == '__main__':
     fig = plt.figure()
 
     fig.add_subplot(1,2,1)
-    plt.imshow(df.targets[0].image())
+    plt.imshow(df.samples[0].image())
     plt.title("image")
 
     fig.add_subplot(1,2,2)
-    plt.imshow(df.targets[0].mask().squeeze(), cmap='plasma')
+    plt.imshow(df.samples[0].mask().squeeze(), cmap='plasma')
     plt.title("mask")
 
     plt.show()

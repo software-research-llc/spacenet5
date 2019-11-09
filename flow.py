@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class Dataflow(tf.keras.utils.Sequence):
+    """A keras.utils.Sequence subclass to feed data to the model"""
     def __init__(self, batch_size=1, samples=None, transform=False, shuffle=False, validation_set=False):
         self.transform = transform
         self.shuffle = shuffle
@@ -66,19 +67,26 @@ class Dataflow(tf.keras.utils.Sequence):
 
 
 class Building:
+    """Carries the data for a single building"""
     def __init__(self):
         self.wkt = None
+        self._coords = None
 
     def coords(self):
+        """Parses the WKT data and caches it for subsequent calls"""
+        if self._coords:
+            return self._coords
         wkt = self.wkt
         pairs = []
         for pair in re.findall(r"\-?\d+\.?\d+ \-?\d+\.?\d+", wkt):
             xy = pair.split(" ")
             x,y = round(float(xy[0])), round(float(xy[1]))
             pairs.append(np.array([x,y]))
-        return np.array(pairs)
+        self._coords = np.array(pairs)
+        return self._coords
 
     def color(self, scale=False):
+        """Get the color value for a building subtype (i.e. index into CLASSES)"""
         ret = CLASSES.index(self.klass)
         if scale:
             ret = ret / N_CLASSES
@@ -86,11 +94,13 @@ class Building:
 
 
 class Target:
+    """Target objects provide filenames, metadata, input images, and masks for training"""
     def __init__(self, text):
         self.buildings = []
         self.parse_json(text)
 
     def parse_json(self, text):
+        """Parse a JSON formatted string and assign instance variables from it"""
         data = json.loads(text)
         self.img_name = data['metadata']['img_name']
         self.metadata = data['metadata']
@@ -110,6 +120,7 @@ class Target:
             self.buildings.append(b)
 
     def mask(self, img=None):
+        """Get the target mask for supervised training of the model"""
         if img is None:
             img = np.zeros(TARGETSHAPE)
         for b in self.buildings:
@@ -119,6 +130,7 @@ class Target:
         return img.clip(0.0, 1.0)
 
     def image(self):
+        """Get the input image (i.e. satellite chip) to feed to the model"""
         for path in IMAGEDIRS:
             fullpath = os.path.join(path, self.img_name)
             try:
@@ -129,11 +141,13 @@ class Target:
 
     @staticmethod
     def from_file(filename):
+        """Create a Target object from the path of a .JSON file"""
         with open(filename) as f:
             return Target(f.read())
 
 
 def get_test_files():
+    """Return a list of the paths of images belonging to the test set"""
     files = []
     for d in TESTDIRS:
         files += [os.path.join(d, ex) for ex in os.listdir(d)]
@@ -141,6 +155,7 @@ def get_test_files():
 
 
 if __name__ == '__main__':
+    # Testing and data inspection
     import time
     df = Dataflow(batch_size=1)
     while True:
@@ -161,7 +176,6 @@ if __name__ == '__main__':
         fig.add_subplot(1,3,3)
         plt.imshow(df.samples[idx].mask().squeeze(), cmap='gray')
         plt.title("mask")
-
 
         plt.show()
         time.sleep(1)

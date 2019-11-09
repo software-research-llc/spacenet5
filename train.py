@@ -1,6 +1,6 @@
 import time
 import sys
-import snflow as flow
+import flow
 import plac
 import tensorflow as tf
 import segmentation_models as sm
@@ -13,11 +13,11 @@ callbacks = [
     keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True, mode='min'),
 ]
 
-BATCH_SIZE = 3
+BATCH_SIZE = 1
 dice_loss = sm.losses.DiceLoss()#class_weights=np.array([1, 1, 1, 1]))
 focal_loss = sm.losses.BinaryFocalLoss() if flow.N_CLASSES == 1 else sm.losses.CategoricalFocalLoss()
 total_loss = dice_loss + sm.losses.BinaryFocalLoss()#focal_loss#keras.losses.sparse_categorical_crossentropy + dice_loss
-metrics = ['accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
+metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss()]#, sm.metrics.IOUScore(), sm.metrics.FScore()]
 optim = keras.optimizers.Adam()
 #preprocess_input = sm.get_preprocessing(flow.BACKBONE)
 
@@ -45,7 +45,7 @@ def load_weights(model, save_path="model-%s.hdf5" % flow.BACKBONE):
 
 def build_model():
     return sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES,
-                   input_shape=flow.IMSHAPE, activation='softmax',
+                   input_shape=flow.SAMPLESHAPE, activation='softmax',
                    encoder_weights='imagenet')
 
 def main(save_path="model-%s.hdf5" % flow.BACKBONE,
@@ -62,8 +62,8 @@ def main(save_path="model-%s.hdf5" % flow.BACKBONE,
     sm.utils.set_trainable(model, recompile=False)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    train_seq = flow.Sequence(batch_size=BATCH_SIZE, transform=0.30, test=False, shuffle=True)
-    val_seq = flow.Sequence(batch_size=BATCH_SIZE, test=True, shuffle=True)
+    train_seq = flow.Dataflow(batch_size=BATCH_SIZE)#, transform=0.30)
+    val_seq = flow.Dataflow(batch_size=BATCH_SIZE, validation_set=True)
 
     train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
     save_model(model, save_path)

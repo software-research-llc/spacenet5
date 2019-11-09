@@ -1,3 +1,4 @@
+import threading
 import random
 import os
 import cv2
@@ -16,11 +17,34 @@ import re
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+class Cacher(threading.Thread):
+    """Cache a tiny amount of input data (global interpreter lock
+       is released during blocking IO)"""
+    def __init__(self, df):
+        threading.Thread.__init__(self, daemon=True)
+        self.cache = {}
+        self.df = df
+        self.idx = 0
+        self.lock = threading.Lock()
+        self.batch_size = df.batch_size
+        self.samples = df.samples
+
+    def run(self):
+        while True:
+            try:
+                idx = self.idx
+                for i in range(2):
+                    if not self.cache.get(idx+i, None):
+                        self.cache[idx] = self.df.get_idx(idx+i)
+            except RuntimeError:
+                pass
+
 class Dataflow(tf.keras.utils.Sequence):
     def __init__(self, batch_size=1, samples=None, transform=False, shuffle=False, validation_set=False):
         self.transform = transform
         self.shuffle = shuffle
         self.batch_size = batch_size
+
         if transform:
             data_gen_args = dict(rotation_range=25,
                                      width_shift_range=0.1,
@@ -44,6 +68,9 @@ class Dataflow(tf.keras.utils.Sequence):
             else:
                 files = files[:int(length*0.9)]
             self.samples = [Target.from_file(f) for f in files]
+        
+        self.cacher = Cacher(self)
+        self.cacher.start()
 
     def __len__(self):
         """Length of this dataflow in units of batch_size"""
@@ -52,8 +79,14 @@ class Dataflow(tf.keras.utils.Sequence):
 
     def __getitem__(self, idx):
         """Return images,masks := numpy arrays of size batch_size"""
+        while not self.cacher.cache.get(idx, None):
+            self.cacher.idx = idx
+        ret = self.cacher.cache[idx]
+        del self.cacher.cache[idx]
+        return ret
+
+    def get_idx(self, idx):
         x = np.array([ex.image() for ex in self.samples[idx * self.batch_size:(idx + 1) * self.batch_size]])
-        #x = np.array(self.samples[idx].image())
         y = np.array([tgt.mask() for tgt in self.samples[idx * self.batch_size:(idx + 1) * self.batch_size]])
         """"
         trans_dict = { 'theta': 90, 'shear': 0.1 }

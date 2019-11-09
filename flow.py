@@ -13,7 +13,7 @@ from keras.preprocessing.image import ImageDataGenerator
 import logging
 import re
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -103,9 +103,6 @@ class Target:
                 logger.error(f"Unrecognized building subtype: {b.klass}")
 
             b.wkt = feature.get('wkt', None)
-            if not b.wkt:
-                logger.debug(f"feature[wkt]:{feature.get('wkt', '')}, prop[wkt]:{prop.get('wkt', '')}")
-                b.wkt = prop.get('wkt', None)
             b.uid = prop['uid']
             self.buildings.append(b)
 

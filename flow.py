@@ -13,8 +13,9 @@ from keras.preprocessing.image import ImageDataGenerator
 import logging
 import re
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
 
 class Dataflow(tf.keras.utils.Sequence):
     def __init__(self, batch_size=1, samples=None, transform=False, shuffle=False, validation_set=False):
@@ -53,7 +54,6 @@ class Dataflow(tf.keras.utils.Sequence):
     def __getitem__(self, idx):
         """Return images,masks := numpy arrays of size batch_size"""
         x = np.array([ex.image() for ex in self.samples[idx * self.batch_size:(idx + 1) * self.batch_size]])
-        #x = np.array(self.samples[idx].image())
         y = np.array([tgt.mask() for tgt in self.samples[idx * self.batch_size:(idx + 1) * self.batch_size]])
         """"
         trans_dict = { 'theta': 90, 'shear': 0.1 }
@@ -63,6 +63,7 @@ class Dataflow(tf.keras.utils.Sequence):
                 y[i] = self.image_datagen.apply_transform(y[i], trans_dict)
         """
         return x,y
+
 
 class Building:
     def __init__(self):
@@ -80,6 +81,7 @@ class Building:
     def color(self):
         return CLASSES.index(self.klass)
 
+
 class Target:
     def __init__(self, text):
         self.buildings = []
@@ -95,16 +97,15 @@ class Target:
             if prop['feature_type'] != 'building':
                 continue
             b = Building()
-            try:
-                b.klass = prop['subtype']
-            except:
-                logger.debug("no subtype for building {} in {}".format(prop['uid'], self.img_name))
-                b.klass = 'no-damage'
-
+            b.klass = prop.get('subtype', "no-damage")
+           
             if b.klass not in CLASSES:
                 logger.error(f"Unrecognized building subtype: {b.klass}")
 
-            b.wkt = feature['wkt']
+            b.wkt = feature.get('wkt', None)
+            if not b.wkt:
+                logger.debug(f"feature[wkt]:{feature.get('wkt', '')}, prop[wkt]:{prop.get('wkt', '')}")
+                b.wkt = prop.get('wkt', None)
             b.uid = prop['uid']
             self.buildings.append(b)
 
@@ -129,22 +130,28 @@ class Target:
         with open(filename) as f:
             return Target(f.read())
 
+
 def get_test_files():
     files = []
     for d in TESTDIRS:
         files += [os.path.join(d, ex) for ex in os.listdir(d)]
     return files
 
+
 if __name__ == '__main__':
-    df = Dataflow()
-    fig = plt.figure()
+    import time
+    df = Dataflow(batch_size=1)
+    while True:
+        idx = random.randint(0,len(df) - 1)
+        fig = plt.figure()
 
-    fig.add_subplot(1,2,1)
-    plt.imshow(df.samples[0].image())
-    plt.title("image")
+        fig.add_subplot(1,2,1)
+        plt.imshow(df.samples[idx].image())
+        plt.title(df.samples[idx].img_name)
 
-    fig.add_subplot(1,2,2)
-    plt.imshow(df.samples[0].mask().squeeze(), cmap='plasma')
-    plt.title("mask")
+        fig.add_subplot(1,2,2)
+        plt.imshow(df.samples[idx].mask().squeeze(), cmap='plasma')
+        plt.title("mask")
 
-    plt.show()
+        plt.show()
+        time.sleep(1)

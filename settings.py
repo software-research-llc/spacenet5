@@ -2,7 +2,7 @@ import os
 from inspect import getsourcefile
 
 BACKBONE = 'resnext50'
-CLASSES = ["no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
+CLASSES = ["background", "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
 N_CLASSES = len(CLASSES)
 
 TARGETSHAPE = [1024,1024,1]

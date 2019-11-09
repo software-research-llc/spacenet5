@@ -78,8 +78,11 @@ class Building:
             pairs.append(np.array([x,y]))
         return np.array(pairs)
 
-    def color(self):
-        return CLASSES.index(self.klass)
+    def color(self, scale=False):
+        ret = CLASSES.index(self.klass)
+        if scale:
+            ret = ret / N_CLASSES
+        return ret
 
 
 class Target:
@@ -106,12 +109,14 @@ class Target:
             b.uid = prop['uid']
             self.buildings.append(b)
 
-    def mask(self):
-        img = np.zeros(TARGETSHAPE)
+    def mask(self, img=None):
+        if img is None:
+            img = np.zeros(TARGETSHAPE)
         for b in self.buildings:
-            if len(b.coords() > 1):
-                cv2.fillConvexPoly(img, b.coords(), b.color())
-        return img
+            coords = b.coords()
+            if len(coords > 1):
+                cv2.fillConvexPoly(img, coords, b.color(scale=True))
+        return img.clip(0.0, 1.0)
 
     def image(self):
         for path in IMAGEDIRS:
@@ -142,13 +147,21 @@ if __name__ == '__main__':
         idx = random.randint(0,len(df) - 1)
         fig = plt.figure()
 
-        fig.add_subplot(1,2,1)
+        fig.add_subplot(1,3,1)
         plt.imshow(df.samples[idx].image())
         plt.title(df.samples[idx].img_name)
 
-        fig.add_subplot(1,2,2)
-        plt.imshow(df.samples[idx].mask().squeeze(), cmap='plasma')
+        fig.add_subplot(1,3,2)
+        plt.imshow(df.samples[idx].image())
+        colormap = {0: 'red', 1: 'blue', 2: 'green', 3: 'purple', 4: 'orange', 5: 'yellow', 6: 'brown' }
+        for b in df.samples[idx].buildings:
+            plt.plot(b.coords()[:,0], b.coords()[:,1], color=colormap[b.color()])
+        plt.title("image overlaid with mask")
+
+        fig.add_subplot(1,3,3)
+        plt.imshow(df.samples[idx].mask().squeeze(), cmap='gray')
         plt.title("mask")
+
 
         plt.show()
         time.sleep(1)

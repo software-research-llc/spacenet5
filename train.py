@@ -9,21 +9,15 @@ import numpy as np
 import logging
 logger = logging.getLogger(__name__)
 
+
 callbacks = [
-    keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True, mode='min'),
+    keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True),
 ]
 
 BATCH_SIZE = 1
-dice_loss = sm.losses.DiceLoss()#class_weights=np.array([1, 1, 1, 1]))
-focal_loss = sm.losses.BinaryFocalLoss() if flow.N_CLASSES == 1 else sm.losses.CategoricalFocalLoss()
-total_loss = dice_loss + sm.losses.BinaryFocalLoss()#focal_loss#keras.losses.sparse_categorical_crossentropy + dice_loss
-metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss()]#, sm.metrics.IOUScore(), sm.metrics.FScore()]
-optim = keras.optimizers.Adam()
+metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
 #preprocess_input = sm.get_preprocessing(flow.BACKBONE)
 
-def loss(y_true, y_pred):
-    dice = dice_loss(y_true, y_pred)
-    return dice# + keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
 
 def save_model(model, save_path="model-%s.hdf5" % flow.BACKBONE, pause=0):
     if pause > 0:
@@ -34,6 +28,7 @@ def save_model(model, save_path="model-%s.hdf5" % flow.BACKBONE, pause=0):
     sys.stderr.write("Saving...\n")
     return model.save_weights(save_path)
 
+
 def load_weights(model, save_path="model-%s.hdf5" % flow.BACKBONE):
     try:
         model.load_weights(save_path)
@@ -43,18 +38,19 @@ def load_weights(model, save_path="model-%s.hdf5" % flow.BACKBONE):
         sys.stderr.write(str(exc) + "\n")
     return model
 
+
 def build_model():
     return sm.Unet(flow.BACKBONE, classes=flow.N_CLASSES,
                    input_shape=flow.SAMPLESHAPE, activation='softmax',
                    encoder_weights='imagenet')
 
+
 def main(save_path="model-%s.hdf5" % flow.BACKBONE,
          optimizer='adam',
-         loss='sparse_categorical_crossentropy',#'sparse_categorical_crossentropy',#loss,#'sparse_categorical_crossentropy',
+         loss='sparse_categorical_crossentropy',
          restore=True,
          verbose=1,
-         epochs=500,
-         validation_split=0.1):
+         epochs=50):
     logger.info("Building model.")
     model = build_model()
     if restore:
@@ -70,34 +66,12 @@ def main(save_path="model-%s.hdf5" % flow.BACKBONE,
     logger.info("Training.")
     train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
     save_model(model, save_path)
-    sys.exit()
 
-    for epoch in range(epochs):
-        vi = 0
-        stepnum = 0
-        for x,y in train_seq:
-            stepnum += 1
-            vx, vy = val_seq[vi]
-            vi += 1
-            if vi >= len(val_seq):
-                vi = 0
-            try:
-                print("Epoch %d / %d, step %d / %d" % (epoch, epochs, stepnum, len(train_seq)))
-                model.fit(x, y, validation_data=[vx, vy], epochs=1,
-                            verbose=verbose, batch_size=BATCH_SIZE)
-            except KeyboardInterrupt:
-                save_model(model, save_path, pause=1)
-                sys.exit()
-            except Exception as exc:
-                save_model(model, save_path)
-                raise exc
-    save_model(model, save_path)
 
 def train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq):
     try:
         model.fit(train_seq, validation_data=val_seq, epochs=epochs,
                             verbose=verbose, callbacks=callbacks)
-                            #use_multiprocessing=True)
     except KeyboardInterrupt:
             save_model(model, save_path, pause=1)
             sys.exit()
@@ -110,7 +84,6 @@ def train_step_generator(model, train_seq, verbose, epochs, callbacks, save_path
     try:
         model.fit_generator(train_seq, validation_data=val_seq, epochs=epochs,
                             verbose=verbose, callbacks=callbacks)
-                            #use_multiprocessing=True)
     except KeyboardInterrupt:
             save_model(model, save_path, pause=1)
             sys.exit()

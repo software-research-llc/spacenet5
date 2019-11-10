@@ -1,7 +1,8 @@
 import os
 from inspect import getsourcefile
 
-BACKBONE = 'resnext50'
+BATCH_SIZE = 3
+BACKBONE = 'resnet34'
 CLASSES = ["background", "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
 N_CLASSES = len(CLASSES)
 

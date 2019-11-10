@@ -1,3 +1,4 @@
+from settings import *
 import time
 import sys
 import flow
@@ -14,7 +15,6 @@ callbacks = [
     keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True),
 ]
 
-BATCH_SIZE = 1
 metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
 #preprocess_input = sm.get_preprocessing(flow.BACKBONE)
 

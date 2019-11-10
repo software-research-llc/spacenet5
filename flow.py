@@ -1,3 +1,4 @@
+import glob
 import random
 import os
 import cv2
@@ -74,7 +75,7 @@ class Building:
 
     def coords(self):
         """Parses the WKT data and caches it for subsequent calls"""
-        if self._coords:
+        if self._coords is not None:
             return self._coords
         wkt = self.wkt
         pairs = []
@@ -148,10 +149,13 @@ class Target:
 
 def get_test_files():
     """Return a list of the paths of images belonging to the test set"""
-    files = []
+    prefiles = []
+    postfiles = []
+    sortfunc = lambda x: os.path.basename(x)
     for d in TESTDIRS:
-        files += [os.path.join(d, ex) for ex in os.listdir(d)]
-    return files
+        prefiles += glob.glob(os.path.join(d, "*pre*"))
+        postfiles += glob.glob(os.path.join(d, "*post*"))
+    return zip(sorted(prefiles, key=sortfunc), sorted(postfiles, key=sortfunc))
 
 
 if __name__ == '__main__':

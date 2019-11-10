@@ -127,8 +127,8 @@ class Target:
         for b in self.buildings:
             coords = b.coords()
             if len(coords > 1):
-                cv2.fillConvexPoly(img, coords, b.color(scale=True))
-        return img.clip(0.0, 1.0)
+                cv2.fillConvexPoly(img, coords, b.color())
+        return img
 
     def image(self):
         """Get the input image (i.e. satellite chip) to feed to the model"""

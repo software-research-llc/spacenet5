@@ -28,6 +28,6 @@ def f1score(model:sm.Unet, picklefile:str="validationflow.pickle"):
 
 if __name__ == '__main__':
     model = train.build_model()
-    model = train.load_weights()
+    model = train.load_weights(model)
     score = f1score(model)
     print("F1 Score: %f" % score)

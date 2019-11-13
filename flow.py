@@ -13,13 +13,14 @@ import skimage
 from keras.preprocessing.image import ImageDataGenerator
 import logging
 import re
+import pickle
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class Dataflow(tf.keras.utils.Sequence):
-    """A keras.utils.Sequence subclass to feed data to the model"""
+    """A tf.keras.utils.Sequence subclass to feed data to the model"""
     def __init__(self, batch_size=1, samples=None, transform=False, shuffle=False, validation_set=False):
         self.transform = transform
         self.shuffle = shuffle
@@ -35,7 +36,7 @@ class Dataflow(tf.keras.utils.Sequence):
         self.image_datagen = ImageDataGenerator(**data_gen_args)
         self.mask_datagen = ImageDataGenerator(**data_gen_args)
 
-        if samples:
+        if samples is not None:
             self.samples = samples
         else:
             files = []
@@ -54,9 +55,9 @@ class Dataflow(tf.keras.utils.Sequence):
         return length
 
     def __getitem__(self, idx):
-        """Return images,masks := numpy arrays of size batch_size"""
-        x = np.array([ex.image() for ex in self.samples[idx * self.batch_size:(idx + 1) * self.batch_size]])
-        y = np.array([tgt.mask() for tgt in self.samples[idx * self.batch_size:(idx + 1) * self.batch_size]])
+        """Return [images,masks], both of which are numpy arrays of batch_size)"""
+        x = np.array([ex.image() for ex in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]])
+        y = np.array([tgt.mask() for tgt in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]])
         """"
         trans_dict = { 'theta': 90, 'shear': 0.1 }
         for i in range(len(x)):
@@ -66,9 +67,19 @@ class Dataflow(tf.keras.utils.Sequence):
         """
         return x,y
 
+    @staticmethod
+    def from_pickle(picklefile:str):
+        with open(picklefile, "rb") as f:
+            return pickle.load(f)
+
+    def to_pickle(self, picklefile:str):
+        with open(picklefile, "wb") as f:
+            return pickle.dump(self, f)
+
 
 class Building:
-    """Carries the data for a single building"""
+    """Carries the data for a single building; multiple Buildings are
+       owned by a single Target"""
     def __init__(self):
         self.wkt = None
         self._coords = None
@@ -95,12 +106,13 @@ class Building:
 
 
 class Target:
-    """Target objects provide filenames, metadata, input images, and masks for training"""
-    def __init__(self, text):
+    """Target objects provide filenames, metadata, input images, and masks for training.
+       One target per pre-disaster,post-disaster input image set."""
+    def __init__(self, text:str):
         self.buildings = []
         self.parse_json(text)
 
-    def parse_json(self, text):
+    def parse_json(self, text:str):
         """Parse a JSON formatted string and assign instance variables from it"""
         data = json.loads(text)
         self.img_name = data['metadata']['img_name']
@@ -120,8 +132,8 @@ class Target:
             b.uid = prop['uid']
             self.buildings.append(b)
 
-    def mask(self, img=None):
-        """Get the target mask for supervised training of the model"""
+    def mask(self, img:np.ndarray=None):
+        """Get the Target's mask for supervised training of the model"""
         if img is None:
             img = np.zeros(TARGETSHAPE)
         for b in self.buildings:
@@ -131,7 +143,7 @@ class Target:
         return img
 
     def image(self):
-        """Get the input image (i.e. satellite chip) to feed to the model"""
+        """Get this Target's input image (i.e. satellite chip) to feed to the model"""
         for path in IMAGEDIRS:
             fullpath = os.path.join(path, self.img_name)
             try:
@@ -141,14 +153,17 @@ class Target:
         raise exc
 
     @staticmethod
-    def from_file(filename):
-        """Create a Target object from the path of a .JSON file"""
+    def from_file(filename:str):
+        """Create a Target object from a path to a .JSON file"""
         with open(filename) as f:
             return Target(f.read())
 
 
 def get_test_files():
-    """Return a list of the paths of images belonging to the test set"""
+    """
+    Return a list of the paths of images belonging to the test set as
+    (preimage, postimage) tuples, e.g. ("socal-pre-004.png", "socal-post-004.png").
+    """
     prefiles = []
     postfiles = []
     sortfunc = lambda x: os.path.basename(x)
@@ -158,10 +173,38 @@ def get_test_files():
     return zip(sorted(prefiles, key=sortfunc), sorted(postfiles, key=sortfunc))
 
 
+def get_training_files():
+    """
+    Return a list of the .json files describing the training images.
+    """
+    files = []
+    for directory in LABELDIRS:
+        files += [os.path.join(os.path.abspath(directory), f) for f in os.listdir(directory)]
+    length = len(files)
+    files = files[:int(length*0.9)]
+    return files
+
+
+def get_validation_files():
+    """
+    Return a list of the .json files describing the validation set (holdout set).
+    """
+    files = []
+    for directory in LABELDIRS:
+        files += [os.path.join(os.path.abspath(directory), f) for f in os.listdir(directory)]
+    length = len(files)
+    files = files[int(length*0.9):]
+    return files
+
 if __name__ == '__main__':
     # Testing and data inspection
     import time
-    df = Dataflow(batch_size=1)
+    if os.path.exists("trainingflow.pickle"):
+        df = Dataflow.from_pickle("trainingflow.pickle")
+        logger.info("Loaded training dataflow from pickle file.")
+    else:
+        logger.warning("Generating dataflows")
+        df = Dataflow(batch_size=1)
     while True:
         idx = random.randint(0,len(df) - 1)
         fig = plt.figure()

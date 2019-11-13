@@ -13,18 +13,32 @@ import matplotlib.pyplot as plt
 from settings import *
 
 
-def compress_channels(mask):
-    assert mask.shape == tuple(MASKSHAPE), f"expected {MASKSHAPE}, got {mask.shape}"
+def compress_channels(mask:np.ndarray):
+    """
+    Compress an N-dimensional image, i.e. WxHxN, where N is the number of channels.
+
+    Returns a grayscale (single channel) image with each pixel value being an integer
+    that represents the class of the original input image at that pixel location.
+    """
+    assert mask.shape == tuple(MASKSHAPE), f"expected shape {MASKSHAPE}, got {mask.shape}"
     cutoff = 0.03
     cmpr = np.zeros(TARGETSHAPE, dtype=np.uint8)
 
-    for i in range(mask.shape[-1] - 1):
+    for i in range(1, mask.shape[-1]):
         cmpr[mask[:,:,i] > cutoff] = i
 
     return cmpr.squeeze()
 
-def decompress_channels(img):
-    assert [img.shape[0], img.shape[1]] == [TARGETSHAPE[0], TARGETSHAPE[1]], f"expected {TARGETSHAPE[:2]}, got {img.shape[:2]}"
+
+def decompress_channels(img:np.ndarray):
+    """
+    Decompress an image that was compressed by compress_channels().
+
+    Returns one grayscale image per object class (see settings.py).
+
+    Note: use np.stack(decompress_channels(img), axis=2) to get an N-channel image.
+    """
+    assert img.shape[:2] == tuple(TARGETSHAPE[:2]), f"expected shape {TARGETSHAPE[:2]}, got {img.shape}"
     chans = [np.zeros(TARGETSHAPE[:2], dtype=np.uint8) for _ in CLASSES]
 
     for i, chan in enumerate(chans):
@@ -32,8 +46,13 @@ def decompress_channels(img):
 
     return chans
 
-def infer(model, pre, post=None):
-    """Do prediction, returning (mask_image, damage_image)"""
+
+def infer(model, pre:np.ndarray, post:np.ndarray=None, compress:bool=True):
+    """
+    Do prediction.  If compress is True, calls compress_channels() on the return images.
+
+    Returns a (mask_image, damage_image) tuple.
+    """
     assert pre.ndim == 3, f"expected 3 dimensions, got {pre.shape}"
     premask = model.predict(np.expand_dims(pre, axis=0))
 
@@ -41,11 +60,18 @@ def infer(model, pre, post=None):
         return premask.squeeze()
     postmask = model.predict(np.expand_dims(post, axis=0))
 
-    return compress_channels(premask.squeeze()), compress_channels(postmask.squeeze())
+    if compress:
+        return compress_channels(premask.squeeze()), compress_channels(postmask.squeeze())
+    else:
+        return premask.squeeze(), postmask.squeeze()
 
 
 def show_random(model):
-    """Choose a random test image and display the results of inference"""
+    """
+    Choose a random test image pair and display the results of inference.
+
+    Returns None.
+    """
     files = list(flow.get_test_files())
     idx = random.randint(0,len(files)-1)
     preimg = skimage.io.imread(files[idx][0])
@@ -76,6 +102,7 @@ def show_random(model):
         plt.title("Damage - {}".format(CLASSES[i]))
 
     plt.show()
+
 
 if __name__ == "__main__":
     # Testing and inspection

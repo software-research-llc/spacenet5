@@ -1,7 +1,7 @@
 """https://github.com/JHart96/keras_ordinal_categorical_crossentropy"""
-
-from tf.keras import backend as K
-from tf.keras import losses
+import tensorflow as tf
+from tensorflow.keras import backend as K
+from tensorflow.keras import losses
 
 def sparse_loss(y_true, y_pred):
     """

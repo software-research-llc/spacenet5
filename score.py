@@ -1,3 +1,4 @@
+import numpy as np
 import flow
 import pickle
 import sklearn
@@ -8,17 +9,16 @@ import train
 
 
 def f1score(model:sm.Unet, picklefile:str="validationflow.pickle"):
-    valid_df = pickle.load(picklefile)
+    with open(picklefile, "rb") as f:
+        valid_df = pickle.load(f)
     y_true = []
     y_pred = []
     for x,y in tqdm.tqdm(valid_df):
-        y_true.append(x)
         y_true.append(y)
 
-        x_, y_ = infer.infer(model, pre=x, post=y, compress=True)
+        x_ = infer.infer(model, x.squeeze(), compress=True)
         
         y_pred.append(x_)
-        y_pred.append(y_)
 
     y_true = np.array(y_true).ravel()
     y_pred = np.array(y_pred).ravel()

@@ -40,15 +40,11 @@ class Dataflow(tf.keras.utils.Sequence):
         if samples is not None:
             self.samples = samples
         else:
-            files = []
-            for directory in LABELDIRS:
-                files += [os.path.join(directory, f) for f in os.listdir(directory)]
-            length = len(files)
             if validation_set:
-                files = files[int(length*SPLITFACTOR):]
+                files = get_validation_files()
             else:
-                files = files[:int(length*SPLITFACTOR)]
-            self.samples = [Target.from_file(f) for f in files]
+                files = get_training_files()
+            self.samples = [(Target.from_file(pre), Target.from_file(post)) for (pre,post) in files]
 
     def __len__(self):
         """Length of this dataflow in units of batch_size"""
@@ -57,9 +53,9 @@ class Dataflow(tf.keras.utils.Sequence):
 
     def __getitem__(self, idx):
         """Return [images,masks], both of which are numpy arrays of batch_size)"""
-        x = np.array([resize(ex.image(), SAMPLESHAPE) for ex in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]])
-        y = np.array([resize(tgt.mask(), TARGETSHAPE) for tgt in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]])
-        """"
+        x = [(resize(pre.image(), SAMPLESHAPE), resize(post.image(), SAMPLESHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
+        y = [(resize(pre.mask(), TARGETSHAPE), resize(post.mask(), TARGETSHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
+        """
         trans_dict = { 'theta': 90, 'shear': 0.1 }
         for i in range(len(x)):
             if random.random() < float(self.transform):
@@ -108,7 +104,7 @@ class Building:
 
 class Target:
     """Target objects provide filenames, metadata, input images, and masks for training.
-       One target per pre-disaster,post-disaster input image set."""
+       One target per input image."""
     def __init__(self, text:str):
         self.buildings = []
         self.parse_json(text)
@@ -167,7 +163,7 @@ def get_files(directories):
     for d in directories:
         prefiles += glob.glob(os.path.join(d, "*pre*"))
         postfiles += glob.glob(os.path.join(d, "*post*"))
-    return zip(sorted(prefiles, key=sortfunc), sorted(postfiles, key=sortfunc))
+    return list(zip(sorted(prefiles, key=sortfunc), sorted(postfiles, key=sortfunc)))
 
 
 def get_test_files():
@@ -182,26 +178,19 @@ def get_training_files():
     """
     Return a list of the .json files describing the training images.
     """
-    return list(get_files(LABELDIRS))[:int(length*SPLITFACTOR)]
-    files = []
-    for directory in LABELDIRS:
-        files += [os.path.join(os.path.abspath(directory), f) for f in os.listdir(directory)]
+    files = get_files(LABELDIRS)
     length = len(files)
-    files = files[:int(length*SPLITFACTOR)]
-    return files
+    return files[:int(length*SPLITFACTOR)]
 
 
 def get_validation_files():
     """
     Return a list of the .json files describing the validation set (holdout set).
     """
-    return list(get_files(LABELDIRS))[int(length*SPLITFACTOR):]
-    files = []
-    for directory in LABELDIRS:
-        files += [os.path.join(os.path.abspath(directory), f) for f in os.listdir(directory)]
+    files = get_files(LABELDIRS)
     length = len(files)
-    files = files[int(length*SPLITFACTOR):]
-    return files
+    return files[int(length*SPLITFACTOR):]
+
 
 if __name__ == '__main__':
     # Testing and data inspection

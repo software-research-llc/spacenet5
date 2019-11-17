@@ -10,6 +10,7 @@ import train
 import flow
 import cv2
 import matplotlib.pyplot as plt
+from skimage.transform import resize
 from settings import *
 
 
@@ -21,7 +22,7 @@ def compress_channels(mask:np.ndarray):
     that represents the class of the original input image at that pixel location.
     """
     assert mask.shape == tuple(MASKSHAPE), f"expected shape {MASKSHAPE}, got {mask.shape}"
-    cutoff = 0.03
+    cutoff = 0.50
     cmpr = np.zeros(TARGETSHAPE, dtype=np.uint8)
 
     for i in range(1, mask.shape[-1]):
@@ -54,12 +55,14 @@ def infer(model, pre:np.ndarray, post:np.ndarray=None, compress:bool=True):
     Returns a (mask_image, damage_image) tuple.
     """
     assert pre.ndim == 3, f"expected 3 dimensions, got {pre.shape}"
-    premask = model.predict(np.expand_dims(pre, axis=0))
+    if post is not None:
+        assert post.ndim == 3, f"expected 3 dimensions, got {post.shape}"
 
+    premask = model.predict(np.expand_dims(pre, axis=0))
     if post is None:
         return premask.squeeze()
-    postmask = model.predict(np.expand_dims(post, axis=0))
 
+    postmask = model.predict(np.expand_dims(post, axis=0))
     if compress:
         return compress_channels(premask.squeeze()), compress_channels(postmask.squeeze())
     else:
@@ -74,10 +77,11 @@ def show_random(model):
     """
     files = list(flow.get_test_files())
     idx = random.randint(0,len(files)-1)
-    preimg = skimage.io.imread(files[idx][0])
-    postimg = skimage.io.imread(files[idx][1])
+    preimg = resize(skimage.io.imread(files[idx][0]), SAMPLESHAPE)
+    postimg = resize(skimage.io.imread(files[idx][1]), SAMPLESHAPE)
 
-    mask,dmg = infer(model, preimg, postimg)
+    mask, dmg = infer(model, preimg, postimg, compress=False)
+    mask, dmg = resize(mask, TARGETSHAPE).squeeze(), resize(dmg, TARGETSHAPE).squeeze()
 
     fig = plt.figure()
     fig.add_subplot(2,5,1)

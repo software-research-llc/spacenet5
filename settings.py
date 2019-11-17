@@ -1,14 +1,24 @@
 import os
 from inspect import getsourcefile
+import segmentation_models as sm
 
-BATCH_SIZE = 1
+
+BATCH_SIZE = 8
+# Train/validation split proportion
+SPLITFACTOR = 0.9
+
 BACKBONE = 'resnext50'
-CLASSES = ["background", "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
-N_CLASSES = len(CLASSES)
+TOPCLASS = sm.FPN
 
-TARGETSHAPE = [1024,1024,1]
-SAMPLESHAPE = [1024,1024,3]
-MASKSHAPE = [1024,1024,N_CLASSES]
+CLASSES = ["background", "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
+N_CLASSES = 1
+
+TARGETSHAPE = [256,256,1]
+SAMPLESHAPE = [256,256,3]
+MASKSHAPE = [256,256,1]
+
+PICKLED_TRAINSET = "trainingflow.pickle"
+PICKLED_VALIDSET = "validationflow.pickle"
 
 HOMEDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
 IMAGEDIRS = ["/data/xview2/train/images", "/data/xview2/tier3/images"]

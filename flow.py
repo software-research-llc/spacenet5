@@ -14,6 +14,7 @@ from keras.preprocessing.image import ImageDataGenerator
 import logging
 import re
 import pickle
+from skimage.transform import resize
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,9 +45,9 @@ class Dataflow(tf.keras.utils.Sequence):
                 files += [os.path.join(directory, f) for f in os.listdir(directory)]
             length = len(files)
             if validation_set:
-                files = files[int(length*0.9):]
+                files = files[int(length*SPLITFACTOR):]
             else:
-                files = files[:int(length*0.9)]
+                files = files[:int(length*SPLITFACTOR)]
             self.samples = [Target.from_file(f) for f in files]
 
     def __len__(self):
@@ -56,8 +57,8 @@ class Dataflow(tf.keras.utils.Sequence):
 
     def __getitem__(self, idx):
         """Return [images,masks], both of which are numpy arrays of batch_size)"""
-        x = np.array([ex.image() for ex in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]])
-        y = np.array([tgt.mask() for tgt in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]])
+        x = np.array([resize(ex.image(), SAMPLESHAPE) for ex in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]])
+        y = np.array([resize(tgt.mask(), TARGETSHAPE) for tgt in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]])
         """"
         trans_dict = { 'theta': 90, 'shear': 0.1 }
         for i in range(len(x)):
@@ -68,11 +69,11 @@ class Dataflow(tf.keras.utils.Sequence):
         return x,y
 
     @staticmethod
-    def from_pickle(picklefile:str):
+    def from_pickle(picklefile:str=PICKLED_TRAINSET):
         with open(picklefile, "rb") as f:
             return pickle.load(f)
 
-    def to_pickle(self, picklefile:str):
+    def to_pickle(self, picklefile:str=PICKLED_TRAINSET):
         with open(picklefile, "wb") as f:
             return pickle.dump(self, f)
 
@@ -159,29 +160,34 @@ class Target:
             return Target(f.read())
 
 
+def get_files(directories):
+    prefiles = []
+    postfiles = []
+    sortfunc = lambda x: os.path.basename(x)
+    for d in directories:
+        prefiles += glob.glob(os.path.join(d, "*pre*"))
+        postfiles += glob.glob(os.path.join(d, "*post*"))
+    return zip(sorted(prefiles, key=sortfunc), sorted(postfiles, key=sortfunc))
+
+
 def get_test_files():
     """
     Return a list of the paths of images belonging to the test set as
     (preimage, postimage) tuples, e.g. ("socal-pre-004.png", "socal-post-004.png").
     """
-    prefiles = []
-    postfiles = []
-    sortfunc = lambda x: os.path.basename(x)
-    for d in TESTDIRS:
-        prefiles += glob.glob(os.path.join(d, "*pre*"))
-        postfiles += glob.glob(os.path.join(d, "*post*"))
-    return zip(sorted(prefiles, key=sortfunc), sorted(postfiles, key=sortfunc))
+    return get_files(TESTDIRS)
 
 
 def get_training_files():
     """
     Return a list of the .json files describing the training images.
     """
+    return list(get_files(LABELDIRS))[:int(length*SPLITFACTOR)]
     files = []
     for directory in LABELDIRS:
         files += [os.path.join(os.path.abspath(directory), f) for f in os.listdir(directory)]
     length = len(files)
-    files = files[:int(length*0.9)]
+    files = files[:int(length*SPLITFACTOR)]
     return files
 
 
@@ -189,18 +195,19 @@ def get_validation_files():
     """
     Return a list of the .json files describing the validation set (holdout set).
     """
+    return list(get_files(LABELDIRS))[int(length*SPLITFACTOR):]
     files = []
     for directory in LABELDIRS:
         files += [os.path.join(os.path.abspath(directory), f) for f in os.listdir(directory)]
     length = len(files)
-    files = files[int(length*0.9):]
+    files = files[int(length*SPLITFACTOR):]
     return files
 
 if __name__ == '__main__':
     # Testing and data inspection
     import time
-    if os.path.exists("trainingflow.pickle"):
-        df = Dataflow.from_pickle("trainingflow.pickle")
+    if os.path.exists(PICKLED_TRAINSET):
+        df = Dataflow.from_pickle(PICKLED_TRAINSET)
         logger.info("Loaded training dataflow from pickle file.")
     else:
         logger.warning("Generating dataflows")

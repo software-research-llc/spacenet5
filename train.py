@@ -23,7 +23,7 @@ metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.m
 #preprocess_input = sm.get_preprocessing(BACKBONE)
 
 
-def save_model(model:sm.Unet, save_path="model-%s.hdf5" % BACKBONE, pause=0):
+def save_model(model, save_path="model-%s.hdf5" % BACKBONE, pause=0):
     if pause > 0:
         sys.stderr.write("Saving in")
         for i in list(range(1,6))[::-1]:
@@ -33,7 +33,7 @@ def save_model(model:sm.Unet, save_path="model-%s.hdf5" % BACKBONE, pause=0):
     return model.save_weights(save_path)
 
 
-def load_weights(model:sm.Unet, save_path="model-%s.hdf5" % BACKBONE):
+def load_weights(model, save_path="model-%s.hdf5" % BACKBONE):
     try:
         model.load_weights(save_path)
         logger.info("Model file %s loaded successfully." % save_path)
@@ -44,14 +44,14 @@ def load_weights(model:sm.Unet, save_path="model-%s.hdf5" % BACKBONE):
 
 
 def build_model():
-    return sm.Unet(BACKBONE, classes=N_CLASSES,
+    return TOPCLASS(BACKBONE, classes=N_CLASSES,
                    input_shape=flow.SAMPLESHAPE, activation='softmax',
                    encoder_weights='imagenet')
 
 
 def main(save_path="model-%s.hdf5" % BACKBONE,
          optimizer=tf.keras.optimizers.Adam(),
-         loss='sparse_categorical_crossentropy',
+         loss=sm.losses.CategoricalFocalLoss(),#'sparse_categorical_crossentropy',
          restore=True,
          verbose=1,
          epochs=50):
@@ -67,9 +67,15 @@ def main(save_path="model-%s.hdf5" % BACKBONE,
     sm.utils.set_trainable(model, recompile=False)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    logger.info("Creating dataflows.")
-    train_seq = flow.Dataflow(batch_size=BATCH_SIZE)#, transform=0.30)
-    val_seq = flow.Dataflow(batch_size=BATCH_SIZE, validation_set=True)
+    logger.info("Generating dataflows.")
+    if os.path.exists(PICKLED_TRAINSET):
+        train_seq = flow.Dataflow.from_pickle(PICKLED_TRAINSET)
+    else:
+        train_seq = flow.Dataflow(batch_size=BATCH_SIZE)#, transform=0.30)
+    if os.path.exists(PICKLED_VALIDSET):
+        val_seq = flow.Dataflow.from_pickle(PICKLED_VALIDSET)
+    else:
+        val_seq = flow.Dataflow(batch_size=BATCH_SIZE, validation_set=True)
 
     logger.info("Training.")
     train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)

@@ -52,7 +52,14 @@ class Dataflow(tf.keras.utils.Sequence):
         return length
 
     def __getitem__(self, idx):
-        """Return [images,masks], both of which are numpy arrays of batch_size)"""
+        """
+        Return lists of len batch_size, composed of tuples, the first being (pre_image, post_image),
+        the second being (localization mask, damage mask).
+
+        pre_image and post_image are the pre-disaster and post-disaster samples.
+        localization_mask is the uint8, single channel localization target we're training to predict.
+        damage_mask is the uint8, single channel damage target we're training to predict.
+        """
         x = [(resize(pre.image(), SAMPLESHAPE), resize(post.image(), SAMPLESHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
         y = [(resize(pre.mask(), TARGETSHAPE), resize(post.mask(), TARGETSHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
         """
@@ -62,7 +69,8 @@ class Dataflow(tf.keras.utils.Sequence):
                 x[i] = self.image_datagen.apply_transform(x[i], trans_dict)
                 y[i] = self.image_datagen.apply_transform(y[i], trans_dict)
         """
-        return x,y
+        return x,y # x == [(pre_image, post_image)] * BATCH_SIZE
+                   # y == [(localization_mask, damage_mask)] * BATCH_SIZE
 
     @staticmethod
     def from_pickle(picklefile:str=PICKLED_TRAINSET):

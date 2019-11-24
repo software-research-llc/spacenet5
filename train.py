@@ -9,6 +9,8 @@ import tensorflow.keras as keras
 import numpy as np
 import logging
 import ordinal_loss
+import keras
+import layers
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,25 @@ callbacks = [
 metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
 #preprocess_input = sm.get_preprocessing(BACKBONE)
 
+"""
+@tf.custom_gradient
+def loss(y_true, y_pred):
+    pred = tf.cast(y_pred, dtype=tf.float32)
+    targ = tf.cast(tf.argmax(y_true, axis=3), dtype=tf.float32)
+    f1s = 0
+    for c in [0,1,2,3,4,5]:
+        c = tf.constant(c, dtype=tf.float32)
+        TP = tf.reduce_sum(tf.cast(tf.logical_and(pred == c, targ == c), dtype=tf.float32))
+        FN = tf.reduce_sum(tf.cast(tf.logical_and(pred != c, targ == c), dtype=tf.float32))
+        FP = tf.reduce_sum(tf.cast(tf.logical_and(pred == c, targ != c), dtype=tf.float32))
+        prec = TP / (TP + FP)
+        rec = TP / (TP + FN)
+        f1 = tf.constant(2, dtype=tf.float32) * (prec * rec) / (prec + rec)
+        f1s += f1
+    def grad(dy):
+        return tf.gradient(dy)
+    return tf.constant(1, dtype=tf.float32) - (f1s / 6), grad
+"""
 
 def save_model(model, save_path="model-%s.hdf5" % BACKBONE, pause=0):
     if pause > 0:
@@ -44,17 +65,23 @@ def load_weights(model, save_path="model-%s.hdf5" % BACKBONE):
 
 
 def build_model():
-    return TOPCLASS(BACKBONE, classes=N_CLASSES,
-                   input_shape=flow.SAMPLESHAPE, activation='softmax',
+    base = TOPCLASS(BACKBONE, classes=N_CLASSES,
+                   input_shape=TARGETSHAPE, activation='softmax',
                    encoder_weights='imagenet')
+    return base
+    inp = keras.layers.Input(SAMPLESHAPE)
+    layer = layers.ChannelCompression()
+    x = layer(inp)
+    #out = keras.layers.Lambda(lambda x: tf.argmax(x, axis=3))(mid)
+    return keras.models.Model(inputs=inp, outputs=x)
 
 
 def main(save_path="model-%s.hdf5" % BACKBONE,
          optimizer=tf.keras.optimizers.Adam(),
-         loss=sm.losses.CategoricalFocalLoss(),#'sparse_categorical_crossentropy',
-         restore=True,
+         loss='sparse_categorical_crossentropy',
+         restore=False,
          verbose=1,
-         epochs=50):
+         epochs=100):
     """
     Train the model.
     """
@@ -64,8 +91,8 @@ def main(save_path="model-%s.hdf5" % BACKBONE,
     if restore:
         load_weights(model)
 
-    sm.utils.set_trainable(model, recompile=False)
-    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+#    sm.utils.set_trainable(model, recompile=True)
+    model.compile(optimizer=optimizer, loss=loss)#, metrics=metrics)
 
     logger.info("Generating dataflows.")
     if os.path.exists(PICKLED_TRAINSET):
@@ -93,17 +120,6 @@ def train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
         save_model(model, save_path)
         raise(exc)
 
-
-def train_step_generator(model, train_seq, verbose, epochs, callbacks, save_path, val_seq=None):
-    try:
-        model.fit_generator(train_seq, validation_data=val_seq, epochs=epochs,
-                            verbose=verbose, callbacks=callbacks)
-    except KeyboardInterrupt:
-            save_model(model, save_path, pause=1)
-            sys.exit()
-    except Exception as exc:
-        save_model(model, save_path)
-        raise(exc)
 
 if __name__ == "__main__":
     plac.call(main)

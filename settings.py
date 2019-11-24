@@ -7,20 +7,32 @@ BATCH_SIZE = 8
 # Train/validation split proportion
 SPLITFACTOR = 0.9
 
+# The architecture and weights to use for feature extraction (encoding)
 BACKBONE = 'resnext50'
-TOPCLASS = sm.FPN
+# The architecture to use for decoding (upscaling)
+TOPCLASS = sm.Unet
 
+# Each pixel of the net outputs (the masks) is an index in to this list
+#               0            1             2                 3             4              5
 CLASSES = ["background", "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
-N_CLASSES = 1
+N_CLASSES = len(CLASSES)
 
-TARGETSHAPE = [256,256,1]
-SAMPLESHAPE = [256,256,3]
+# Shape of the training input images; basically the same as MASKSHAPE
+INPUTSHAPE = [256,256,3]
 MASKSHAPE = [256,256,1]
+# The shape of the input samples
+SAMPLESHAPE = [1024,1024,3]
+TARGETSHAPE = INPUTSHAPE
 
+# The training and validation set files (pickled versions for faster loading)
 PICKLED_TRAINSET = "trainingflow.pickle"
 PICKLED_VALIDSET = "validationflow.pickle"
 
+# Base directory of the Python files
 HOMEDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
+# Directories where the training images are located
 IMAGEDIRS = ["/data/xview2/train/images", "/data/xview2/tier3/images"]
+# Directories where the .json files describing the images are
 LABELDIRS = ["/data/xview2/train/labels", "/data/xview2/tier3/labels"]
+# Directories where the test images are kept
 TESTDIRS = ["/data/xview2/test/images"]

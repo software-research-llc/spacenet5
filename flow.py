@@ -60,8 +60,16 @@ class Dataflow(tf.keras.utils.Sequence):
         localization_mask is the uint8, single channel localization target we're training to predict.
         damage_mask is the uint8, single channel damage target we're training to predict.
         """
-        x = [(resize(pre.image(), SAMPLESHAPE), resize(post.image(), SAMPLESHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
-        y = [(resize(pre.mask(), TARGETSHAPE), resize(post.mask(), TARGETSHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
+#        x = [(resize(pre.image(), TARGETSHAPE), resize(post.image(), TARGETSHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
+#        y = [(resize(pre.mask(), MASKSHAPE), resize(post.mask(), MASKSHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
+        x = []
+        for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
+            pre = resize(pre.image(), TARGETSHAPE)
+            post = resize(post.image(), TARGETSHAPE)
+            #pre = pre.image()
+            #post = post.image()
+            x.append((pre - np.mean(pre)) + (post - np.mean(post)))
+        y = [resize(post.mask(), MASKSHAPE) for (_, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
         """
         trans_dict = { 'theta': 90, 'shear': 0.1 }
         for i in range(len(x)):
@@ -69,8 +77,7 @@ class Dataflow(tf.keras.utils.Sequence):
                 x[i] = self.image_datagen.apply_transform(x[i], trans_dict)
                 y[i] = self.image_datagen.apply_transform(y[i], trans_dict)
         """
-        return x,y # x == [(pre_image, post_image)] * BATCH_SIZE
-                   # y == [(localization_mask, damage_mask)] * BATCH_SIZE
+        return np.array(x),np.array(y).astype(np.uint8)
 
     @staticmethod
     def from_pickle(picklefile:str=PICKLED_TRAINSET):
@@ -85,11 +92,14 @@ class Dataflow(tf.keras.utils.Sequence):
 class Building:
     """Carries the data for a single building; multiple Buildings are
        owned by a single Target"""
-    def __init__(self):
+    def __init__(self, pre=None):
         self.wkt = None
         self._coords = None
+        # If specified, self.pre == True and self.post == False (both == None if not specified)
+        self.pre = pre
+        self.post = False if pre is not None else None
 
-    def coords(self):
+    def coords(self, downvert=False, **kwargs):
         """Parses the WKT data and caches it for subsequent calls"""
         if self._coords is not None:
             return self._coords
@@ -97,17 +107,38 @@ class Building:
         pairs = []
         for pair in re.findall(r"\-?\d+\.?\d+ \-?\d+\.?\d+", wkt):
             xy = pair.split(" ")
-            x,y = round(float(xy[0])), round(float(xy[1]))
+            x,y = float(xy[0]), float(xy[1])
+            if downvert is True:
+                x,y = self.downvert(x,y,**kwargs)
+            else:
+                x,y = round(x), round(y)
             pairs.append(np.array([x,y]))
         self._coords = np.array(pairs)
         return self._coords
 
-    def color(self, scale=False):
+    def color(self):
         """Get the color value for a building subtype (i.e. index into CLASSES)"""
         ret = CLASSES.index(self.klass)
-        if scale:
-            ret = ret / N_CLASSES
         return ret
+
+    def downvert(self, x, y,
+                 orig_x=SAMPLESHAPE[0],
+                 orig_y=SAMPLESHAPE[1],
+                 new_x=TARGETSHAPE[0],
+                 new_y=TARGETSHAPE[1]):
+        x = x * (new_x / orig_x)
+        y = y * (new_y / orig_y)
+        return round(x), round(y)
+
+    def upvert(self, x, y,
+               orig_x=SAMPLESHAPE[0],
+               orig_y=SAMPLESHAPE[1],
+               new_x=TARGETSHAPE[0],
+               new_y=TARGETSHAPE[1]):
+        x = x / (new_x / orig_x)
+        y = y / (new_y / orig_y)
+        return round(x), round(y)
+
 
 
 class Target:
@@ -140,9 +171,9 @@ class Target:
     def mask(self, img:np.ndarray=None):
         """Get the Target's mask for supervised training of the model"""
         if img is None:
-            img = np.zeros(TARGETSHAPE)
+            img = np.zeros(MASKSHAPE)
         for b in self.buildings:
-            coords = b.coords()
+            coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
             if len(coords > 1):
                 cv2.fillConvexPoly(img, coords, b.color())
         return img
@@ -203,30 +234,45 @@ def get_validation_files():
 if __name__ == '__main__':
     # Testing and data inspection
     import time
+    """
     if os.path.exists(PICKLED_TRAINSET):
         df = Dataflow.from_pickle(PICKLED_TRAINSET)
         logger.info("Loaded training dataflow from pickle file.")
     else:
         logger.warning("Generating dataflows")
         df = Dataflow(batch_size=1)
+    """
+    df = Dataflow()
     while True:
         idx = random.randint(0,len(df) - 1)
+        (pre, post) = df.samples[idx]
+        i = 1
         fig = plt.figure()
+        for sample in (pre,post):
 
-        fig.add_subplot(1,3,1)
-        plt.imshow(df.samples[idx].image())
-        plt.title(df.samples[idx].img_name)
+            fig.add_subplot(2,3,i)
+            plt.imshow(sample.image())
+            plt.title(sample.img_name)
+            i += 1
 
-        fig.add_subplot(1,3,2)
-        plt.imshow(df.samples[idx].image())
-        colormap = {0: 'red', 1: 'blue', 2: 'green', 3: 'purple', 4: 'orange', 5: 'yellow', 6: 'brown' }
-        for b in df.samples[idx].buildings:
-            plt.plot(b.coords()[:,0], b.coords()[:,1], color=colormap[b.color()])
-        plt.title("image overlaid with mask")
+            fig.add_subplot(2,3,i)
+            plt.imshow(sample.image())
+            #background, no-damage, minor-damage, major-damage, destroyed, un-classified
+            #    0           1           2             3            4            5
+            colormap = {0: 'k', 1: 'b', 2: 'g', 3: 'y', 4: 'r', 5: 'w'}
+            polys = []
+            for b in sample.buildings:
+                coords = b.coords()#[b.upvert(x,y,1024,1024) for (x,y) in zip(b.coords()[:,0], b.coords()[:,1])]
+                xs = np.array(coords)[:,0]
+                ys = np.array(coords)[:,1]
+                polys.append(plt.plot(xs, ys, colormap[b.color()], antialiased=True, lw=0.5))
+            plt.title("building polygons")
+            i += 1
 
-        fig.add_subplot(1,3,3)
-        plt.imshow(df.samples[idx].mask().squeeze(), cmap='gray')
-        plt.title("mask")
+            fig.add_subplot(2,3,i)
+            plt.imshow(sample.mask().squeeze())#, cmap='gray')
+            plt.title("target mask")
+            i += 1
 
         plt.show()
         time.sleep(1)

@@ -10,9 +10,12 @@ class ChannelCompression(Layer):
 
     i.e. The net outputs one channel per class, and we take the max of it's predictions
     and output that from this layer.
+
+    Currently unusable with segmentation_models (gradient and/or datatype errors that
+    I can't fix).
     """
     def compute_output_shape(self, input_shape):
-        return input_shape[0:-1]#(input_shape[0], input_shape[1], input_shape[2])#(None,) + tuple(MASKSHAPE)#(None,) + tuple(MASKSHAPE)
+        return (None, MASKSHAPE[0], MASKSHAPE[1])
     
     def call(self, x):
         # N, W, H, C

@@ -21,12 +21,15 @@ callbacks = [
     keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True),
 ]
 
-metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
+#metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
 #preprocess_input = sm.get_preprocessing(BACKBONE)
 
-"""
-@tf.custom_gradient
-def loss(y_true, y_pred):
+#@tf.custom_gradient
+def f1score(y_true, y_pred):
+    if y_true.shape[0] == 2:
+        first = f1score(y_true[0], y_pred[0])
+        second = f1score(y_true[1], y_pred[1])
+        return (first + second) / 2.0
     pred = tf.cast(y_pred, dtype=tf.float32)
     targ = tf.cast(tf.argmax(y_true, axis=3), dtype=tf.float32)
     f1s = 0
@@ -39,10 +42,9 @@ def loss(y_true, y_pred):
         rec = TP / (TP + FN)
         f1 = tf.constant(2, dtype=tf.float32) * (prec * rec) / (prec + rec)
         f1s += f1
-    def grad(dy):
-        return tf.gradient(dy)
-    return tf.constant(1, dtype=tf.float32) - (f1s / 6), grad
-"""
+#    def grad(dy):
+#        return tf.gradient(dy)
+    return tf.constant(1, dtype=tf.float32) - (f1s / 6)#, grad
 
 def save_model(model, save_path="model-%s.hdf5" % BACKBONE, pause=0):
     if pause > 0:
@@ -65,11 +67,11 @@ def load_weights(model, save_path="model-%s.hdf5" % BACKBONE):
 
 
 def build_model():
-    base = TOPCLASS(BACKBONE, classes=N_CLASSES,
-                   input_shape=TARGETSHAPE, activation='softmax',
+    base = TOPCLASS(BACKBONE,# classes=N_CLASSES,
+                   input_shape=INPUTSHAPE, activation='sigmoid',
                    encoder_weights='imagenet')
     return base
-    inp = keras.layers.Input(SAMPLESHAPE)
+    inp = keras.layers.Input(INPUTSHAPE)
     layer = layers.ChannelCompression()
     x = layer(inp)
     #out = keras.layers.Lambda(lambda x: tf.argmax(x, axis=3))(mid)
@@ -78,8 +80,9 @@ def build_model():
 
 def main(save_path="model-%s.hdf5" % BACKBONE,
          optimizer=tf.keras.optimizers.Adam(),
-         loss='sparse_categorical_crossentropy',
-         restore=False,
+         loss=sm.losses.bce_jaccard_loss,
+         metrics=[sm.metrics.iou_score, 'accuracy'],
+         restore=True,
          verbose=1,
          epochs=100):
     """
@@ -91,8 +94,8 @@ def main(save_path="model-%s.hdf5" % BACKBONE,
     if restore:
         load_weights(model)
 
-#    sm.utils.set_trainable(model, recompile=True)
-    model.compile(optimizer=optimizer, loss=loss)#, metrics=metrics)
+#    sm.utils.set_trainable(model, recompile=False)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     logger.info("Generating dataflows.")
     if os.path.exists(PICKLED_TRAINSET):

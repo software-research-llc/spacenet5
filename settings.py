@@ -3,7 +3,7 @@ from inspect import getsourcefile
 import segmentation_models as sm
 
 
-BATCH_SIZE = 8
+BATCH_SIZE = 1
 # Train/validation split proportion
 SPLITFACTOR = 0.9
 
@@ -18,8 +18,8 @@ CLASSES = ["background", "no-damage", "minor-damage", 'major-damage', 'destroyed
 N_CLASSES = len(CLASSES)
 
 # Shape of the training input images; basically the same as MASKSHAPE
-INPUTSHAPE = [256,256,3]
-MASKSHAPE = [256,256,1]
+INPUTSHAPE = [1024,1024,3]
+MASKSHAPE = [1024,1024,1]
 # The shape of the input samples
 SAMPLESHAPE = [1024,1024,3]
 TARGETSHAPE = INPUTSHAPE

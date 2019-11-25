@@ -22,10 +22,12 @@ logger = logging.getLogger(__name__)
 
 class Dataflow(tf.keras.utils.Sequence):
     """A tf.keras.utils.Sequence subclass to feed data to the model"""
-    def __init__(self, batch_size=1, samples=None, transform=False, shuffle=False, validation_set=False):
+    def __init__(self, batch_size=1, samples=None, transform=None, shuffle=False, validation_set=False):
         self.transform = transform
         self.shuffle = shuffle
         self.batch_size = batch_size
+        self.preproc = sm.get_preprocessing(BACKBONE)
+        """"
         if transform:
             data_gen_args = dict(rotation_range=25,
                                      width_shift_range=0.1,
@@ -34,8 +36,8 @@ class Dataflow(tf.keras.utils.Sequence):
                                      shear_range=0.2)
         else:
             data_gen_args = {}
-        self.image_datagen = ImageDataGenerator(**data_gen_args)
-        self.mask_datagen = ImageDataGenerator(**data_gen_args)
+        """
+        self.image_datagen = ImageDataGenerator()
 
         if samples is not None:
             self.samples = samples
@@ -53,31 +55,26 @@ class Dataflow(tf.keras.utils.Sequence):
 
     def __getitem__(self, idx):
         """
-        Return lists of len batch_size, composed of tuples, the first being (pre_image, post_image),
-        the second being (localization mask, damage mask).
-
         pre_image and post_image are the pre-disaster and post-disaster samples.
-        localization_mask is the uint8, single channel localization target we're training to predict.
-        damage_mask is the uint8, single channel damage target we're training to predict.
+        premask is the uint8, single channel localization target we're training to predict.
         """
 #        x = [(resize(pre.image(), TARGETSHAPE), resize(post.image(), TARGETSHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
 #        y = [(resize(pre.mask(), MASKSHAPE), resize(post.mask(), MASKSHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
         x = []
-        for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
-            pre = resize(pre.image(), TARGETSHAPE)
-            post = resize(post.image(), TARGETSHAPE)
-            #pre = pre.image()
-            #post = post.image()
-            x.append((pre - np.mean(pre)) + (post - np.mean(post)))
-        y = [resize(post.mask(), MASKSHAPE) for (_, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
-        """
+        y = []
         trans_dict = { 'theta': 90, 'shear': 0.1 }
-        for i in range(len(x)):
-            if random.random() < float(self.transform):
-                x[i] = self.image_datagen.apply_transform(x[i], trans_dict)
-                y[i] = self.image_datagen.apply_transform(y[i], trans_dict)
-        """
-        return np.array(x),np.array(y).astype(np.uint8)
+        for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
+            premask = pre.mask()
+            pre = resize(pre.image(), TARGETSHAPE)
+            if isinstance(self.transform, float) and random.random() < float(self.transform):
+                pre = self.image_datagen.apply_transform(pre, trans_dict)
+                premask = self.image_datagen.apply_transform(premask, trans_dict)
+
+            pre = self.preproc(pre)
+            x.append(pre)
+            y.append(premask)
+
+        return np.array(x), np.array(y).astype(np.uint8)
 
     @staticmethod
     def from_pickle(picklefile:str=PICKLED_TRAINSET):

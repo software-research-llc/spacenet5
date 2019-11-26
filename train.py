@@ -82,8 +82,8 @@ def build_model():
 
 def main(save_path="model-%s.hdf5" % BACKBONE,
          optimizer=tf.keras.optimizers.Adam(lr=0.001),
-         loss=sm.losses.dice_loss,
-         metrics=[sm.metrics.iou_score, sm.metrics.f1_score, sm.losses.focal_loss],
+         loss=sm.losses.jaccard_loss,
+         metrics=[sm.metrics.iou_score, sm.metrics.f1_score],#, sm.losses.focal_loss],
          restore=True,
          verbose=1,
          epochs=100):

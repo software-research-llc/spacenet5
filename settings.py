@@ -13,8 +13,8 @@ BACKBONE = 'resnext50'
 TOPCLASS = sm.Unet
 
 # Each pixel of the net outputs (the masks) is an index in to this list
-#               0            1             2                 3             4              5
-CLASSES = ["no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified', None ]
+#           0        1             2                3              4              5
+CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
 N_CLASSES = len(CLASSES)
 
 # Shape of the training input images; basically the same as MASKSHAPE

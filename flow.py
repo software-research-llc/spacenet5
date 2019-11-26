@@ -266,9 +266,9 @@ if __name__ == '__main__':
 
             fig.add_subplot(2,3,i)
             plt.imshow(sample.image())
-            #no-damage, minor-damage, major-damage, destroyed, un-classified, (unknown)
+            #background, no-damage, minor-damage, major-damage, destroyed, un-classified
             #    0           1           2             3            4            5
-            colormap = {0: 'b', 1: 'g', 2: 'y', 3: 'r', 4: 'k', 5: 'b'}
+            colormap = {0: 'w', 1: 'b', 2: 'g', 3: 'y', 4: 'r', 5: 'k'}
             polys = []
             colors = set()
             for b in sample.buildings:

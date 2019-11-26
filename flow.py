@@ -21,12 +21,21 @@ logger = logging.getLogger(__name__)
 
 
 def get_files(directories):
+    """
+    Return a list of all files found in all directories we're given.  The files are
+    sorted lexicographically by filename (not full path) and returned in (pre, post) pairs.
+
+    Note that we assume the file list is well formed, i.e. that all pairs exist and match by
+    name.
+    """
     prefiles = []
     postfiles = []
     sortfunc = lambda x: os.path.basename(x)
     for d in directories:
         prefiles += glob.glob(os.path.join(d, "*pre*"))
         postfiles += glob.glob(os.path.join(d, "*post*"))
+    assert len(prefiles) == len(postfiles), f"something is wrong, len(predisaster)" + \
+                                             " != len(postdisaster): {} {}".format(len(prefiles), len(postfiles))
     return list(zip(sorted(prefiles, key=sortfunc), sorted(postfiles, key=sortfunc)))
 
 def get_test_files():
@@ -39,6 +48,8 @@ def get_test_files():
 def get_validation_files():
     """
     Return a list of the .json files describing the validation set (holdout set).
+
+    See settings.py for definition of SPLITFACTOR (proportion of the training set heldout).
     """
     files = get_files(LABELDIRS)
     length = len(files)
@@ -54,7 +65,9 @@ def get_training_files():
 
 
 class Dataflow(tf.keras.utils.Sequence):
-    """A tf.keras.utils.Sequence subclass to feed data to the model"""
+    """
+    A tf.keras.utils.Sequence subclass to feed data to the model.
+    """
     def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=False):
         self.transform = transform
         self.shuffle = shuffle
@@ -62,11 +75,11 @@ class Dataflow(tf.keras.utils.Sequence):
         self.preproc = sm.get_preprocessing(BACKBONE)
         self.image_datagen = ImageDataGenerator()
 
-        if ".json" in files[0][0]:
-            logger.info("Reading files in JSON format")
+        if ".json" in files[0][0].lower():
+            logger.info("Creating Targets from JSON format files")
             self.samples = [(Target.from_json(pre), Target.from_json(post)) for (pre,post) in files]
-        elif ".png" in files[0][0]:
-            logger.info("Reading files in PNG format")
+        elif ".png" in files[0][0].lower():
+            logger.info("Creating Targets from a list of PNG files")
             self.samples = [(Target.from_png(pre), Target.from_png(post)) for (pre,post) in files]
 
     def __len__(self):
@@ -81,7 +94,8 @@ class Dataflow(tf.keras.utils.Sequence):
         """
         x = []
         y = []
-        trans_dict = { 'theta': 90 * random.randint(1, 3), 'shear': 0.1 * random.randint(1, 2) }
+        # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
+        trans_dict = { 'theta': 90 * random.randint(1, 3), 'shear': 0.1 }# * random.randint(1, 2) }
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             premask = pre.mask()
             pre = resize(pre.image(), TARGETSHAPE)
@@ -108,12 +122,10 @@ class Dataflow(tf.keras.utils.Sequence):
 class Building:
     """Carries the data for a single building; multiple Buildings are
        owned by a single Target"""
-    def __init__(self, pre=None):
+    def __init__(self, target=None):
         self.wkt = None
         self._coords = None
-        # If specified, self.pre == True and self.post == False (both == None if not specified)
-        self.pre = pre
-        self.post = False if pre is not None else None
+        self.target = None
 
     def coords(self, downvert=False, **kwargs):
         """Parses the WKT data and caches it for subsequent calls"""
@@ -138,6 +150,7 @@ class Building:
         # the value of those buildings in our masks to be 1 and nothing else
         if self.klass is None:
             return 1
+        # post-disaster images include subtype information (see settings.py for CLASSES)
         ret = CLASSES.index(self.klass)
         return ret
 
@@ -163,7 +176,7 @@ class Building:
 
 class Target:
     """Target objects provide filenames, metadata, input images, and masks for training.
-       One target per input image."""
+       One target per input image (i.e. two targets per pre-disaster, post-disaster set)."""
     def __init__(self, text:str=""):
         self.buildings = []
         if text:
@@ -179,7 +192,7 @@ class Target:
             prop = feature['properties']
             if prop['feature_type'] != 'building':
                 continue
-            b = Building()
+            b = Building(target=self)
             b.klass = prop.get('subtype', None)
            
             if b.klass not in CLASSES:
@@ -222,6 +235,11 @@ class Target:
 
     @staticmethod
     def from_png(filename:str):
+        """Create a Target object from a path to a .PNG file.
+
+        Note: from_json() will only store the base filename, but this
+              function expects the string passed to be the full (absolute)
+              path to the .png file."""
         target = Target()
         target.img_name = filename
         target.metadata = dict()
@@ -233,15 +251,7 @@ class Target:
 if __name__ == '__main__':
     # Testing and data inspection
     import time
-    """
-    if os.path.exists(PICKLED_TRAINSET):
-        df = Dataflow.from_pickle(PICKLED_TRAINSET)
-        logger.info("Loaded training dataflow from pickle file.")
-    else:
-        logger.warning("Generating dataflows")
-        df = Dataflow(batch_size=1)
-    """
-    df = Dataflow()
+    df = Dataflow(transform=0.5)
     while True:
         idx = random.randint(0,len(df) - 1)
         (pre, post) = df.samples[idx]
@@ -269,7 +279,12 @@ if __name__ == '__main__':
                 except Exception as exc:
                     logger.error(f"{b.uid}: {exc}")
                     continue
-                if CLASSES[b.color()] not in colors:
+                if b.klass is None:
+                    if "no-damage" not in colors:
+                        label = "no-damage"
+                    else:
+                        label = None
+                elif CLASSES[b.color()] not in colors:
                     label = CLASSES[b.color()]
                 else:
                     label = None

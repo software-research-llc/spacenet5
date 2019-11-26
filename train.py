@@ -81,9 +81,9 @@ def build_model():
 
 
 def main(save_path="model-%s.hdf5" % BACKBONE,
-         optimizer=tf.keras.optimizers.Adam(),
-         loss=sm.losses.bce_jaccard_loss,
-         metrics=[sm.metrics.iou_score, 'accuracy'],
+         optimizer=tf.keras.optimizers.Adam(lr=0.001),
+         loss=sm.losses.dice_loss,
+         metrics=[sm.metrics.iou_score, sm.metrics.f1_score, sm.losses.focal_loss],
          restore=True,
          verbose=1,
          epochs=100):
@@ -103,7 +103,7 @@ def main(save_path="model-%s.hdf5" % BACKBONE,
     if os.path.exists(PICKLED_TRAINSET):
         train_seq = flow.Dataflow.from_pickle(PICKLED_TRAINSET)
     else:
-        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE, transform=0.5)
+        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE, transform=0.25)
     if os.path.exists(PICKLED_VALIDSET):
         val_seq = flow.Dataflow.from_pickle(PICKLED_VALIDSET)
     else:

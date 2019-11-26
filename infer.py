@@ -82,14 +82,19 @@ def show_random(model):
     pred = model.predict(img)
 
     fig = plt.figure()
-    fig.add_subplot(1,2,1)
+    fig.add_subplot(1,3,1)
     plt.imshow(img.squeeze())
     plt.title(df.samples[idx][0].img_name)
 
-    fig.add_subplot(1,2,2)
+    fig.add_subplot(1,3,2)
     plt.imshow(pred.squeeze(), cmap='gray')
     plt.title("Predicted mask")
 
+    pred[pred > 0.01] = 1.0
+    pred[pred < 0.01] = 0.0
+    fig.add_subplot(1,3,3)
+    plt.imshow(pred.squeeze(), cmap='gray')
+    plt.title("Thresholded mask")
     plt.show()
     return
 

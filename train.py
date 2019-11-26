@@ -19,6 +19,8 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 callbacks = [
     keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True),
+#    keras.callbacks.tensorboard_v2.TensorBoard(log_dir="logs", histogram_freq=0, batch_size=1, write_grads=False,
+#                                            update_freq='epoch'),
 ]
 
 #metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
@@ -101,11 +103,11 @@ def main(save_path="model-%s.hdf5" % BACKBONE,
     if os.path.exists(PICKLED_TRAINSET):
         train_seq = flow.Dataflow.from_pickle(PICKLED_TRAINSET)
     else:
-        train_seq = flow.Dataflow(batch_size=BATCH_SIZE)#, transform=0.30)
+        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE, transform=0.5)
     if os.path.exists(PICKLED_VALIDSET):
         val_seq = flow.Dataflow.from_pickle(PICKLED_VALIDSET)
     else:
-        val_seq = flow.Dataflow(batch_size=BATCH_SIZE, validation_set=True)
+        val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=BATCH_SIZE)
 
     logger.info("Training.")
     train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)

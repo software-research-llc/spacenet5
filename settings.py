@@ -14,7 +14,7 @@ TOPCLASS = sm.Unet
 
 # Each pixel of the net outputs (the masks) is an index in to this list
 #               0            1             2                 3             4              5
-CLASSES = ["background", "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
+CLASSES = ["no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified', None ]
 N_CLASSES = len(CLASSES)
 
 # Shape of the training input images; basically the same as MASKSHAPE
@@ -36,3 +36,5 @@ IMAGEDIRS = ["/data/xview2/train/images", "/data/xview2/tier3/images"]
 LABELDIRS = ["/data/xview2/train/labels", "/data/xview2/tier3/labels"]
 # Directories where the test images are kept
 TESTDIRS = ["/data/xview2/test/images"]
+# The following is not to be changed: used only to locate the .png file for reading
+ALLIMAGEDIRS = IMAGEDIRS + TESTDIRS

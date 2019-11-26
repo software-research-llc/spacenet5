@@ -20,33 +20,54 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def get_files(directories):
+    prefiles = []
+    postfiles = []
+    sortfunc = lambda x: os.path.basename(x)
+    for d in directories:
+        prefiles += glob.glob(os.path.join(d, "*pre*"))
+        postfiles += glob.glob(os.path.join(d, "*post*"))
+    return list(zip(sorted(prefiles, key=sortfunc), sorted(postfiles, key=sortfunc)))
+
+def get_test_files():
+    """
+    Return a list of the paths of images belonging to the test set as
+    (preimage, postimage) tuples, e.g. ("socal-pre-004.png", "socal-post-004.png").
+    """
+    return get_files(TESTDIRS)
+
+def get_validation_files():
+    """
+    Return a list of the .json files describing the validation set (holdout set).
+    """
+    files = get_files(LABELDIRS)
+    length = len(files)
+    return files[int(length*SPLITFACTOR):]
+
+def get_training_files():
+    """
+    Return a list of the .json files describing the training images.
+    """
+    files = get_files(LABELDIRS)
+    length = len(files)
+    return files[:int(length*SPLITFACTOR)]
+
+
 class Dataflow(tf.keras.utils.Sequence):
     """A tf.keras.utils.Sequence subclass to feed data to the model"""
-    def __init__(self, batch_size=1, samples=None, transform=None, shuffle=False, validation_set=False):
+    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=False):
         self.transform = transform
         self.shuffle = shuffle
         self.batch_size = batch_size
         self.preproc = sm.get_preprocessing(BACKBONE)
-        """"
-        if transform:
-            data_gen_args = dict(rotation_range=25,
-                                     width_shift_range=0.1,
-                                     height_shift_range=0.1,
-                                     zoom_range=0.2,
-                                     shear_range=0.2)
-        else:
-            data_gen_args = {}
-        """
         self.image_datagen = ImageDataGenerator()
 
-        if samples is not None:
-            self.samples = samples
-        else:
-            if validation_set:
-                files = get_validation_files()
-            else:
-                files = get_training_files()
-            self.samples = [(Target.from_file(pre), Target.from_file(post)) for (pre,post) in files]
+        if ".json" in files[0][0]:
+            logger.info("Reading files in JSON format")
+            self.samples = [(Target.from_json(pre), Target.from_json(post)) for (pre,post) in files]
+        elif ".png" in files[0][0]:
+            logger.info("Reading files in PNG format")
+            self.samples = [(Target.from_png(pre), Target.from_png(post)) for (pre,post) in files]
 
     def __len__(self):
         """Length of this dataflow in units of batch_size"""
@@ -58,11 +79,9 @@ class Dataflow(tf.keras.utils.Sequence):
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
         """
-#        x = [(resize(pre.image(), TARGETSHAPE), resize(post.image(), TARGETSHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
-#        y = [(resize(pre.mask(), MASKSHAPE), resize(post.mask(), MASKSHAPE)) for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]]
         x = []
         y = []
-        trans_dict = { 'theta': 90, 'shear': 0.1 }
+        trans_dict = { 'theta': 90 * random.randint(1, 3), 'shear': 0.1 * random.randint(1, 2) }
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             premask = pre.mask()
             pre = resize(pre.image(), TARGETSHAPE)
@@ -109,12 +128,16 @@ class Building:
                 x,y = self.downvert(x,y,**kwargs)
             else:
                 x,y = round(x), round(y)
-            pairs.append(np.array([x,y]))
-        self._coords = np.array(pairs)
+            pairs.append(np.array([x,y], dtype='int32'))
+        self._coords = np.array(pairs, dtype='int32')
         return self._coords
 
     def color(self):
         """Get the color value for a building subtype (i.e. index into CLASSES)"""
+        # For pre-disaster images, the building subtype isn't specified, but we want
+        # the value of those buildings in our masks to be 1 and nothing else
+        if self.klass is None:
+            return 1
         ret = CLASSES.index(self.klass)
         return ret
 
@@ -141,9 +164,10 @@ class Building:
 class Target:
     """Target objects provide filenames, metadata, input images, and masks for training.
        One target per input image."""
-    def __init__(self, text:str):
+    def __init__(self, text:str=""):
         self.buildings = []
-        self.parse_json(text)
+        if text:
+            self.parse_json(text)
 
     def parse_json(self, text:str):
         """Parse a JSON formatted string and assign instance variables from it"""
@@ -156,7 +180,7 @@ class Target:
             if prop['feature_type'] != 'building':
                 continue
             b = Building()
-            b.klass = prop.get('subtype', "no-damage")
+            b.klass = prop.get('subtype', None)
            
             if b.klass not in CLASSES:
                 logger.error(f"Unrecognized building subtype: {b.klass}")
@@ -165,18 +189,23 @@ class Target:
             b.uid = prop['uid']
             self.buildings.append(b)
 
-    def mask(self, img:np.ndarray=None):
+    def mask(self):
         """Get the Target's mask for supervised training of the model"""
-        if img is None:
-            img = np.zeros(MASKSHAPE)
+        img = np.zeros(MASKSHAPE)
         for b in self.buildings:
             coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
-            if len(coords > 1):
-                cv2.fillConvexPoly(img, coords, b.color())
+            if len(coords) > 0:
+                try:
+                    cv2.fillPoly(img, np.array([coords]), b.color())
+                except Exception as exc:
+                    logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
+                    cv2.fillConvexPoly(img, coords, b.color())
         return img
 
     def image(self):
         """Get this Target's input image (i.e. satellite chip) to feed to the model"""
+        if os.path.exists(self.img_name):
+            return skimage.io.imread(self.img_name)
         for path in IMAGEDIRS:
             fullpath = os.path.join(path, self.img_name)
             try:
@@ -186,46 +215,19 @@ class Target:
         raise exc
 
     @staticmethod
-    def from_file(filename:str):
+    def from_json(filename:str):
         """Create a Target object from a path to a .JSON file"""
         with open(filename) as f:
             return Target(f.read())
 
-
-def get_files(directories):
-    prefiles = []
-    postfiles = []
-    sortfunc = lambda x: os.path.basename(x)
-    for d in directories:
-        prefiles += glob.glob(os.path.join(d, "*pre*"))
-        postfiles += glob.glob(os.path.join(d, "*post*"))
-    return list(zip(sorted(prefiles, key=sortfunc), sorted(postfiles, key=sortfunc)))
+    @staticmethod
+    def from_png(filename:str):
+        target = Target()
+        target.img_name = filename
+        target.metadata = dict()
+        return target
 
 
-def get_test_files():
-    """
-    Return a list of the paths of images belonging to the test set as
-    (preimage, postimage) tuples, e.g. ("socal-pre-004.png", "socal-post-004.png").
-    """
-    return get_files(TESTDIRS)
-
-
-def get_training_files():
-    """
-    Return a list of the .json files describing the training images.
-    """
-    files = get_files(LABELDIRS)
-    length = len(files)
-    return files[:int(length*SPLITFACTOR)]
-
-
-def get_validation_files():
-    """
-    Return a list of the .json files describing the validation set (holdout set).
-    """
-    files = get_files(LABELDIRS)
-    length = len(files)
-    return files[int(length*SPLITFACTOR):]
 
 
 if __name__ == '__main__':
@@ -254,20 +256,32 @@ if __name__ == '__main__':
 
             fig.add_subplot(2,3,i)
             plt.imshow(sample.image())
-            #background, no-damage, minor-damage, major-damage, destroyed, un-classified
+            #no-damage, minor-damage, major-damage, destroyed, un-classified, (unknown)
             #    0           1           2             3            4            5
-            colormap = {0: 'k', 1: 'b', 2: 'g', 3: 'y', 4: 'r', 5: 'w'}
+            colormap = {0: 'b', 1: 'g', 2: 'y', 3: 'r', 4: 'k', 5: 'b'}
             polys = []
+            colors = set()
             for b in sample.buildings:
                 coords = b.coords()#[b.upvert(x,y,1024,1024) for (x,y) in zip(b.coords()[:,0], b.coords()[:,1])]
-                xs = np.array(coords)[:,0]
-                ys = np.array(coords)[:,1]
-                polys.append(plt.plot(xs, ys, colormap[b.color()], antialiased=True, lw=0.5))
+                try:
+                    xs = np.array(coords)[:,0]
+                    ys = np.array(coords)[:,1]
+                except Exception as exc:
+                    logger.error(f"{b.uid}: {exc}")
+                    continue
+                if CLASSES[b.color()] not in colors:
+                    label = CLASSES[b.color()]
+                else:
+                    label = None
+                colors.add(label)
+                polys.append(plt.plot(xs, ys, colormap[b.color()], antialiased=True, lw=0.85, label=label))
             plt.title("building polygons")
+            if len(sample.buildings) > 0:
+                plt.legend()
             i += 1
 
             fig.add_subplot(2,3,i)
-            plt.imshow(sample.mask().squeeze())#, cmap='gray')
+            plt.imshow(sample.mask().squeeze(), cmap='terrain')
             plt.title("target mask")
             i += 1
 

@@ -75,37 +75,23 @@ def show_random(model):
 
     Returns None.
     """
-    files = list(flow.get_test_files())
-    idx = random.randint(0,len(files)-1)
-    preimg = resize(skimage.io.imread(files[idx][0]), SAMPLESHAPE)
-    postimg = resize(skimage.io.imread(files[idx][1]), SAMPLESHAPE)
 
-    mask, dmg = infer(model, preimg, postimg, compress=False)
-    mask, dmg = resize(mask, TARGETSHAPE).squeeze(), resize(dmg, TARGETSHAPE).squeeze()
+    df = flow.Dataflow(files=flow.get_test_files())
+    idx = random.randint(0, len(df) - 1)
+    img, _ = df[idx]
+    pred = model.predict(img)
 
     fig = plt.figure()
-    fig.add_subplot(2,5,1)
-    plt.imshow(preimg)
-    plt.title(files[idx][0])
+    fig.add_subplot(1,2,1)
+    plt.imshow(img.squeeze())
+    plt.title(df.samples[idx][0].img_name)
 
-    fig.add_subplot(2,5,2)
-    plt.imshow(postimg)
-    plt.title(files[idx][1])
-
-    fig.add_subplot(2,5,3)
-    plt.imshow(mask,cmap='gray')
-    plt.title("Pre disaster")
-
-    fig.add_subplot(2,5,4)
-    plt.imshow(dmg.squeeze(),cmap='gray')
-    plt.title("Post disaster")
-
-    for i, chan in enumerate(decompress_channels(dmg.squeeze())):
-        fig.add_subplot(2,5,5+i)
-        plt.imshow(chan, cmap='gray')
-        plt.title("Damage - {}".format(CLASSES[i]))
+    fig.add_subplot(1,2,2)
+    plt.imshow(pred.squeeze(), cmap='gray')
+    plt.title("Predicted mask")
 
     plt.show()
+    return
 
 
 if __name__ == "__main__":

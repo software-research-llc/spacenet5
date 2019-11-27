@@ -68,19 +68,25 @@ class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
     """
-    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=False):
+    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True):
         self.transform = transform
         self.shuffle = shuffle
         self.batch_size = batch_size
-        self.preproc = sm.get_preprocessing(BACKBONE)
         self.image_datagen = ImageDataGenerator()
 
-        if ".json" in files[0][0].lower():
+        if ".pickle" in files:
+            with open(files, "rb") as f:
+                logger.info("Creating Targets from pickle file")
+                self.samples = pickle.load(f)
+        elif ".json" in files[0][0].lower():
             logger.info("Creating Targets from JSON format files")
             self.samples = [(Target.from_json(pre), Target.from_json(post)) for (pre,post) in files]
         elif ".png" in files[0][0].lower():
             logger.info("Creating Targets from a list of PNG files")
             self.samples = [(Target.from_png(pre), Target.from_png(post)) for (pre,post) in files]
+
+        if shuffle:
+            random.shuffle(self.samples)
 
     def __len__(self):
         """Length of this dataflow in units of batch_size"""
@@ -95,15 +101,14 @@ class Dataflow(tf.keras.utils.Sequence):
         x = []
         y = []
         # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
-        trans_dict = { 'theta': 90 * random.randint(1, 3), 'shear': 0.1 }# * random.randint(1, 2) }
+        trans_dict = { 'theta': 90 * random.randint(1, 3), 'shear': 0.1 * random.randint(1, 2) }
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             premask = pre.mask()
-            pre = resize(pre.image(), TARGETSHAPE)
+            pre = resize(pre.image(), INPUTSHAPE)
             if isinstance(self.transform, float) and random.random() < float(self.transform):
                 pre = self.image_datagen.apply_transform(pre, trans_dict)
                 premask = self.image_datagen.apply_transform(premask, trans_dict)
 
-            pre = self.preproc(pre)
             x.append(pre)
             y.append(premask)
 
@@ -127,7 +132,7 @@ class Building:
         self._coords = None
         self.target = None
 
-    def coords(self, downvert=False, **kwargs):
+    def coords(self, downvert=True, **kwargs):
         """Parses the WKT data and caches it for subsequent calls"""
         if self._coords is not None:
             return self._coords
@@ -140,8 +145,8 @@ class Building:
                 x,y = self.downvert(x,y,**kwargs)
             else:
                 x,y = round(x), round(y)
-            pairs.append(np.array([x,y], dtype='int32'))
-        self._coords = np.array(pairs, dtype='int32')
+            pairs.append(np.array([x,y]))
+        self._coords = np.array(pairs)
         return self._coords
 
     def color(self):
@@ -204,7 +209,7 @@ class Target:
 
     def mask(self):
         """Get the Target's mask for supervised training of the model"""
-        img = np.zeros(MASKSHAPE)
+        img = np.zeros(MASKSHAPE, dtype=np.uint8)
         for b in self.buildings:
             coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
             if len(coords) > 0:
@@ -213,7 +218,7 @@ class Target:
                 except Exception as exc:
                     logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
                     cv2.fillConvexPoly(img, coords, b.color())
-        return img
+        return img.reshape((MASKSHAPE[0] * MASKSHAPE[1], -1))
 
     def image(self):
         """Get this Target's input image (i.e. satellite chip) to feed to the model"""
@@ -221,11 +226,9 @@ class Target:
             return skimage.io.imread(self.img_name)
         for path in IMAGEDIRS:
             fullpath = os.path.join(path, self.img_name)
-            try:
+            if os.path.exists(fullpath):
                 return skimage.io.imread(fullpath)
-            except OSError as exc:
-                continue
-        raise exc
+        raise Exception("could not find {} in any directory".format(self.img_name))
 
     @staticmethod
     def from_json(filename:str):
@@ -272,7 +275,7 @@ if __name__ == '__main__':
             polys = []
             colors = set()
             for b in sample.buildings:
-                coords = b.coords()#[b.upvert(x,y,1024,1024) for (x,y) in zip(b.coords()[:,0], b.coords()[:,1])]
+                coords = [b.upvert(c[0], c[1]) for c in b.coords()]#[b.upvert(x,y,1024,1024) for (x,y) in zip(b.coords()[:,0], b.coords()[:,1])]
                 try:
                     xs = np.array(coords)[:,0]
                     ys = np.array(coords)[:,1]

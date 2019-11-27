@@ -1,32 +1,30 @@
 import os
 from inspect import getsourcefile
-import segmentation_models as sm
 
 
-BATCH_SIZE = 1
+BATCH_SIZE = 4
 # Train/validation split proportion
 SPLITFACTOR = 0.9
 
 # The architecture and weights to use for feature extraction (encoding)
-BACKBONE = 'resnext50'
-# The architecture to use for decoding (upscaling)
-TOPCLASS = sm.Unet
+BACKBONE = 'resnet50'
+MODELSTRING = "%s-unet.hdf5" % BACKBONE
 
 # Each pixel of the net outputs (the masks) is an index in to this list
 #           0        1             2                3              4              5
 CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
 N_CLASSES = len(CLASSES)
 
-# Shape of the training input images; basically the same as MASKSHAPE
-INPUTSHAPE = [1024,1024,3]
-MASKSHAPE = [1024,1024,1]
-# The shape of the input samples
+# Shape of the training input images
+INPUTSHAPE = [256,256,3]
+MASKSHAPE = [256,256,2]
+# The shape of the raw on-disk input images
 SAMPLESHAPE = [1024,1024,3]
 TARGETSHAPE = INPUTSHAPE
 
 # The training and validation set files (pickled versions for faster loading)
-PICKLED_TRAINSET = "trainingflow.pickle"
-PICKLED_VALIDSET = "validationflow.pickle"
+PICKLED_TRAINSET = "trainingsamples.pickle"
+PICKLED_VALIDSET = "validationsamples.pickle"
 
 # Base directory of the Python files
 HOMEDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))

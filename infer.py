@@ -1,7 +1,6 @@
 import time
 import random
 import tensorflow as tf
-import segmentation_models as sm
 import numpy as np
 import os
 import sys
@@ -12,6 +11,15 @@ import cv2
 import matplotlib.pyplot as plt
 from skimage.transform import resize
 from settings import *
+
+
+def convert_prediction(pred):
+    """
+    Turn a model's prediction output into a grayscale segmentation mask.
+    """
+    x = pred.reshape([-1] + MASKSHAPE)
+    x = x[:,:,:,1]
+    return x
 
 
 def compress_channels(mask:np.ndarray):
@@ -79,7 +87,7 @@ def show_random(model):
     df = flow.Dataflow(files=flow.get_test_files())
     idx = random.randint(0, len(df) - 1)
     img, _ = df[idx]
-    pred = model.predict(img)
+    pred = convert_prediction(model.predict(img))
 
     fig = plt.figure()
     fig.add_subplot(1,3,1)

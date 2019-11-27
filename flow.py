@@ -209,15 +209,17 @@ class Target:
 
     def mask(self):
         """Get the Target's mask for supervised training of the model"""
-        img = np.zeros(MASKSHAPE, dtype=np.uint8)
+        chan1 = np.ones(MASKSHAPE[:2], dtype=np.uint8)
+        chan2 = np.zeros(MASKSHAPE[:2], dtype=np.uint8)
+        img = np.stack([chan1,chan2], axis=2)
         for b in self.buildings:
             coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
             if len(coords) > 0:
                 try:
-                    cv2.fillPoly(img, np.array([coords]), b.color())
+                    cv2.fillPoly(img, np.array([coords]), [0, b.color()])
                 except Exception as exc:
                     logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
-                    cv2.fillConvexPoly(img, coords, b.color())
+                    cv2.fillConvexPoly(img, coords, (0, b.color()))
         return img.reshape((MASKSHAPE[0] * MASKSHAPE[1], -1))
 
     def image(self):

@@ -2,13 +2,13 @@ import os
 from inspect import getsourcefile
 
 
-BATCH_SIZE = 4
+BATCH_SIZE = 20
 # Train/validation split proportion
 SPLITFACTOR = 0.9
 
 # The architecture and weights to use for feature extraction (encoding)
 BACKBONE = 'resnet50'
-MODELSTRING = "%s-unet.hdf5" % BACKBONE
+MODELSTRING = "unet.hdf5"# % BACKBONE
 
 # Each pixel of the net outputs (the masks) is an index in to this list
 #           0        1             2                3              4              5

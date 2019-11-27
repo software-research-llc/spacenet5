@@ -17,8 +17,8 @@ def convert_prediction(pred):
     """
     Turn a model's prediction output into a grayscale segmentation mask.
     """
-    x = pred.reshape([-1] + MASKSHAPE)
-    x = x[:,:,:,1]
+    x = pred.squeeze().reshape(MASKSHAPE)
+    x = x[:,:,1]
     return x
 
 

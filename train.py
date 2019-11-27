@@ -16,8 +16,8 @@ import modeling
 
 logger = logging.getLogger(__name__)
 
-tf.config.optimizer.set_jit(False)
-tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
+#tf.config.optimizer.set_jit(False)
+#tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 callbacks = [
     keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True),
@@ -66,20 +66,20 @@ def load_weights(model, save_path=MODELSTRING):
 
 
 def build_model():
-    return modeling.resnet_unet()
+    return modeling.get_unet()
 
 
 def main(save_path=MODELSTRING,
-         optimizer=tf.keras.optimizers.Adam(),
+         optimizer=tf.keras.optimizers.Adam(lr=0.001),
          loss='categorical_crossentropy',
-         metrics=['accuracy'],
+         metrics=['binary_accuracy', 'categorical_accuracy', 'mae'],
          restore=True,
          verbose=1,
          epochs=100):
     """
     Train the model.
     """
-    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
+#    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
     logger.info("Building model.")
     model = build_model()
     if restore:
@@ -89,11 +89,11 @@ def main(save_path=MODELSTRING,
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     logger.info("Generating dataflows.")
-    if os.path.exists("trainingsamples.pickle"):
+    if os.path.exists("trainingsamples.pickle2"):
         train_seq = flow.Dataflow("trainingsamples.pickle")
     else:
-        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE, transform=0.25)
-    if os.path.exists("validationsamples.pickle"):
+        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE)#, transform=0.25)
+    if os.path.exists("validationsamples.pickle2"):
         val_seq = flow.Dataflow("validationsamples.pickle")
     else:
         val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=BATCH_SIZE)
@@ -111,7 +111,6 @@ def train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
             save_model(model, save_path, pause=1)
             sys.exit()
     except Exception as exc:
-        save_model(model, save_path)
         raise(exc)
 
 

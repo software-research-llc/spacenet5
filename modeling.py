@@ -26,7 +26,7 @@ def conv2d_block(input_tensor, n_filters, kernel_size=3, batchnorm=True):
     x = Activation("relu")(x)
     return x
 
-def resnet_unet(filters=64, dropout=0.5):
+def resnet_unet(filters=128, dropout=0.5):
     backbone = keras.applications.ResNet50V2(input_shape=INPUTSHAPE, include_top=False, pooling=None)
     inp = backbone.input
     x = backbone.output
@@ -37,26 +37,26 @@ def resnet_unet(filters=64, dropout=0.5):
 #    skips = skips[::-1]
 
     x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters * 8, kernel_size=(3,3), strides=(2,2), padding='same')(x)
+    x = Conv2DTranspose(filters * 8, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
     x = Dropout(dropout)(x)
     x = conv2d_block(x, filters * 8)
 
     x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters * 4, kernel_size=(3,3), strides=(2,2), padding='same')(x)
+    x = Conv2DTranspose(filters * 4, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
     x = Dropout(dropout)(x)
     x = conv2d_block(x, filters * 4)
 
     x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters * 2, kernel_size=(3,3), strides=(2,2), padding='same')(x)
+    x = Conv2DTranspose(filters * 2, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
     x = Dropout(dropout)(x)
     x = conv2d_block(x, filters * 2)
     
     x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters, kernel_size=(3,3), strides=(2,2), padding='same')(x)
+    x = Conv2DTranspose(filters, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
     x = Dropout(dropout)(x)
     x = conv2d_block(x, filters)
 
-    x = Conv2DTranspose(filters, kernel_size=(3,3), strides=(2,2), padding='same')(x)
+    x = Conv2DTranspose(filters, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
     x = Conv2D(2, (1, 1))(x)
 
     x = Reshape((2, INPUTSHAPE[0] * INPUTSHAPE[1]))(x)

@@ -2,7 +2,7 @@ import os
 from inspect import getsourcefile
 
 
-BATCH_SIZE = 3
+BATCH_SIZE = 2
 # Train/validation split proportion
 SPLITFACTOR = 0.9
 

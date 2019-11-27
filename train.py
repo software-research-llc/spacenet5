@@ -66,7 +66,7 @@ def load_weights(model, save_path=MODELSTRING):
 
 
 def build_model():
-    return modeling.get_unet()
+    return modeling.resnet_unet()
 
 
 def main(save_path=MODELSTRING,

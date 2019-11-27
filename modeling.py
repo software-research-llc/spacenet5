@@ -27,22 +27,31 @@ def conv2d_block(input_tensor, n_filters, kernel_size=3, batchnorm=True):
     return x
 
 def resnet_unet(filters=64, dropout=0.5):
-    backbone = keras.applications.ResNet50(input_shape=INPUTSHAPE, include_top=False, pooling=None)
+    backbone = keras.applications.ResNet50V2(input_shape=INPUTSHAPE, include_top=False, pooling=None)
     inp = backbone.input
     x = backbone.output
-    
+
+    skips = []
+    for i in range(2,6):
+        skips.append(backbone.get_layer("conv%d_block1_out" % i).output)
+#    skips = skips[::-1]
+
+    x = concatenate([x, skips.pop()])
     x = Conv2DTranspose(filters * 8, kernel_size=(3,3), strides=(2,2), padding='same')(x)
     x = Dropout(dropout)(x)
     x = conv2d_block(x, filters * 8)
 
+    x = concatenate([x, skips.pop()])
     x = Conv2DTranspose(filters * 4, kernel_size=(3,3), strides=(2,2), padding='same')(x)
     x = Dropout(dropout)(x)
     x = conv2d_block(x, filters * 4)
 
+    x = concatenate([x, skips.pop()])
     x = Conv2DTranspose(filters * 2, kernel_size=(3,3), strides=(2,2), padding='same')(x)
     x = Dropout(dropout)(x)
     x = conv2d_block(x, filters * 2)
     
+    x = concatenate([x, skips.pop()])
     x = Conv2DTranspose(filters, kernel_size=(3,3), strides=(2,2), padding='same')(x)
     x = Dropout(dropout)(x)
     x = conv2d_block(x, filters)
@@ -111,3 +120,6 @@ def get_unet(n_filters=16, dropout=0.5, batchnorm=True):
     return model
 
 
+if __name__ == '__main__':
+    m = resnet_unet()
+    m.summary()

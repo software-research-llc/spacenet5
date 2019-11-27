@@ -4,8 +4,10 @@ import sys
 import flow
 import plac
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import backend as K
+#from tensorflow import keras
+#from tensorflow.keras import backend as K
+import keras
+import keras.backend as K
 import segmentation_models as sm
 import numpy as np
 import logging
@@ -21,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 callbacks = [
     keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True),
-#    keras.callbacks.tensorboard_v2.TensorBoard(log_dir="logs", histogram_freq=0, batch_size=1, write_grads=False,
-#                                            update_freq='epoch'),
+    keras.callbacks.tensorboard_v2.TensorBoard(log_dir="logs", histogram_freq=0, batch_size=1, write_grads=False,
+                                            update_freq='epoch'),
 ]
 
 #metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]

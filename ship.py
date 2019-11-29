@@ -42,6 +42,7 @@ ROOT_DIR = "./"
 #sys.path.append(ROOT_DIR)  # To find local version of the library
 from mrcnn.config import Config
 from mrcnn import model as modellib, utils
+from settings import *
 
 import flow
 # Path to trained weights file
@@ -275,10 +276,59 @@ def train(model):
     # Since we're using a very small dataset, and starting from
     # COCO trained weights, we don't need to train too long. Also,
     # no need to train all layers, just the heads should do it.
-    print("Training network heads")
+    print("Training")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
                 epochs=160, layers="all")
+
+
+def output2prediction(output):
+    output = output[0]
+    rois = output['rois']
+    class_ids = output['class_ids']
+    scores = output['scores']
+    masks = output['masks'].astype(np.uint8)
+
+    return get_mask(masks)
+
+def get_mask(masks):
+    if len(masks) == 0:
+        return np.empty(MASKSHAPE)
+    ret = np.zeros_like(masks[:,:,0])
+    for i in range(masks.shape[-1]):
+        ret = np.logical_or(masks[:,:,i], ret)
+    return ret
+
+def show_predictions(model):
+    import matplotlib.pyplot as plt
+    import time
+    dataset = Xview2Dataset()
+    dataset.load_xview2("val")
+    dataset.prepare()
+
+    for image_id in dataset.image_ids:
+        image = dataset.load_image(image_id)
+        gtmask = dataset.load_mask(image_id)
+        mask = get_mask(gtmask[0])
+        output = model.detect([image], verbose=1)
+        pred = output2prediction(output)
+
+        fig = plt.figure()
+        fig.add_subplot(1,3,1)
+        plt.imshow(image.squeeze())
+        plt.title("Input image")
+
+        fig.add_subplot(1,3,2)
+        plt.imshow(pred.squeeze())
+        plt.title("Prediction")
+
+        #import pdb; pdb.set_trace()
+        fig.add_subplot(1,3,3)
+        plt.imshow(mask)
+        plt.title("Ground truth")
+
+        plt.show()
+        time.sleep(1)
 
 def color_splash(image, mask):
     """Apply color splash effect.
@@ -441,5 +491,4 @@ if __name__ == '__main__':
         detect_and_color_splash(model, image_path=args.image,
                                 video_path=args.video)
     else:
-        print("'{}' is not recognized. "
-              "Use 'train' or 'splash'".format(args.command))
+        show_predictions(model)

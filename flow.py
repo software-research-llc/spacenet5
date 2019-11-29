@@ -20,6 +20,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def get_abs_path(filename):
+    if os.path.exists(filename):
+        return filename
+    for path in IMAGEDIRS:
+        fullpath = os.path.join(path, filename)
+        if os.path.exists(fullpath):
+            return os.path.abspath(fullpath)
+    raise Exception("could not find {} in any directory".format(filename))
+
 def get_files(directories):
     """
     Return a list of all files found in all directories we're given.  The files are
@@ -68,7 +77,7 @@ class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
     """
-    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True):
+    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=False):
         self.transform = transform
         self.shuffle = shuffle
         self.batch_size = batch_size
@@ -104,7 +113,10 @@ class Dataflow(tf.keras.utils.Sequence):
         trans_dict = { 'theta': 90 * random.randint(1, 3), 'shear': 0.1 * random.randint(1, 2) }
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             premask = pre.mask()
-            pre = resize(pre.image(), INPUTSHAPE)
+            if INPUTSHAPE != SAMPLESHAPE:
+                pre = resize(pre.image(), INPUTSHAPE)
+            else:
+                pre = pre.image()
             if isinstance(self.transform, float) and random.random() < float(self.transform):
                 pre = self.image_datagen.apply_transform(pre, trans_dict)
                 premask = self.image_datagen.apply_transform(premask, trans_dict)
@@ -222,21 +234,34 @@ class Target:
                     cv2.fillConvexPoly(img, coords, (0, b.color()))
         return img.reshape((MASKSHAPE[0] * MASKSHAPE[1], -1))
 
+    def rcnn_masks(self):
+        masks = []
+        for b in self.buildings:
+            img = np.zeros(MASKSHAPE[:2], dtype=np.uint8)
+            coords = b.coords()
+            if len(coords) > 0:
+                cv2.fillPoly(img, np.array([coords]), b.color())
+                masks.append(img)
+        if len(masks) == 0:
+            return np.array(masks), np.ones([0], dtype=np.int32)
+        #masks.append(np.zeros(MASKSHAPE[:2], dtype=np.uint8))
+        return np.dstack(masks).astype(bool), np.ones([len(masks)], dtype=np.int32)
+
     def image(self):
         """Get this Target's input image (i.e. satellite chip) to feed to the model"""
-        if os.path.exists(self.img_name):
-            return skimage.io.imread(self.img_name)
-        for path in IMAGEDIRS:
-            fullpath = os.path.join(path, self.img_name)
-            if os.path.exists(fullpath):
-                return skimage.io.imread(fullpath)
-        raise Exception("could not find {} in any directory".format(self.img_name))
+        return skimage.io.imread(self.image_path())
+
+    def image_path(self):
+        return self.img_path
+        return get_abs_path(self.img_name)
 
     @staticmethod
     def from_json(filename:str):
         """Create a Target object from a path to a .JSON file"""
         with open(filename) as f:
-            return Target(f.read())
+            t = Target(f.read())
+            t.img_path = get_abs_path(t.img_name)
+            return t
 
     @staticmethod
     def from_png(filename:str):
@@ -247,6 +272,7 @@ class Target:
               path to the .png file."""
         target = Target()
         target.img_name = filename
+        target.img_path = filename
         target.metadata = dict()
         return target
 

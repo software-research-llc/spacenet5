@@ -16,8 +16,8 @@ CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-c
 N_CLASSES = len(CLASSES)
 
 # Shape of the training input images
-INPUTSHAPE = [256,256,3]
-MASKSHAPE = [256,256,2]
+INPUTSHAPE = [1024,1024,3]
+MASKSHAPE = [1024,1024,1]
 # The shape of the raw on-disk input images
 SAMPLESHAPE = [1024,1024,3]
 TARGETSHAPE = INPUTSHAPE
@@ -29,9 +29,9 @@ PICKLED_VALIDSET = "validationsamples.pickle"
 # Base directory of the Python files
 HOMEDIR = os.path.abspath(os.path.dirname(getsourcefile(lambda:0)))
 # Directories where the training images are located
-IMAGEDIRS = ["/data/xview2/train/images", "/data/xview2/tier3/images"]
+IMAGEDIRS = ["train/images", "tier3/images"]
 # Directories where the .json files describing the images are
-LABELDIRS = ["/data/xview2/train/labels", "/data/xview2/tier3/labels"]
+LABELDIRS = ["train/labels", "tier3/labels"]
 # Directories where the test images are kept
 TESTDIRS = ["/data/xview2/test/images"]
 # The following is not to be changed: used only to locate the .png file for reading

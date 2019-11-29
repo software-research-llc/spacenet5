@@ -1,0 +1,2 @@
+tensorflow-gpu==1.15
+keras==2.0.8

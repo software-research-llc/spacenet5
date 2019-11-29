@@ -89,7 +89,7 @@ class Dataflow(tf.keras.utils.Sequence):
                 self.samples = pickle.load(f)
         elif ".json" in files[0][0].lower():
             logger.info("Creating Targets from JSON format files")
-            self.samples = [(Target.from_json(pre), Target.from_json(post)) for (pre,post) in files]
+            self.samples = [(Target.from_json(pre, self.transform), Target.from_json(post, self.transform)) for (pre,post) in files]
         elif ".png" in files[0][0].lower():
             logger.info("Creating Targets from a list of PNG files")
             self.samples = [(Target.from_png(pre), Target.from_png(post)) for (pre,post) in files]
@@ -196,6 +196,7 @@ class Target:
        One target per input image (i.e. two targets per pre-disaster, post-disaster set)."""
     def __init__(self, text:str=""):
         self.buildings = []
+        self.image_datagen = ImageDataGenerator()
         if text:
             self.parse_json(text)
 
@@ -219,11 +220,11 @@ class Target:
             b.uid = prop['uid']
             self.buildings.append(b)
 
-    def mask(self):
+    def mask(self, reshape=True):
         """Get the Target's mask for supervised training of the model"""
         chan1 = np.ones(MASKSHAPE[:2], dtype=np.uint8)
         chan2 = np.zeros(MASKSHAPE[:2], dtype=np.uint8)
-        img = np.stack([chan1,chan2], axis=2)
+        img = np.dstack([chan1,chan2])#, axis=2)
         for b in self.buildings:
             coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
             if len(coords) > 0:
@@ -232,7 +233,17 @@ class Target:
                 except Exception as exc:
                     logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
                     cv2.fillConvexPoly(img, coords, (0, b.color()))
-        return img.reshape((MASKSHAPE[0] * MASKSHAPE[1], -1))
+        if reshape:
+            return img.reshape((MASKSHAPE[0] * MASKSHAPE[1], -1))
+        else:
+            return img
+
+    def rcnn_image(self):
+        pre = self.image()
+        if isinstance(self.transform, float) and random.random() < float(self.transform):
+            trans_dict = { 'shear': 0.1 * random.randint(1, 2) }
+            pre = self.image_datagen.apply_transform(pre, trans_dict)
+        return pre
 
     def rcnn_masks(self):
         masks = []
@@ -256,11 +267,12 @@ class Target:
         return get_abs_path(self.img_name)
 
     @staticmethod
-    def from_json(filename:str):
+    def from_json(filename:str, transform:float=0.0):
         """Create a Target object from a path to a .JSON file"""
         with open(filename) as f:
             t = Target(f.read())
             t.img_path = get_abs_path(t.img_name)
+            t.transform = transform
             return t
 
     @staticmethod
@@ -327,7 +339,7 @@ if __name__ == '__main__':
             i += 1
 
             fig.add_subplot(2,3,i)
-            plt.imshow(sample.mask().squeeze(), cmap='terrain')
+            plt.imshow(sample.mask(reshape=False)[...,1], cmap='terrain')
             plt.title("target mask")
             i += 1
 

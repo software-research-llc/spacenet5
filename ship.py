@@ -37,6 +37,7 @@ from skimage.morphology import label
 
 # Root directory of the project
 ROOT_DIR = "./"
+TRANSFORM = 0.25
 
 # Import Mask RCNN
 #sys.path.append(ROOT_DIR)  # To find local version of the library
@@ -64,6 +65,8 @@ class Xview2Config(Config):
     # Give the configuration a recognizable name
     NAME = "xView2"
 
+    #LEARNING_RATE = 0.002
+
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
     IMAGES_PER_GPU = 1
@@ -73,15 +76,29 @@ class Xview2Config(Config):
 
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 8251
+    VALIDATION_STEPS = 50
 
-    # Skip detections with < 95% confidence
-    DETECTION_MIN_CONFIDENCE = 0.95
+    DETECTION_MIN_CONFIDENCE = 0.75
+
+    #RPN_ANCHOR_SCALES = (32, 64, 128, 256, 512)
 
     # Non-maximum suppression threshold for detection
     DETECTION_NMS_THRESHOLD = 0.0
 
     IMAGE_MIN_DIM = 1024
     IMAGE_MAX_DIM = 1024
+
+    #RPN_NMS_THRESHOLD = 0.8
+
+    #USE_MINI_MASK = True
+    #MINI_MASK_SHAPE = (112, 112)
+
+    #MAX_GT_INSTANCES = 300
+    #DETECTION_MAX_INSTANCES = 300
+
+    IMAGE_RESIZE_MODE = "none"
+
+    #TRAIN_ROIS_PER_IMAGE = 512
 
     # # Length of square anchor side in pixels
     # RPN_ANCHOR_SCALES = (32, 64, 128, 256, 512)
@@ -110,7 +127,7 @@ class Xview2Dataset(utils.Dataset):
 
         # Load image ids (filenames) and run length encoded pixels
         if subset == "train":
-            self.df = flow.Dataflow(files=flow.get_training_files())
+            self.df = flow.Dataflow(files=flow.get_training_files(), transform=TRANSFORM)
         elif subset == "val":
             self.df = flow.Dataflow(files=flow.get_validation_files())
         else:
@@ -125,7 +142,7 @@ class Xview2Dataset(utils.Dataset):
             self.add_image("building", image_id=path, width=1024, height=1024, target=pre, path=path)
         if subset == "train":
             old = Xview2Config.STEPS_PER_EPOCH
-            Xview2Config.STEPS_PER_EPOCH = n
+            Xview2Config.STEPS_PER_EPOCH = n // 2
             print("Changing STEPS_PER_EPOCH from {} to {}".format(old, Xview2Config.STEPS_PER_EPOCH))
 
     def load_mask(self, image_id):
@@ -160,6 +177,9 @@ class Xview2Dataset(utils.Dataset):
             mask_array[:,:,index] = self.rle_decode(mask, shape)
 
         return mask_array.astype(np.bool), np.ones([mask_array.shape[-1]], dtype=np.int32)
+
+    def load_image(self, image_id):
+        return self.image_info[image_id]['target'].rcnn_image()
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -292,12 +312,33 @@ def output2prediction(output):
     return get_mask(masks)
 
 def get_mask(masks):
-    if len(masks) == 0:
-        return np.empty(MASKSHAPE)
-    ret = np.zeros_like(masks[:,:,0])
+    try:
+        ret = np.zeros_like(masks[:,:,0])
+    except:
+        return np.zeros(MASKSHAPE)
     for i in range(masks.shape[-1]):
         ret = np.logical_or(masks[:,:,i], ret)
     return ret
+
+def f1score(y_true, y_pred):
+    import keras.backend as K
+    import tensorflow as tf
+    y_true, y_pred = y_true.astype(np.int8), y_pred.astype(np.int8)
+    #one = np.ones_like(y_pred)
+    tp = np.sum(y_true * y_pred)
+    fn = np.sum(np.clip(y_true - y_pred, 0, 1))
+    fp = np.sum(np.clip(y_pred - y_true, 0, 1))
+    #fn = K.sum(tf.logical_and(y_pred != y_true, y_pred == one))
+    #fp = K.sum(tf.logical_and(y_pred == one, y_true != one))
+
+    #tp = np.sum(np.logical_and(y_true, y_pred))
+    #xor = np.logical_xor(y_true, y_pred)
+    #fp = np.sum(np.logical_and(xor, y_pred))
+    #fn = np.sum(np.logical_and(xor, y_true))
+
+    prec = tp / (tp + fp)
+    rec = tp / (tp + fn)
+    return 2 * prec * rec / np.clip(prec + rec, 1e-10, 1e10)
 
 def show_predictions(model):
     import matplotlib.pyplot as plt
@@ -313,19 +354,23 @@ def show_predictions(model):
         output = model.detect([image], verbose=1)
         pred = output2prediction(output)
 
+        score = f1score(mask, pred)
+
         fig = plt.figure()
+        fig.canvas.set_window_title(dataset.image_reference(image_id))
+
         fig.add_subplot(1,3,1)
         plt.imshow(image.squeeze())
-        plt.title("Input image")
+        plt.title("Sample")
 
         fig.add_subplot(1,3,2)
-        plt.imshow(pred.squeeze())
-        plt.title("Prediction")
+        plt.imshow(mask)
+        plt.title("Ground truth")
 
         #import pdb; pdb.set_trace()
         fig.add_subplot(1,3,3)
-        plt.imshow(mask)
-        plt.title("Ground truth")
+        plt.imshow(pred.squeeze())
+        plt.title("Prediction (F1-Score: %f)" % score)
 
         plt.show()
         time.sleep(1)

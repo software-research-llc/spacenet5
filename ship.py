@@ -90,11 +90,11 @@ class Xview2Config(Config):
 
     #RPN_NMS_THRESHOLD = 0.8
 
-    #USE_MINI_MASK = True
-    #MINI_MASK_SHAPE = (112, 112)
+    USE_MINI_MASK = True
+    MINI_MASK_SHAPE = (112, 112)
 
-    #MAX_GT_INSTANCES = 300
-    #DETECTION_MAX_INSTANCES = 300
+    MAX_GT_INSTANCES = 200
+    DETECTION_MAX_INSTANCES = 300
 
     IMAGE_RESIZE_MODE = "none"
 
@@ -321,6 +321,22 @@ def get_mask(masks):
     return ret
 
 def f1score(y_true, y_pred):
+    if isinstance(y_true, list):
+        tp = 0
+        fp = 0
+        fn = 0
+        for (true, pred) in zip(y_true, y_pred):
+            _, rtp, rfp, rfn = _f1(true, pred, return_counts=True)
+            tp += rtp
+            fp += rfp
+            fn += rfn
+        prec = tp / (tp + fp)
+        rec = tp / (tp + fn)
+        return 2 * prec * rec / np.clip(prec + rec, 1e-10, 1e10)
+    else:
+        return _f1(y_true, y_pred)
+
+def _f1(y_true, y_pred, return_counts=False):
     import keras.backend as K
     import tensorflow as tf
     y_true, y_pred = y_true.astype(np.int8), y_pred.astype(np.int8)
@@ -338,16 +354,41 @@ def f1score(y_true, y_pred):
 
     prec = tp / (tp + fp)
     rec = tp / (tp + fn)
-    return 2 * prec * rec / np.clip(prec + rec, 1e-10, 1e10)
+    if return_counts:
+        return 2 * prec * rec / np.clip(prec + rec, 1e-10, 1e10), tp, fp, fn
+    else:
+        return 2 * prec * rec / np.clip(prec + rec, 1e-10, 1e10)
 
-def show_predictions(model):
-    import matplotlib.pyplot as plt
-    import time
+def score_predictions(model):
+    import tqdm
     dataset = Xview2Dataset()
     dataset.load_xview2("val")
     dataset.prepare()
 
-    for image_id in dataset.image_ids:
+    y_true, y_pred = [], []
+    for image_id in tqdm.tqdm(dataset.image_ids, desc="Generating predictions"):
+        image = dataset.load_image(image_id)
+        gtmask = dataset.load_mask(image_id)
+        mask = get_mask(gtmask[0])
+        output = model.detect([image], verbose=0)
+        pred = output2prediction(output)
+
+        y_true.append(mask)
+        y_pred.append(pred)
+
+    print("Score: %f" % f1score(y_true, y_pred))
+
+def show_predictions(model):
+    import matplotlib.pyplot as plt
+    import time
+    import random
+    dataset = Xview2Dataset()
+    dataset.load_xview2("val")
+    dataset.prepare()
+    all_ids = dataset.image_ids.copy()
+    random.shuffle(all_ids)
+
+    for image_id in all_ids:
         image = dataset.load_image(image_id)
         gtmask = dataset.load_mask(image_id)
         mask = get_mask(gtmask[0])
@@ -359,21 +400,31 @@ def show_predictions(model):
         fig = plt.figure()
         fig.canvas.set_window_title(dataset.image_reference(image_id))
 
-        fig.add_subplot(1,3,1)
+        fig.add_subplot(2,2,1)
         plt.imshow(image.squeeze())
         plt.title("Sample")
 
-        fig.add_subplot(1,3,2)
+        fig.add_subplot(2,2,2)
+        img = image.squeeze()
+        try:
+            img[pred] = [128,0,128]
+        except Exception as exc:
+            print("error: %s" % str(exc))
+        plt.imshow(img)
+        plt.title("Overlay")
+
+        fig.add_subplot(2,2,3)
         plt.imshow(mask)
         plt.title("Ground truth")
 
         #import pdb; pdb.set_trace()
-        fig.add_subplot(1,3,3)
+        fig.add_subplot(2,2,4)
         plt.imshow(pred.squeeze())
         plt.title("Prediction (F1-Score: %f)" % score)
 
         plt.show()
         time.sleep(1)
+
 
 def color_splash(image, mask):
     """Apply color splash effect.
@@ -535,5 +586,7 @@ if __name__ == '__main__':
     elif args.command == "splash":
         detect_and_color_splash(model, image_path=args.image,
                                 video_path=args.video)
+    elif args.command == "score":
+        score_predictions(model)
     else:
         show_predictions(model)

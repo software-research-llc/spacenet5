@@ -5,8 +5,35 @@ from keras_applications import resnext
 from keras.models import Model
 from keras.layers import Flatten, Reshape, MaxPooling2D, Dropout, BatchNormalization, Conv2D, Activation, Conv2DTranspose, Concatenate, concatenate, Conv3D, Cropping2D, Permute, Activation
 from settings import *
+from mrcnn.utils import MaskRCNN
 
 keras.backend.set_image_data_format("channels_last")
+
+
+
+class XviewModel(MaskRCNN):
+    def _crop_post(self, masks):
+        ret = []
+        for mask in masks.astype(np.uint8):
+            ret.append(self.post_input * np.dstack([mask,mask,mask]))
+        return np.array(ret)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.feature_maps = [self.keras_model.get_layer('fpn_p%d' % i).output for i in range(2,6)]
+
+        self.mrcnn_model = self.keras_model
+        self.mrcnn_input = self.mrcnn_model.get_layer("input_image")
+
+        self.pre_input = Input(INPUTSHAPE)
+        self.post_input = Input(INPUTSHAPE)
+
+        self.pre_output = self.mrcnn_model(pre_input)
+        x = keras.layers.Lambda(lambda pre_out: pre_out.numpy()[0].astype(np.uint8))(self.pre_output)
+        x = keras.layers.Lambda(self._crop_post)(x)
+        self.post_output = self.mrcnn_model(x)                    
+
+        self.keras_model = Model(inputs=[self.pre_input,self.post_input], outputs=[self.pre_output,self.post_output])
 
 
 def conv2d_block(input_tensor, n_filters, kernel_size=3, batchnorm=True):

@@ -358,7 +358,7 @@ if __name__ == '__main__':
             i += 1
 
             fig.add_subplot(2,3,i)
-            plt.imshow(sample.mask(reshape=False)[...,1], cmap='terrain')
+            plt.imshow(sample.mask().squeeze(), cmap='terrain')
             plt.title("target mask")
             i += 1
 

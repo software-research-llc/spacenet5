@@ -110,9 +110,15 @@ class Dataflow(tf.keras.utils.Sequence):
         x = []
         y = []
         # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
-        trans_dict = { 'theta': 90 * random.randint(1, 3), 'shear': 0.1 * random.randint(1, 2) }
+        trans_dict = { 'theta': 90 * random.randint(1, 3),
+                       'shear': 0.1 * random.randint(1, 2),
+                      # 'channel_shift_intencity': 0.1 * random.randint(1,2),
+                      # 'brightness': 0.1 * random.randint(1,2),
+                       'flip_horizontal': bool(1 * random.randint(0,1)),
+                       'flip_vertical': bool(1 * random.randint(0,1)),
+                       }
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
-            premask = pre.mask()
+            premask = pre.multichannelmask()
             if INPUTSHAPE != SAMPLESHAPE:
                 pre = resize(pre.image(), INPUTSHAPE)
             else:
@@ -220,7 +226,20 @@ class Target:
             b.uid = prop['uid']
             self.buildings.append(b)
 
-    def mask(self, reshape=True):
+    def mask(self):
+        """Get the Target's mask for supervised training of the model"""
+        img = np.zeros(MASKSHAPE, dtype=np.uint8)
+        for b in self.buildings:
+            coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
+            if len(coords) > 0:
+                try:
+                    cv2.fillPoly(img, np.array([coords]), b.color())
+                except Exception as exc:
+                    logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
+                    cv2.fillConvexPoly(img, coords, b.color())
+        return img
+
+    def multichannelmask(self, reshape=False):
         """Get the Target's mask for supervised training of the model"""
         chan1 = np.ones(MASKSHAPE[:2], dtype=np.uint8)
         chan2 = np.zeros(MASKSHAPE[:2], dtype=np.uint8)
@@ -232,7 +251,7 @@ class Target:
                     cv2.fillPoly(img, np.array([coords]), [0, b.color()])
                 except Exception as exc:
                     logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
-                    cv2.fillConvexPoly(img, coords, (0, b.color()))
+                    cv2.fillConvexPoly(img, coords, [0, b.color()])
         if reshape:
             return img.reshape((MASKSHAPE[0] * MASKSHAPE[1], -1))
         else:

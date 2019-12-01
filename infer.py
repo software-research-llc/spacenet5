@@ -17,9 +17,12 @@ def convert_prediction(pred):
     """
     Turn a model's prediction output into a grayscale segmentation mask.
     """
-    x = pred.squeeze().reshape(MASKSHAPE)
+    try:
+        x = pred.squeeze().reshape(MASKSHAPE)
+    except ValueError:
+        x = pred.squeeze().reshape(MASKSHAPE[:2] + [2])
     x = x[:,:,1]
-    return x
+    return x.clip(0,1)
 
 
 def compress_channels(mask:np.ndarray):
@@ -88,6 +91,7 @@ def show_random(model):
     idx = random.randint(0, len(df) - 1)
     img, _ = df[idx]
     pred = convert_prediction(model.predict(img))
+    #pred = model.predict(img).squeeze()
 
     fig = plt.figure()
     fig.add_subplot(1,3,1)

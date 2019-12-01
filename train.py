@@ -6,15 +6,16 @@ import plac
 import tensorflow as tf
 #from tensorflow import keras
 #from tensorflow.keras import backend as K
-import keras
-import keras.backend as K
+#import keras
+#import keras.backend as K
 import segmentation_models as sm
+import tensorflow.keras as keras
 import numpy as np
 import logging
 import ordinal_loss
 #import tensorflow.keras.backend as K
 import layers
-import modeling
+import deeplabmodel
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 callbacks = [
     keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True),
-    keras.callbacks.tensorboard_v2.TensorBoard(log_dir="logs", histogram_freq=0, batch_size=1, write_grads=False,
-                                            update_freq='epoch'),
+#    keras.callbacks.tensorboard_v2.TensorBoard(log_dir="logs", histogram_freq=0, batch_size=1, write_grads=False,
+#                                            update_freq='epoch'),
 ]
 
 #metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
@@ -47,7 +48,7 @@ def f1score(y_true, y_pred):
 def f1_loss(y_true, y_pred):
     return 1 - f1score(y_true, y_pred)
 
-def save_model(model, save_path="model-%s.hdf5" % BACKBONE, pause=0):
+def save_model(model, save_path=MODELSTRING, pause=0):
     if pause > 0:
         sys.stderr.write("Saving in")
         for i in list(range(1,6))[::-1]:
@@ -67,15 +68,26 @@ def load_weights(model, save_path=MODELSTRING):
     return model
 
 
-def build_model():
+def build_model(train=False):
+    return deeplabmodel.Deeplabv3(input_shape=INPUTSHAPE,
+                                  weights='pascal_voc',
+                                  backbone='xception',
+                                  classes=2,
+                                  OS=16 if train is True else 8,
+                                  activation='softmax',
+#                                  alpha=1.0,
+#                                  OS=8)
+                                 )
     return modeling.resnet_unet()
 
 
-def main(save_path=MODELSTRING,
-         optimizer=tf.keras.optimizers.Adam(lr=0.001),
-         loss='categorical_crossentropy',
-         metrics=['binary_accuracy', 'categorical_accuracy', 'mae'],
-         restore=True,
+def main(
+         restore: ("Restore from checkpoint", "flag", "r"),
+         save_path=MODELSTRING,
+         optimizer=tf.keras.optimizers.Adam(lr=0.00005),
+         loss=ordinal_loss.loss,
+         metrics=['binary_accuracy', 'categorical_accuracy', 'mae', 'binary_crossentropy',],
+                  #sm.losses.categorical_focal_loss, sm.losses.binary_focal_loss],
          verbose=1,
          epochs=100):
     """
@@ -83,7 +95,7 @@ def main(save_path=MODELSTRING,
     """
 #    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
     logger.info("Building model.")
-    model = build_model()
+    model = build_model(train=True)
     if restore:
         load_weights(model)
 
@@ -91,11 +103,11 @@ def main(save_path=MODELSTRING,
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     logger.info("Generating dataflows.")
-    if os.path.exists("trainingsamples.pickle2"):
+    if os.path.exists("trainingsamples.pickle"):
         train_seq = flow.Dataflow("trainingsamples.pickle")
     else:
-        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE)#, transform=0.25)
-    if os.path.exists("validationsamples.pickle2"):
+        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE, transform=0.25)
+    if os.path.exists("validationsamples.pickle"):
         val_seq = flow.Dataflow("validationsamples.pickle")
     else:
         val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=BATCH_SIZE)
@@ -108,7 +120,10 @@ def main(save_path=MODELSTRING,
 def train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq):
     try:
         model.fit(train_seq, validation_data=val_seq, epochs=epochs,
-                            verbose=verbose, callbacks=callbacks)
+                            verbose=verbose, callbacks=callbacks,
+                            validation_steps=100, shuffle=False,
+                            workers=1, use_multiprocessing=False,
+                            max_queue_size=10)
     except KeyboardInterrupt:
             save_model(model, save_path, pause=1)
             sys.exit()

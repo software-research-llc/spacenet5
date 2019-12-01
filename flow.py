@@ -313,7 +313,12 @@ class Target:
 if __name__ == '__main__':
     # Testing and data inspection
     import time
-    df = Dataflow(transform=0.5)
+    import ordinal_loss
+    import infer
+    import train
+    df = Dataflow()
+    model = train.build_model()
+    train.load_weights(model)
     while True:
         idx = random.randint(0,len(df) - 1)
         (pre, post) = df.samples[idx]
@@ -321,12 +326,12 @@ if __name__ == '__main__':
         fig = plt.figure()
         for sample in (pre,post):
 
-            fig.add_subplot(2,3,i)
+            fig.add_subplot(2,5,i)
             plt.imshow(sample.image())
             plt.title(sample.img_name)
             i += 1
 
-            fig.add_subplot(2,3,i)
+            fig.add_subplot(2,5,i)
             plt.imshow(sample.image())
             #background, no-damage, minor-damage, major-damage, destroyed, un-classified
             #    0           1           2             3            4            5
@@ -357,9 +362,21 @@ if __name__ == '__main__':
                 plt.legend()
             i += 1
 
-            fig.add_subplot(2,3,i)
+            fig.add_subplot(2,5,i)
             plt.imshow(sample.mask().squeeze(), cmap='terrain')
             plt.title("target mask")
+            i += 1
+
+            fig.add_subplot(2,5,i)
+            pred = model.predict(np.expand_dims(sample.image(), axis=0))
+            lossvalue = ordinal_loss.loss(np.expand_dims(sample.mask(), axis=0), pred)
+            plt.imshow(infer.convert_prediction(pred))
+            plt.title("Prediction")
+            i += 1
+
+            fig.add_subplot(2,5,i)
+            plt.imshow(lossvalue.numpy().squeeze())
+            plt.title("Loss")
             i += 1
 
         plt.show()

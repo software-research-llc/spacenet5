@@ -22,7 +22,7 @@ def convert_prediction(pred):
     except ValueError:
         x = pred.squeeze().reshape(MASKSHAPE[:2] + [2])
     x = x[:,:,1]
-    return x.clip(0,1)
+    return x#.clip(0,1)
 
 
 def compress_channels(mask:np.ndarray):
@@ -86,7 +86,7 @@ def show_random(model):
 
     Returns None.
     """
-
+    threshold = 0.25
     df = flow.Dataflow(files=flow.get_test_files())
     idx = random.randint(0, len(df) - 1)
     img, _ = df[idx]
@@ -102,8 +102,8 @@ def show_random(model):
     plt.imshow(pred.squeeze(), cmap='gray')
     plt.title("Predicted mask")
 
-    pred[pred > 0.01] = 1.0
-    pred[pred < 0.01] = 0.0
+    pred[pred > threshold] = 1.0
+    pred[pred < threshold] = 0.0
     fig.add_subplot(1,3,3)
     plt.imshow(pred.squeeze(), cmap='gray')
     plt.title("Thresholded mask")

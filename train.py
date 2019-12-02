@@ -8,7 +8,7 @@ import tensorflow as tf
 #from tensorflow.keras import backend as K
 #import keras
 #import keras.backend as K
-import segmentation_models as sm
+#import segmentation_models as sm
 import tensorflow.keras as keras
 import numpy as np
 import logging
@@ -24,8 +24,12 @@ logger = logging.getLogger(__name__)
 
 callbacks = [
     keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True),
-#    keras.callbacks.tensorboard_v2.TensorBoard(log_dir="logs", histogram_freq=0, batch_size=1, write_grads=False,
-#                                            update_freq='epoch'),
+    keras.callbacks.TensorBoard(log_dir="logs",
+                                histogram_freq=1,
+                                write_graph=True,
+                                write_images=True,
+                                embeddings_freq=1,
+                                update_freq=1000),
 ]
 
 #metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
@@ -69,24 +73,31 @@ def load_weights(model, save_path=MODELSTRING):
 
 
 def build_model(train=False):
-    return deeplabmodel.Deeplabv3(input_shape=INPUTSHAPE,
+    xception = deeplabmodel.Deeplabv3(input_shape=INPUTSHAPE,
                                   weights='pascal_voc',
                                   backbone='xception',
                                   classes=2,
                                   OS=16 if train is True else 8,
-                                  activation='softmax',
+                                  #activation='softmax',
 #                                  alpha=1.0,
 #                                  OS=8)
                                  )
-    return modeling.resnet_unet()
+    x = xception.get_layer('custom_logits_semantic').output
+    x = tf.image.resize(x, size=INPUTSHAPE[:2],
+                        preserve_aspect_ratio=True,
+                        method=tf.image.ResizeMethod.NEAREST_NEIGHBOR,
+                        name="resize_xception_logits")
+    x = tf.keras.layers.Reshape((-1,2))(x)
+    x = tf.keras.layers.Activation('softmax')(x)
+    return keras.models.Model(inputs=[xception.input], outputs=[x])
 
 
 def main(
          restore: ("Restore from checkpoint", "flag", "r"),
          save_path=MODELSTRING,
-         optimizer=tf.keras.optimizers.Adam(lr=0.00005),
-         loss=ordinal_loss.loss,
-         metrics=['binary_accuracy', 'categorical_accuracy', 'mae', 'binary_crossentropy',],
+         optimizer=tf.keras.optimizers.Adam(lr=0.0001),
+         loss='categorical_crossentropy',#'binary_crossentropy',
+         metrics=['binary_accuracy', 'categorical_accuracy', 'mae', 'binary_crossentropy', 'categorical_crossentropy'],
                   #sm.losses.categorical_focal_loss, sm.losses.binary_focal_loss],
          verbose=1,
          epochs=100):
@@ -106,7 +117,7 @@ def main(
     if os.path.exists("trainingsamples.pickle"):
         train_seq = flow.Dataflow("trainingsamples.pickle")
     else:
-        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE, transform=0.25)
+        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE, transform=0.25, shuffle=True)
     if os.path.exists("validationsamples.pickle"):
         val_seq = flow.Dataflow("validationsamples.pickle")
     else:
@@ -122,7 +133,7 @@ def train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
         model.fit(train_seq, validation_data=val_seq, epochs=epochs,
                             verbose=verbose, callbacks=callbacks,
                             validation_steps=100, shuffle=False,
-                            workers=1, use_multiprocessing=False,
+                            use_multiprocessing=True,
                             max_queue_size=10)
     except KeyboardInterrupt:
             save_model(model, save_path, pause=1)

@@ -114,8 +114,6 @@ class Dataflow(tf.keras.utils.Sequence):
                        'shear': 0.1 * random.randint(1, 2),
                       # 'channel_shift_intencity': 0.1 * random.randint(1,2),
                       # 'brightness': 0.1 * random.randint(1,2),
-                       'flip_horizontal': bool(1 * random.randint(0,1)),
-                       'flip_vertical': bool(1 * random.randint(0,1)),
                        }
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             premask = pre.multichannelmask()
@@ -130,7 +128,7 @@ class Dataflow(tf.keras.utils.Sequence):
             x.append(pre)
             y.append(premask)
 
-        return np.array(x), np.array(y).astype(np.uint8)
+        return np.array(x), np.array(y).astype(np.uint8).reshape([MASKSHAPE[0] * MASKSHAPE[1], 2])
 
     @staticmethod
     def from_pickle(picklefile:str=PICKLED_TRAINSET):
@@ -234,9 +232,9 @@ class Target:
             if len(coords) > 0:
                 try:
                     cv2.fillPoly(img, np.array([coords]), b.color())
+                    cv2.fillConvexPoly(img, coords, b.color())
                 except Exception as exc:
                     logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
-                    cv2.fillConvexPoly(img, coords, b.color())
         return img
 
     def multichannelmask(self, reshape=False):
@@ -249,9 +247,9 @@ class Target:
             if len(coords) > 0:
                 try:
                     cv2.fillPoly(img, np.array([coords]), [0, b.color()])
+                    cv2.fillConvexPoly(img, coords, [0, b.color()])
                 except Exception as exc:
                     logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
-                    cv2.fillConvexPoly(img, coords, [0, b.color()])
         if reshape:
             return img.reshape((MASKSHAPE[0] * MASKSHAPE[1], -1))
         else:

@@ -9,6 +9,36 @@ import train
 
 MAXINMEM = 10
 
+def _f1_stats(tp, fp, fn):
+    prec = tp / (tp + fp)
+    rec = tp / (tp + fn)
+    f1 = 2 * prec * rec / (prec + rec)
+
+    return f1, prec, rec
+
+
+def f1score(y_true, y_pred, threshold=0.1):
+    y_true = y_true.squeeze()#.astype(np.uint8)
+    y_pred = y_pred.squeeze()#.astype(np.uint8)
+    truth = y_true#y_true[y_true == 1]
+    pred = y_pred#y_pred[y_pred > threshold]
+    
+    tp = np.sum(np.clip(truth * pred, 0, 1))
+    fp = np.sum(np.clip(pred - truth, 0, 1))
+    fn = np.sum(np.clip(truth - pred, 0, 1))
+
+    return _f1_stats(tp, fp, fn)
+
+
+def tf1score(y_true, y_pred):
+    tp = tf.reduce_sum(tf.clip_by_value(y_true * y_pred, 0, 1))
+    fp = tf.reduce_sum(tf.clip_by_value(y_pred - y_true, 0, 1))
+    fn = tf.reduce_sum(tf.clip_by_value(y_true - y_pred, 0, 1))
+
+    return _f1_stats(tp, fp, fn)
+
+
+"""
 def f1_score(actual, predicted):
     actual = actual.astype(bool).astype(np.uint8)
     predicted = predicted.astype(bool).astype(np.uint8)
@@ -22,6 +52,7 @@ def f1_score(actual, predicted):
     f1 = 2 * p * r / (p + r)
 
     return f1
+
 
 def f1score(model:sm.Unet, picklefile:str="validationflow.pickle"):
     with open(picklefile, "rb") as f:
@@ -41,6 +72,7 @@ def f1score(model:sm.Unet, picklefile:str="validationflow.pickle"):
 
     score = f1_score(y_true, y_pred)
     return score
+"""
 
 if __name__ == '__main__':
     model = train.build_model()

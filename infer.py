@@ -11,6 +11,7 @@ import cv2
 import matplotlib.pyplot as plt
 from skimage.transform import resize
 from settings import *
+import score
 
 
 def convert_prediction(pred):
@@ -80,16 +81,15 @@ def infer(model, pre:np.ndarray, post:np.ndarray=None, compress:bool=True):
         return premask.squeeze(), postmask.squeeze()
 
 
-def show_random(model):
+def show_random(model, df = flow.Dataflow(files=flow.get_validation_files())):
     """
     Choose a random test image pair and display the results of inference.
 
     Returns None.
     """
-    threshold = 0.25
-    df = flow.Dataflow(files=flow.get_test_files())
+    threshold = 0.75
     idx = random.randint(0, len(df) - 1)
-    img, _ = df[idx]
+    img, y_true = df[idx]
     pred = convert_prediction(model.predict(img))
     #pred = model.predict(img).squeeze()
 
@@ -107,6 +107,12 @@ def show_random(model):
     fig.add_subplot(1,3,3)
     plt.imshow(pred.squeeze(), cmap='gray')
     plt.title("Thresholded mask")
+
+    scores = score.f1score(y_true.reshape(MASKSHAPE)[...,1].squeeze(), pred.squeeze())
+    if str(scores[0]) == "nan":
+        plt.close(fig)
+        return show_random(model)
+    print("F1-Score: {}\nPrecision: {}\nRecall: {}".format(*scores))
     plt.show()
     return
 

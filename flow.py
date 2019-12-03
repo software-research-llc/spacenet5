@@ -89,10 +89,10 @@ class Dataflow(tf.keras.utils.Sequence):
                 self.samples = pickle.load(f)
         elif ".json" in files[0][0].lower():
             logger.info("Creating Targets from JSON format files")
-            self.samples = [(Target.from_json(pre, self.transform), Target.from_json(post, self.transform)) for (pre,post) in files]
+            self.samples = [(Target.from_json(pre, self.transform, df=self), Target.from_json(post, self.transform, df=self)) for (pre,post) in files]
         elif ".png" in files[0][0].lower():
             logger.info("Creating Targets from a list of PNG files")
-            self.samples = [(Target.from_png(pre), Target.from_png(post)) for (pre,post) in files]
+            self.samples = [(Target.from_png(pre, df=self), Target.from_png(post, df=self)) for (pre,post) in files]
 
         if shuffle:
             random.shuffle(self.samples)
@@ -111,7 +111,7 @@ class Dataflow(tf.keras.utils.Sequence):
         y = []
         # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
         trans_dict = { 'theta': 90 * random.randint(1, 3),
-                       'shear': 0.1 * random.randint(1, 2),
+                       'shear': 0.1 * random.randint(1, 3),
                       # 'channel_shift_intencity': 0.1 * random.randint(1,2),
                       # 'brightness': 0.1 * random.randint(1,2),
                        }
@@ -124,11 +124,14 @@ class Dataflow(tf.keras.utils.Sequence):
             if isinstance(self.transform, float) and random.random() < float(self.transform):
                 pre = self.image_datagen.apply_transform(pre, trans_dict)
                 premask = self.image_datagen.apply_transform(premask, trans_dict)
-
+            # center by channel
+            pre = pre.astype(np.float64)
+            for i in range(3):
+                pre[...,i] -= pre[...,i].mean()
             x.append(pre)
             y.append(premask)
 
-        return np.array(x), np.array(y).astype(np.uint8).reshape([MASKSHAPE[0] * MASKSHAPE[1], 2])
+        return np.array(x), np.array(y).astype(np.uint8).reshape([BATCH_SIZE, MASKSHAPE[0] * MASKSHAPE[1], 2])
 
     @staticmethod
     def from_pickle(picklefile:str=PICKLED_TRAINSET):
@@ -143,10 +146,28 @@ class Dataflow(tf.keras.utils.Sequence):
 class Building:
     """Carries the data for a single building; multiple Buildings are
        owned by a single Target"""
+    MAP = {}
+    PRE = 1
+    POST = 2
+
     def __init__(self, target=None):
         self.wkt = None
         self._coords = None
         self.target = None
+
+    @staticmethod
+    def get(uid:str, key=None):
+        """
+        Look up a building by UID.  Returns both PRE and POST image buildings if one
+        isn't specified.
+        """
+        if key is None:
+            return Building.MAP[(uid,Building.PRE)], Building.MAP[(uid,Building.POST)]
+        return Building.MAP[(uid,key)]
+
+    def __repr__(self):
+        string = "<Building {} from {}: {}>".format(self.uid, self.target.img_name, str(self.coords()).replace("\n", ","))
+        return string
 
     def coords(self, downvert=True, **kwargs):
         """Parses the WKT data and caches it for subsequent calls"""
@@ -198,7 +219,8 @@ class Building:
 class Target:
     """Target objects provide filenames, metadata, input images, and masks for training.
        One target per input image (i.e. two targets per pre-disaster, post-disaster set)."""
-    def __init__(self, text:str=""):
+    def __init__(self, text:str="", df:Dataflow=None):
+        self._df = df
         self.buildings = []
         self.image_datagen = ImageDataGenerator()
         if text:
@@ -222,7 +244,14 @@ class Target:
 
             b.wkt = feature.get('wkt', None)
             b.uid = prop['uid']
+            b.target = self
             self.buildings.append(b)
+
+            if b.klass is None:
+                key = "pre"
+            else:
+                key = "post"
+            Building.MAP[(b.uid, key)] = b
 
     def mask(self):
         """Get the Target's mask for supervised training of the model"""
@@ -284,22 +313,24 @@ class Target:
         return get_abs_path(self.img_name)
 
     @staticmethod
-    def from_json(filename:str, transform:float=0.0):
+    def from_json(filename:str, transform:float=0.0, df:Dataflow=None):
         """Create a Target object from a path to a .JSON file"""
         with open(filename) as f:
             t = Target(f.read())
+            t._df = df
             t.img_path = get_abs_path(t.img_name)
             t.transform = transform
             return t
 
     @staticmethod
-    def from_png(filename:str):
+    def from_png(filename:str, df:Dataflow=None):
         """Create a Target object from a path to a .PNG file.
 
         Note: from_json() will only store the base filename, but this
               function expects the string passed to be the full (absolute)
               path to the .png file."""
         target = Target()
+        target._df = df
         target.img_name = filename
         target.img_path = filename
         target.metadata = dict()
@@ -314,6 +345,7 @@ if __name__ == '__main__':
     import ordinal_loss
     import infer
     import train
+    import score
     df = Dataflow()
     model = train.build_model()
     train.load_weights(model)

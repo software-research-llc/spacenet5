@@ -16,6 +16,8 @@ import ordinal_loss
 #import tensorflow.keras.backend as K
 import layers
 import deeplabmodel
+import infer
+import score
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +25,16 @@ logger = logging.getLogger(__name__)
 #tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 callbacks = [
-    keras.callbacks.ModelCheckpoint('./best_model.hdf5', save_weights_only=True, save_best_only=True),
+    keras.callbacks.ModelCheckpoint('logs/model', save_weights_only=True, save_best_only=False)]
+""""
     keras.callbacks.TensorBoard(log_dir="logs",
                                 histogram_freq=1,
                                 write_graph=True,
                                 write_images=True,
-                                embeddings_freq=1,
-                                update_freq=1000),
+                                embeddings_freq=0,
+                                update_freq=100),
 ]
+"""
 
 #metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
 #preprocess_input = sm.get_preprocessing(BACKBONE)
@@ -72,10 +76,12 @@ def load_weights(model, save_path=MODELSTRING):
     return model
 
 
-def build_model(train=False):
-    xception = deeplabmodel.Deeplabv3(input_shape=INPUTSHAPE,
+def build_model(architecture='xception', train=False):
+    inp = tf.keras.layers.Input(INPUTSHAPE)
+    x = tf.keras.layers.GaussianNoise(0.0003)(inp)
+    xception = deeplabmodel.Deeplabv3(input_tensor=x,#input_shape=INPUTSHAPE,
                                   weights='pascal_voc',
-                                  backbone='xception',
+                                  backbone=architecture,
                                   classes=2,
                                   OS=16 if train is True else 8,
                                   #activation='softmax',
@@ -85,20 +91,22 @@ def build_model(train=False):
     x = xception.get_layer('custom_logits_semantic').output
     x = tf.image.resize(x, size=INPUTSHAPE[:2],
                         preserve_aspect_ratio=True,
-                        method=tf.image.ResizeMethod.NEAREST_NEIGHBOR,
+                        method=tf.image.ResizeMethod.MITCHELLCUBIC,
                         name="resize_xception_logits")
     x = tf.keras.layers.Reshape((-1,2))(x)
     x = tf.keras.layers.Activation('softmax')(x)
-    return keras.models.Model(inputs=[xception.input], outputs=[x])
+    return keras.models.Model(inputs=[inp], outputs=[x])
 
 
 def main(
          restore: ("Restore from checkpoint", "flag", "r"),
+         architecture: ("xception or mobilenetv2", "option", "a")='xception',
          save_path=MODELSTRING,
-         optimizer=tf.keras.optimizers.Adam(lr=0.0001),
-         loss='categorical_crossentropy',#'binary_crossentropy',
-         metrics=['binary_accuracy', 'categorical_accuracy', 'mae', 'binary_crossentropy', 'categorical_crossentropy'],
-                  #sm.losses.categorical_focal_loss, sm.losses.binary_focal_loss],
+         optimizer=tf.keras.optimizers.Adam(lr=0.00001),
+         loss='categorical_crossentropy',
+         metrics=['binary_accuracy', 'categorical_accuracy', 'mae',
+                  'binary_crossentropy', 'categorical_crossentropy',
+                  score.tf1score],
          verbose=1,
          epochs=100):
     """
@@ -106,7 +114,7 @@ def main(
     """
 #    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
     logger.info("Building model.")
-    model = build_model(train=True)
+    model = build_model(architecture=architecture, train=True)
     if restore:
         load_weights(model)
 
@@ -117,7 +125,7 @@ def main(
     if os.path.exists("trainingsamples.pickle"):
         train_seq = flow.Dataflow("trainingsamples.pickle")
     else:
-        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE, transform=0.25, shuffle=True)
+        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE, transform=0.50, shuffle=True)
     if os.path.exists("validationsamples.pickle"):
         val_seq = flow.Dataflow("validationsamples.pickle")
     else:
@@ -136,9 +144,11 @@ def train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
                             use_multiprocessing=True,
                             max_queue_size=10)
     except KeyboardInterrupt:
+            save_model(model, "tmp.hdf5", pause=0)
             save_model(model, save_path, pause=1)
             sys.exit()
     except Exception as exc:
+        save_model(model, "tmp.hdf5", pause=0)
         raise(exc)
 
 

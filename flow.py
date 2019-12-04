@@ -144,7 +144,7 @@ class Dataflow(tf.keras.utils.Sequence):
             x.append(pre)
             y.append(premask)
 
-        return np.array(x), np.array(y).astype(np.uint8).reshape([S.BATCH_SIZE, S.MASKSHAPE[0] * S.MASKSHAPE[1], 2])
+        return np.array(x), np.array(y).astype(np.uint8).reshape([S.BATCH_SIZE, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
 
     @staticmethod
     def from_pickle(picklefile:str=S.PICKLED_TRAINSET):
@@ -281,22 +281,35 @@ class Target:
 
     def multichannelmask(self, reshape=False):
         """Get the Target's mask for supervised training of the model"""
+        # Each class gets one channel, but because fillPoly() only handles up to 4 channels,
+        # we split the return 6-D image in to two parts
         chan1 = np.ones(S.MASKSHAPE[:2], dtype=np.uint8)
         chan2 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
-        chans = [chan1, chan2]
-        for _ in range(2, S.N_CLASSES):
-            chans.append(np.zeros(S.MASKSHAPE[:2]))
-        img = np.dstack(chans)
+        chan3 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
+        chan4 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
+        chan5 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
+        chan6 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
+
+        # Repeat chan1 because it's the background channel, and we want to zero-out the
+        # pixels at those coordinates while painting with fillPoly()
+        img1 = np.dstack([chan1, chan2, chan3])
+        img2 = np.dstack([chan1, chan4, chan5, chan6])
+
+        # For each building, set pixels according to (x,y) coordinates; they end up
+        # being a one-hot-encoded vector corresponding to class for each (x,y) location
         for b in self.buildings:
-            coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
-            color = [0] * S.N_CLASSES
-            color[b.color()] = 1
-            if len(coords) > 0:
-                try:
-                    cv2.fillPoly(img, np.array([coords]), color)
-                    #cv2.fillConvexPoly(img, coords, [0, b.color()])
-                except Exception as exc:
-                    logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
+            coords = b.coords()
+            if b.color() in [3,4,5]:
+                color = [0] * 4
+                color[b.color()-2] = 1
+                if len(coords) > 0:
+                    cv2.fillPoly(img2, np.array([coords]), color)
+            else:
+                color = [0] * 3
+                color[b.color()] = 1
+                if len(coords) > 0:
+                    cv2.fillPoly(img1, np.array([coords]), color)
+        img = np.dstack([chan1, chan2, chan3, chan4, chan5, chan6])
         if reshape:
             return img.reshape((S.MASKSHAPE[0] * S.MASKSHAPE[1], -1))
         else:

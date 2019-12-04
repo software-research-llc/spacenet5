@@ -84,7 +84,7 @@ def build_model(architecture='xception', train=False):
     xception = deeplabmodel.Deeplabv3(input_tensor=x,#input_shape=INPUTSHAPE,
                                   weights='pascal_voc',
                                   backbone=architecture,
-                                  classes=2,
+                                  classes=S.N_CLASSES,
                                   OS=16 if train is True else 8,
                                   #activation='softmax',
 #                                  alpha=1.0,
@@ -95,7 +95,7 @@ def build_model(architecture='xception', train=False):
                         preserve_aspect_ratio=True,
                         method=tf.image.ResizeMethod.MITCHELLCUBIC,
                         name="resize_xception_logits")
-    x = tf.keras.layers.Reshape((-1,2))(x)
+    x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
     x = tf.keras.layers.Activation('softmax')(x)
     return keras.models.Model(inputs=[inp], outputs=[x])
 
@@ -106,8 +106,7 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
          optimizer=tf.keras.optimizers.Adam(lr=0.0001),
          loss='categorical_crossentropy',
          metrics=['binary_accuracy', 'categorical_accuracy', 'mae',
-                  'binary_crossentropy', 'categorical_crossentropy',
-                  score.tf1score],
+                  'binary_crossentropy', 'categorical_crossentropy'],
          verbose=1,
          epochs=100):
     """

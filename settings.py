@@ -16,7 +16,7 @@ N_CLASSES = len(CLASSES)
 
 # Shape of the training input images
 INPUTSHAPE = [1024,1024,3]
-MASKSHAPE = [1024,1024,2]
+MASKSHAPE = [1024,1024,N_CLASSES]
 # The shape of the raw on-disk input images
 SAMPLESHAPE = [1024,1024,3]
 TARGETSHAPE = INPUTSHAPE

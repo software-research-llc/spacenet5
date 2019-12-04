@@ -87,7 +87,7 @@ def show_random(model, df = flow.Dataflow(files=flow.get_validation_files())):
 
     Returns None.
     """
-    threshold = 0.75
+    threshold = 0.50
     idx = random.randint(0, len(df) - 1)
     img, y_true = df[idx]
     pred = convert_prediction(model.predict(img))
@@ -102,17 +102,17 @@ def show_random(model, df = flow.Dataflow(files=flow.get_validation_files())):
     plt.imshow(pred.squeeze(), cmap='gray')
     plt.title("Predicted mask")
 
-    pred[pred > threshold] = 1.0
-    pred[pred < threshold] = 0.0
+    pred = np.round(pred).astype(int)#[pred > threshold] = 1.0
+    #pred[pred < threshold] = 0.0
     fig.add_subplot(1,3,3)
     plt.imshow(pred.squeeze(), cmap='gray')
     plt.title("Thresholded mask")
 
-    scores = score.f1score(y_true.reshape(MASKSHAPE)[...,1].squeeze(), pred.squeeze())
+    scores = score.my_f1score(y_true.reshape(MASKSHAPE)[...,1].squeeze(), pred.squeeze())
     if str(scores[0]) == "nan":
         plt.close(fig)
         return show_random(model)
-    print("F1-Score: {}\nPrecision: {}\nRecall: {}".format(*scores))
+    print("\nF1-Score: {}\nPrecision: {}\nRecall: {}".format(*scores))
     plt.show()
     return
 

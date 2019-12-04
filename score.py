@@ -11,6 +11,11 @@ import sklearn.metrics
 
 MAXINMEM = 10
 
+TP = 0
+FP = 0
+FN = 0
+TN = 0
+
 def _f1_stats(tp, fp, fn):
     prec = tp / (tp + fp)
     rec = tp / (tp + fn)
@@ -42,6 +47,40 @@ def tf1score(y_true, y_pred):
 
 def f1_loss(y_true, y_pred):
     return 1 - tf1score(tf.cast(y_true, tf.float32), y_pred)[0]
+
+def my_f1score(y_true, y_pred):
+    global TP, FP, FN, TN
+    tp,fp,tn,fn = 0,0,0,0
+
+    true = y_true.ravel()
+    pred = y_pred.ravel()
+    for i in range(len(true)):
+        if true[i] == 1:
+            if pred[i] == 1:
+                tp += 1
+            else:
+                fn += 1
+        elif true[i] == 0:
+            if pred[i] == 0:
+                tn += 1
+            elif pred[i] == 1:
+                fp += 1
+            else:
+                raise Exception
+        else:
+            raise Exception
+
+    TP += tp
+    FP += fp
+    TN += tn
+    FN += fn
+    if tp == 0:
+        if fp == 0 and fn == 0:
+            return 1,1,1
+        return 0,0,0
+    prec = TP / (TP + FP)
+    rec = TP / (TP + FN)
+    return 2 * prec * rec / (prec + rec), prec, rec
 
 """
 def f1_score(actual, predicted):
@@ -91,7 +130,9 @@ if __name__ == '__main__':
     pbar = tqdm.tqdm(df, desc="Scoring")
     for x,y in pbar:
         pred = model.predict(x)
-        scores = sklearn.metrics.f1_score(np.round(y).astype(int).squeeze(), np.round(pred).astype(int).squeeze(), average='micro')
+        y_true = infer.convert_prediction(y).astype(int)
+        y_pred = infer.convert_prediction(np.round(pred)).astype(int)
+        scores = my_f1score(y_true, y_pred)#sklearn.metrics.f1_score(y_true, y_pred, average=None)
         total += scores
         pbar.set_description("%f" % (total / i))
         i += 1

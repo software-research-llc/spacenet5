@@ -89,10 +89,20 @@ class Dataflow(tf.keras.utils.Sequence):
                 self.samples = pickle.load(f)
         elif ".json" in files[0][0].lower():
             logger.info("Creating Targets from JSON format files")
-            self.samples = [(Target.from_json(pre, self.transform, df=self), Target.from_json(post, self.transform, df=self)) for (pre,post) in files]
+            self.samples = []
+            for (pre,post) in files:
+                self.samples.append(Target.from_json(pre, df=self))
+                self.samples.append(Target.from_json(post, df=self))
+            #self.samples = [(Target.from_json(pre, self.transform, df=self), Target.from_json(post, self.transform, df=self)) for (pre,post) in files]
         elif ".png" in files[0][0].lower():
             logger.info("Creating Targets from a list of PNG files")
-            self.samples = [(Target.from_png(pre, df=self), Target.from_png(post, df=self)) for (pre,post) in files]
+            self.samples = []
+            for (pre,post) in files:
+                self.samples.append(Target.from_png(pre, df=self))
+                self.samples.append(Target.from_png(post, df=self))
+                #self.samples = [(Target.from_png(pre, df=self), Target.from_png(post, df=self)) for (pre,post) in files]
+        else:
+            raise RuntimeError("Files should be in PNG, JSON, or pickle format")
 
         if shuffle:
             random.shuffle(self.samples)
@@ -115,7 +125,8 @@ class Dataflow(tf.keras.utils.Sequence):
                       # 'channel_shift_intencity': 0.1 * random.randint(1,2),
                       # 'brightness': 0.1 * random.randint(1,2),
                        }
-        for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
+#        for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
+        for pre in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             premask = pre.multichannelmask()
             if S.INPUTSHAPE != S.SAMPLESHAPE:
                 pre = resize(pre.image(), S.INPUTSHAPE)
@@ -195,7 +206,7 @@ class Building:
         if self.klass is None:
             return 1
         # post-disaster images include subtype information (see settings.py for CLASSES)
-        ret = CLASSES.index(self.klass)
+        ret = S.CLASSES.index(self.klass)
         return ret
 
     def downvert(self, x, y,
@@ -272,13 +283,18 @@ class Target:
         """Get the Target's mask for supervised training of the model"""
         chan1 = np.ones(S.MASKSHAPE[:2], dtype=np.uint8)
         chan2 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
-        img = np.dstack([chan1,chan2])#, axis=2)
+        chans = [chan1, chan2]
+        for _ in range(2, S.N_CLASSES):
+            chans.append(np.zeros(S.MASKSHAPE[:2]))
+        img = np.dstack(chans)
         for b in self.buildings:
             coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
+            color = [0] * S.N_CLASSES
+            color[b.color()] = 1
             if len(coords) > 0:
                 try:
-                    cv2.fillPoly(img, np.array([coords]), [0, b.color()])
-                    cv2.fillConvexPoly(img, coords, [0, b.color()])
+                    cv2.fillPoly(img, np.array([coords]), color)
+                    #cv2.fillConvexPoly(img, coords, [0, b.color()])
                 except Exception as exc:
                     logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
         if reshape:
@@ -358,12 +374,12 @@ if __name__ == '__main__':
         fig = plt.figure()
         for sample in (pre,post):
 
-            fig.add_subplot(2,5,i)
+            fig.add_subplot(2,4,i)
             plt.imshow(sample.image())
             plt.title(sample.img_name)
             i += 1
 
-            fig.add_subplot(2,5,i)
+            fig.add_subplot(2,4,i)
             plt.imshow(sample.image())
             #background, no-damage, minor-damage, major-damage, destroyed, un-classified
             #    0           1           2             3            4            5
@@ -383,8 +399,8 @@ if __name__ == '__main__':
                         label = "no-damage"
                     else:
                         label = None
-                elif CLASSES[b.color()] not in colors:
-                    label = CLASSES[b.color()]
+                elif S.CLASSES[b.color()] not in colors:
+                    label = S.CLASSES[b.color()]
                 else:
                     label = None
                 colors.add(label)
@@ -394,22 +410,21 @@ if __name__ == '__main__':
                 plt.legend()
             i += 1
 
-            fig.add_subplot(2,5,i)
-            plt.imshow(sample.mask().squeeze(), cmap='terrain')
+            fig.add_subplot(2,4,i)
+            plt.imshow(sample.mask().squeeze()[...,1], cmap='terrain')
             plt.title("target mask")
             i += 1
 
-            fig.add_subplot(2,5,i)
+            fig.add_subplot(2,4,i)
             pred = model.predict(np.expand_dims(sample.image(), axis=0))
-            lossvalue = ordinal_loss.loss(np.expand_dims(sample.mask(), axis=0), pred)
             plt.imshow(infer.convert_prediction(pred))
             plt.title("Prediction")
             i += 1
 
-            fig.add_subplot(2,5,i)
-            plt.imshow(lossvalue.numpy().squeeze())
-            plt.title("Loss")
-            i += 1
+            #fig.add_subplot(2,5,i)
+            #plt.imshow(lossvalue.numpy().squeeze())
+            #plt.title("Loss")
+            #i += 1
 
         plt.show()
         time.sleep(1)

@@ -1,3 +1,4 @@
+import settings as S
 import tensorflow as tf
 import numpy as np
 import flow
@@ -6,6 +7,7 @@ import tqdm
 import segmentation_models as sm
 import infer
 import train
+import sklearn.metrics
 
 MAXINMEM = 10
 
@@ -37,6 +39,9 @@ def tf1score(y_true, y_pred):
 
     return _f1_stats(tp, fp, fn)
 
+
+def f1_loss(y_true, y_pred):
+    return 1 - tf1score(tf.cast(y_true, tf.float32), y_pred)[0]
 
 """
 def f1_score(actual, predicted):
@@ -75,6 +80,18 @@ def f1score(model:sm.Unet, picklefile:str="validationflow.pickle"):
 """
 
 if __name__ == '__main__':
+    import infer
+    import math
     model = train.build_model()
+    S.BATCH_SIZE = 1
     model = train.load_weights(model)
-    score = f1score(model)
+    df = flow.Dataflow(files=flow.get_validation_files(), batch_size=1)
+    total = 0
+    i = 1
+    pbar = tqdm.tqdm(df, desc="Scoring")
+    for x,y in pbar:
+        pred = model.predict(x)
+        scores = sklearn.metrics.f1_score(np.round(y).astype(int).squeeze(), np.round(pred).astype(int).squeeze(), average='micro')
+        total += scores
+        pbar.set_description("%f" % (total / i))
+        i += 1

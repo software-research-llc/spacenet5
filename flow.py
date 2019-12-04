@@ -7,7 +7,7 @@ import pandas as pd
 import shapely
 import json
 import numpy as np
-from settings import *
+import settings as S
 import matplotlib.pyplot as plt
 import skimage
 from keras.preprocessing.image import ImageDataGenerator
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 def get_abs_path(filename):
     if os.path.exists(filename):
         return filename
-    for path in IMAGEDIRS:
+    for path in S.IMAGEDIRS:
         fullpath = os.path.join(path, filename)
         if os.path.exists(fullpath):
             return os.path.abspath(fullpath)
@@ -60,24 +60,24 @@ def get_validation_files():
 
     See settings.py for definition of SPLITFACTOR (proportion of the training set heldout).
     """
-    files = get_files(LABELDIRS)
+    files = get_files(S.LABELDIRS)
     length = len(files)
-    return files[int(length*SPLITFACTOR):]
+    return files[int(length*S.SPLITFACTOR):]
 
 def get_training_files():
     """
     Return a list of the .json files describing the training images.
     """
-    files = get_files(LABELDIRS)
+    files = get_files(S.LABELDIRS)
     length = len(files)
-    return files[:int(length*SPLITFACTOR)]
+    return files[:int(length*S.SPLITFACTOR)]
 
 
 class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
     """
-    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=False):
+    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True):
         self.transform = transform
         self.shuffle = shuffle
         self.batch_size = batch_size
@@ -102,7 +102,7 @@ class Dataflow(tf.keras.utils.Sequence):
         length = int(np.ceil(len(self.samples) / float(self.batch_size)))
         return length
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx, subtract_mean=False):
         """
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
@@ -111,34 +111,36 @@ class Dataflow(tf.keras.utils.Sequence):
         y = []
         # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
         trans_dict = { 'theta': 90 * random.randint(1, 3),
-                       'shear': 0.1 * random.randint(1, 3),
+                       'shear': 0.1 * random.randint(1, 2),
                       # 'channel_shift_intencity': 0.1 * random.randint(1,2),
                       # 'brightness': 0.1 * random.randint(1,2),
                        }
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             premask = pre.multichannelmask()
-            if INPUTSHAPE != SAMPLESHAPE:
-                pre = resize(pre.image(), INPUTSHAPE)
+            if S.INPUTSHAPE != S.SAMPLESHAPE:
+                pre = resize(pre.image(), S.INPUTSHAPE)
             else:
                 pre = pre.image()
             if isinstance(self.transform, float) and random.random() < float(self.transform):
                 pre = self.image_datagen.apply_transform(pre, trans_dict)
                 premask = self.image_datagen.apply_transform(premask, trans_dict)
+
             # center by channel
-            pre = pre.astype(np.float64)
-            for i in range(3):
-                pre[...,i] -= pre[...,i].mean()
+            if subtract_mean:
+                pre = pre.astype(np.float64)
+                for i in range(3):
+                    pre[...,i] -= pre[...,i].mean()
             x.append(pre)
             y.append(premask)
 
-        return np.array(x), np.array(y).astype(np.uint8).reshape([BATCH_SIZE, MASKSHAPE[0] * MASKSHAPE[1], 2])
+        return np.array(x), np.array(y).astype(np.uint8).reshape([S.BATCH_SIZE, S.MASKSHAPE[0] * S.MASKSHAPE[1], 2])
 
     @staticmethod
-    def from_pickle(picklefile:str=PICKLED_TRAINSET):
+    def from_pickle(picklefile:str=S.PICKLED_TRAINSET):
         with open(picklefile, "rb") as f:
             return pickle.load(f)
 
-    def to_pickle(self, picklefile:str=PICKLED_TRAINSET):
+    def to_pickle(self, picklefile:str=S.PICKLED_TRAINSET):
         with open(picklefile, "wb") as f:
             return pickle.dump(self, f)
 
@@ -197,19 +199,19 @@ class Building:
         return ret
 
     def downvert(self, x, y,
-                 orig_x=SAMPLESHAPE[0],
-                 orig_y=SAMPLESHAPE[1],
-                 new_x=TARGETSHAPE[0],
-                 new_y=TARGETSHAPE[1]):
+                 orig_x=S.SAMPLESHAPE[0],
+                 orig_y=S.SAMPLESHAPE[1],
+                 new_x=S.TARGETSHAPE[0],
+                 new_y=S.TARGETSHAPE[1]):
         x = x * (new_x / orig_x)
         y = y * (new_y / orig_y)
         return round(x), round(y)
 
     def upvert(self, x, y,
-               orig_x=SAMPLESHAPE[0],
-               orig_y=SAMPLESHAPE[1],
-               new_x=TARGETSHAPE[0],
-               new_y=TARGETSHAPE[1]):
+               orig_x=S.SAMPLESHAPE[0],
+               orig_y=S.SAMPLESHAPE[1],
+               new_x=S.TARGETSHAPE[0],
+               new_y=S.TARGETSHAPE[1]):
         x = x / (new_x / orig_x)
         y = y / (new_y / orig_y)
         return round(x), round(y)
@@ -239,7 +241,7 @@ class Target:
             b = Building(target=self)
             b.klass = prop.get('subtype', None)
            
-            if b.klass not in CLASSES:
+            if b.klass not in S.CLASSES:
                 logger.error(f"Unrecognized building subtype: {b.klass}")
 
             b.wkt = feature.get('wkt', None)
@@ -255,7 +257,7 @@ class Target:
 
     def mask(self):
         """Get the Target's mask for supervised training of the model"""
-        img = np.zeros(MASKSHAPE, dtype=np.uint8)
+        img = np.zeros(S.MASKSHAPE, dtype=np.uint8)
         for b in self.buildings:
             coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
             if len(coords) > 0:
@@ -268,8 +270,8 @@ class Target:
 
     def multichannelmask(self, reshape=False):
         """Get the Target's mask for supervised training of the model"""
-        chan1 = np.ones(MASKSHAPE[:2], dtype=np.uint8)
-        chan2 = np.zeros(MASKSHAPE[:2], dtype=np.uint8)
+        chan1 = np.ones(S.MASKSHAPE[:2], dtype=np.uint8)
+        chan2 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
         img = np.dstack([chan1,chan2])#, axis=2)
         for b in self.buildings:
             coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
@@ -280,7 +282,7 @@ class Target:
                 except Exception as exc:
                     logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
         if reshape:
-            return img.reshape((MASKSHAPE[0] * MASKSHAPE[1], -1))
+            return img.reshape((S.MASKSHAPE[0] * S.MASKSHAPE[1], -1))
         else:
             return img
 
@@ -294,7 +296,7 @@ class Target:
     def rcnn_masks(self):
         masks = []
         for b in self.buildings:
-            img = np.zeros(MASKSHAPE[:2], dtype=np.uint8)
+            img = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
             coords = b.coords()
             if len(coords) > 0:
                 cv2.fillPoly(img, np.array([coords]), b.color())

@@ -1,4 +1,6 @@
-from settings import *
+import os
+import focal_loss
+import settings as S
 import time
 import sys
 import flow
@@ -56,7 +58,7 @@ def f1score(y_true, y_pred):
 def f1_loss(y_true, y_pred):
     return 1 - f1score(y_true, y_pred)
 
-def save_model(model, save_path=MODELSTRING, pause=0):
+def save_model(model, save_path=S.MODELSTRING, pause=0):
     if pause > 0:
         sys.stderr.write("Saving in")
         for i in list(range(1,6))[::-1]:
@@ -66,7 +68,7 @@ def save_model(model, save_path=MODELSTRING, pause=0):
     return model.save_weights(save_path)
 
 
-def load_weights(model, save_path=MODELSTRING):
+def load_weights(model, save_path=S.MODELSTRING):
     try:
         model.load_weights(save_path)
         logger.info("Model file %s loaded successfully." % save_path)
@@ -77,7 +79,7 @@ def load_weights(model, save_path=MODELSTRING):
 
 
 def build_model(architecture='xception', train=False):
-    inp = tf.keras.layers.Input(INPUTSHAPE)
+    inp = tf.keras.layers.Input(S.INPUTSHAPE)
     x = tf.keras.layers.GaussianNoise(0.0003)(inp)
     xception = deeplabmodel.Deeplabv3(input_tensor=x,#input_shape=INPUTSHAPE,
                                   weights='pascal_voc',
@@ -89,7 +91,7 @@ def build_model(architecture='xception', train=False):
 #                                  OS=8)
                                  )
     x = xception.get_layer('custom_logits_semantic').output
-    x = tf.image.resize(x, size=INPUTSHAPE[:2],
+    x = tf.image.resize(x, size=S.INPUTSHAPE[:2],
                         preserve_aspect_ratio=True,
                         method=tf.image.ResizeMethod.MITCHELLCUBIC,
                         name="resize_xception_logits")
@@ -98,12 +100,11 @@ def build_model(architecture='xception', train=False):
     return keras.models.Model(inputs=[inp], outputs=[x])
 
 
-def main(
-         restore: ("Restore from checkpoint", "flag", "r"),
+def main(restore: ("Restore from checkpoint", "flag", "r"),
          architecture: ("xception or mobilenetv2", "option", "a")='xception',
-         save_path=MODELSTRING,
-         optimizer=tf.keras.optimizers.Adam(lr=0.00001),
-         loss='categorical_crossentropy',
+         save_path: ("Save path", "option", "s")=S.MODELSTRING,
+         optimizer=tf.keras.optimizers.Adam(lr=0.0001),
+         loss=focal_loss.BinaryFocalLoss(gamma=2.),#ordinal_loss.loss,#'categorical_crossentropy',
          metrics=['binary_accuracy', 'categorical_accuracy', 'mae',
                   'binary_crossentropy', 'categorical_crossentropy',
                   score.tf1score],
@@ -125,11 +126,11 @@ def main(
     if os.path.exists("trainingsamples.pickle"):
         train_seq = flow.Dataflow("trainingsamples.pickle")
     else:
-        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=BATCH_SIZE, transform=0.50, shuffle=True)
+        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE, transform=0.50, shuffle=True)
     if os.path.exists("validationsamples.pickle"):
         val_seq = flow.Dataflow("validationsamples.pickle")
     else:
-        val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=BATCH_SIZE)
+        val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE)
 
     logger.info("Training.")
     train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)

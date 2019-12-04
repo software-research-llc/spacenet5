@@ -7,7 +7,6 @@ BATCH_SIZE = 1
 SPLITFACTOR = 0.9
 
 # The architecture and weights to use for feature extraction (encoding)
-BACKBONE = 'resnet50'
 MODELSTRING = "deeplab-xception.hdf5"# % BACKBONE
 
 # Each pixel of the net outputs (the masks) is an index in to this list

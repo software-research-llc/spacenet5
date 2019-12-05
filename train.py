@@ -125,7 +125,7 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
     if os.path.exists("trainingsamples.pickle"):
         train_seq = flow.Dataflow("trainingsamples.pickle")
     else:
-        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE, transform=0.50, shuffle=True)
+        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE, transform=0.3, shuffle=True)
     if os.path.exists("validationsamples.pickle"):
         val_seq = flow.Dataflow("validationsamples.pickle")
     else:

@@ -15,6 +15,7 @@ import logging
 import re
 import pickle
 from skimage.transform import resize
+import cv2
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -73,6 +74,14 @@ def get_training_files():
     return files[:int(length*S.SPLITFACTOR)]
 
 
+def apply_gaussian_blur(img:np.ndarray, kernel=(5,5)):
+    chans = []
+    for i in range(img.shape[-1]):
+        chans.append(cv2.GaussianBlur(img[...,i].squeeze(), kernel, cv2.BORDER_DEFAULT))
+    ret = np.dstack(chans)
+    return ret.reshape(img.shape)
+
+
 class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
@@ -119,12 +128,6 @@ class Dataflow(tf.keras.utils.Sequence):
         """
         x = []
         y = []
-        # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
-        trans_dict = { 'theta': 90 * random.randint(1, 3),
-                       'shear': 0.1 * random.randint(1, 2),
-                      # 'channel_shift_intencity': 0.1 * random.randint(1,2),
-                      # 'brightness': 0.1 * random.randint(1,2),
-                       }
 #        for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
         for pre in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             premask = pre.multichannelmask()
@@ -132,15 +135,30 @@ class Dataflow(tf.keras.utils.Sequence):
                 pre = resize(pre.image(), S.INPUTSHAPE)
             else:
                 pre = pre.image()
-            if isinstance(self.transform, float) and random.random() < float(self.transform):
-                pre = self.image_datagen.apply_transform(pre, trans_dict)
-                premask = self.image_datagen.apply_transform(premask, trans_dict)
 
-            # center by channel
+            # we want medium deformations, not severe deformations
+            if isinstance(self.transform, float) and random.random() < float(self.transform):
+                # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
+                rotate_dict = { 'theta': 90 * random.randint(1, 3),}
+                shear_dict = {  'shear': 0.1 * random.randint(1, 2),}
+
+                # rotate and shear the sample, but only rotate the mask
+                pre = self.image_datagen.apply_transform(pre, rotate_dict)
+                pre = self.image_datagen.apply_transform(pre, shear_dict)
+                premask = self.image_datagen.apply_transform(premask, rotate_dict)
+
+            elif isinstance(self.transform, float) and random.random() < float(self.transform):
+                # apply a Gaussian blur to the sample, not the mask
+                #random.randint(3,7)
+                ksize = 5
+                pre = apply_gaussian_blur(pre, kernel=(ksize,ksize))
+                #premask = apply_gaussian_blur(premask, kernel=(ksize,ksize))
+
             if subtract_mean:
-                pre = pre.astype(np.float64)
+                # center by channel
                 for i in range(3):
-                    pre[...,i] -= pre[...,i].mean()
+                    pre[...,i] -= int(np.round(pre[...,i].mean()))
+
             x.append(pre)
             y.append(premask)
 

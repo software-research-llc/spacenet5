@@ -53,20 +53,12 @@ def my_f1score(y_true, y_pred):
     true = y_true.ravel()
     pred = y_pred.ravel()
     for i in range(len(true)):
-        if true[i] == 1:
-            if pred[i] == 1:
-                tp += 1
-            else:
-                fn += 1
-        elif true[i] == 0:
-            if pred[i] == 0:
-                tn += 1
-            elif pred[i] == 1:
-                fp += 1
-            else:
-                raise Exception
+        if true[i] == pred[i] and true[i] > 0:
+            tp += 1
+        elif true[i] == pred[i]:
+            tn += 1
         else:
-            raise Exception
+            fp += 1
 
     TP += tp
     FP += fp
@@ -124,15 +116,17 @@ if __name__ == '__main__':
     S.BATCH_SIZE = 1
     model = train.load_weights(model)
     df = flow.Dataflow(files=flow.get_validation_files(), batch_size=1)
-    totals = [0,0,0]
+    totals = 0#[0,0,0]
     i = 1
     pbar = tqdm.tqdm(df, desc="Scoring")
     for x,y in pbar:
         pred = model.predict(x)
-        y_true = infer.convert_prediction(y).astype(int)
-        y_pred = infer.convert_prediction(np.round(pred)).astype(int)
-        scores = my_f1score(y_true, y_pred)#sklearn.metrics.f1_score(y_true, y_pred, average=None)
-        for i in range(len(scores)):
-            totals[i] += scores[i]
-        pbar.set_description("%f (%f/%f)" % (totals[0],totals[1],totals[2]))
+        y_true = infer.convert_prediction(y).astype(int).ravel()
+        y_pred = infer.convert_prediction(np.round(pred)).astype(int).ravel()
+        scores = sklearn.metrics.f1_score(y_true.astype(int), y_pred.astype(int), average='macro')
+        totals += scores
+        #for i in range(len(scores)):
+        #    totals[i] += scores[i]
+        pbar.set_description("%f" % (totals / i))
+        #pbar.set_description("%f (%f/%f)" % (totals[0],totals[1],totals[2]))
         i += 1

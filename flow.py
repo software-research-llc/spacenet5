@@ -299,21 +299,22 @@ class Target:
         # being a one-hot-encoded vector corresponding to class for each (x,y) location
         for b in self.buildings:
             coords = b.coords()
-            if b.color() == 0:
-                raise Exception("color should not be zero")
-            elif b.color() == 1:
-                cv2.fillPoly(chan1, np.array([coords]), 1)
-            elif b.color() == 2:
-                cv2.fillPoly(chan2, np.array([coords]), 1)
-            elif b.color() == 3:
-                cv2.fillPoly(chan3, np.array([coords]), 1)
-            elif b.color() == 4:
-                cv2.fillPoly(chan4, np.array([coords]), 1)
-            elif b.color() == 5:
-                cv2.fillPoly(chan5, np.array([coords]), 1)
-            else:
-                raise Exception("unrecognized color")
-            cv2.fillPoly(chan0, np.array([coords]), 0)
+            if len(coords) > 0:
+                if b.color() == 0:
+                    raise Exception("color should not be zero")
+                elif b.color() == 1:
+                    cv2.fillPoly(chan1, np.array([coords]), 1)
+                elif b.color() == 2:
+                    cv2.fillPoly(chan2, np.array([coords]), 1)
+                elif b.color() == 3:
+                    cv2.fillPoly(chan3, np.array([coords]), 1)
+                elif b.color() == 4:
+                    cv2.fillPoly(chan4, np.array([coords]), 1)
+                elif b.color() == 5:
+                    cv2.fillPoly(chan5, np.array([coords]), 1)
+                else:
+                    raise Exception("unrecognized color")
+                cv2.fillPoly(chan0, np.array([coords]), 0)
         img = np.dstack([chan0, chan1, chan2, chan3, chan4, chan5])
         return img#.reshape((S.MASKSHAPE[0] * S.MASKSHAPE[1], -1))
         """

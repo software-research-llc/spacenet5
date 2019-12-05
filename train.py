@@ -86,25 +86,29 @@ def build_model(architecture='xception', train=False):
                                   backbone=architecture,
                                   classes=S.N_CLASSES,
                                   OS=16 if train is True else 8,
-                                  #activation='softmax',
+                                  activation='softmax',
 #                                  alpha=1.0,
 #                                  OS=8)
                                  )
+    """
     x = xception.get_layer('custom_logits_semantic').output
     x = tf.image.resize(x, size=S.INPUTSHAPE[:2],
-                        preserve_aspect_ratio=True,
-                        method=tf.image.ResizeMethod.MITCHELLCUBIC,
-                        name="resize_xception_logits")
+                        #preserve_aspect_ratio=True,
+                        method=tf.image.ResizeMethod.BILINEAR,
+                        #name="resize_xception_logits",
+                        align_corners=True)
+    """
+    x = xception.output
     x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
-    x = tf.keras.layers.Activation('softmax')(x)
+    #x = tf.keras.layers.Activation('softmax')(x)
     return keras.models.Model(inputs=[inp], outputs=[x])
 
 
 def main(restore: ("Restore from checkpoint", "flag", "r"),
          architecture: ("xception or mobilenetv2", "option", "a")='xception',
          save_path: ("Save path", "option", "s")=S.MODELSTRING,
-         optimizer=tf.keras.optimizers.Adam(lr=0.001, epsilon=0.5),
-         loss=ordinal_loss.loss,#'categorical_crossentropy',
+         optimizer=tf.keras.optimizers.RMSprop(),#Adam(lr=0.0001, epsilon=0.9),
+         loss='categorical_crossentropy',
          metrics=['binary_accuracy', 'categorical_accuracy', 'mae',
                   'binary_crossentropy', 'categorical_crossentropy'],
          verbose=1,

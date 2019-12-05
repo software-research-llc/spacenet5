@@ -18,11 +18,13 @@ def convert_prediction(pred):
     """
     Turn a model's prediction output into a grayscale segmentation mask.
     """
+    #import pdb; pdb.set_trace()
     try:
         x = pred.squeeze().reshape(MASKSHAPE)
     except ValueError:
         x = pred.squeeze().reshape(MASKSHAPE[:2] + [2])
-    x = x[:,:,1]
+    return np.argmax(x, axis=2)
+    x = x[...,idx]
     return x#.clip(0,1)
 
 
@@ -81,7 +83,7 @@ def infer(model, pre:np.ndarray, post:np.ndarray=None, compress:bool=True):
         return premask.squeeze(), postmask.squeeze()
 
 
-def show_random(model, df = flow.Dataflow(files=flow.get_validation_files())):
+def show_random(model, df):
     """
     Choose a random test image pair and display the results of inference.
 
@@ -96,7 +98,7 @@ def show_random(model, df = flow.Dataflow(files=flow.get_validation_files())):
     fig = plt.figure()
     fig.add_subplot(1,3,1)
     plt.imshow(img.squeeze())
-    plt.title(df.samples[idx][0].img_name)
+    plt.title(df.samples[idx].img_name)
 
     fig.add_subplot(1,3,2)
     plt.imshow(pred.squeeze(), cmap='gray')
@@ -122,5 +124,5 @@ if __name__ == "__main__":
     model = train.build_model()
     model = train.load_weights(model)
     while True:
-        show_random(model)
+        show_random(model, df=flow.Dataflow(files=flow.get_validation_files()))
         time.sleep(1)

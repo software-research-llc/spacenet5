@@ -283,22 +283,40 @@ class Target:
         """Get the Target's mask for supervised training of the model"""
         # Each class gets one channel, but because fillPoly() only handles up to 4 channels,
         # we split the return 6-D image in to two parts
-        chan1 = np.ones(S.MASKSHAPE[:2], dtype=np.uint8)
+        chan0 = np.ones(S.MASKSHAPE[:2], dtype=np.uint8)
+        chan1 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
         chan2 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
         chan3 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
         chan4 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
         chan5 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
-        chan6 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
 
         # Repeat chan1 because it's the background channel, and we want to zero-out the
         # pixels at those coordinates while painting with fillPoly()
-        img1 = np.dstack([chan1, chan2, chan3])
-        img2 = np.dstack([chan1, chan4, chan5, chan6])
+        #img1 = np.dstack([chan1, chan2, chan3])
+        #img2 = np.dstack([chan1, chan4, chan5, chan6])
 
         # For each building, set pixels according to (x,y) coordinates; they end up
         # being a one-hot-encoded vector corresponding to class for each (x,y) location
         for b in self.buildings:
             coords = b.coords()
+            if b.color() == 0:
+                raise Exception("color should not be zero")
+            elif b.color() == 1:
+                cv2.fillPoly(chan1, np.array([coords]), 1)
+            elif b.color() == 2:
+                cv2.fillPoly(chan2, np.array([coords]), 1)
+            elif b.color() == 3:
+                cv2.fillPoly(chan3, np.array([coords]), 1)
+            elif b.color() == 4:
+                cv2.fillPoly(chan4, np.array([coords]), 1)
+            elif b.color() == 5:
+                cv2.fillPoly(chan5, np.array([coords]), 1)
+            else:
+                raise Exception("unrecognized color")
+            cv2.fillPoly(chan0, np.array([coords]), 0)
+        img = np.dstack([chan0, chan1, chan2, chan3, chan4, chan5])
+        return img#.reshape((S.MASKSHAPE[0] * S.MASKSHAPE[1], -1))
+        """
             if b.color() in [3,4,5]:
                 color = [0] * 4
                 color[b.color()-2] = 1
@@ -309,12 +327,12 @@ class Target:
                 color[b.color()] = 1
                 if len(coords) > 0:
                     cv2.fillPoly(img1, np.array([coords]), color)
-        img = np.dstack([chan1, chan2, chan3, chan4, chan5, chan6])
+        img = np.dstack([img1, img2])
         if reshape:
             return img.reshape((S.MASKSHAPE[0] * S.MASKSHAPE[1], -1))
         else:
             return img
-
+        """
     def rcnn_image(self):
         pre = self.image()
         if isinstance(self.transform, float) and random.random() < float(self.transform):

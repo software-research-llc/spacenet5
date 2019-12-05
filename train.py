@@ -103,7 +103,7 @@ def build_model(architecture='xception', train=False):
 def main(restore: ("Restore from checkpoint", "flag", "r"),
          architecture: ("xception or mobilenetv2", "option", "a")='xception',
          save_path: ("Save path", "option", "s")=S.MODELSTRING,
-         optimizer=tf.keras.optimizers.Adam(lr=0.0001),
+         optimizer=tf.keras.optimizers.Adam(lr=0.001, epsilon=0.5),
          loss='categorical_crossentropy',
          metrics=['binary_accuracy', 'categorical_accuracy', 'mae',
                   'binary_crossentropy', 'categorical_crossentropy'],

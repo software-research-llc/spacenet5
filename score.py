@@ -4,9 +4,7 @@ import numpy as np
 import flow
 import pickle
 import tqdm
-import segmentation_models as sm
-import infer
-import train
+#import segmentation_models as sm
 import sklearn.metrics
 
 MAXINMEM = 10
@@ -121,11 +119,12 @@ def f1score(model:sm.Unet, picklefile:str="validationflow.pickle"):
 if __name__ == '__main__':
     import infer
     import math
+    import train
     model = train.build_model()
     S.BATCH_SIZE = 1
     model = train.load_weights(model)
     df = flow.Dataflow(files=flow.get_validation_files(), batch_size=1)
-    total = 0
+    totals = [0,0,0]
     i = 1
     pbar = tqdm.tqdm(df, desc="Scoring")
     for x,y in pbar:
@@ -133,6 +132,7 @@ if __name__ == '__main__':
         y_true = infer.convert_prediction(y).astype(int)
         y_pred = infer.convert_prediction(np.round(pred)).astype(int)
         scores = my_f1score(y_true, y_pred)#sklearn.metrics.f1_score(y_true, y_pred, average=None)
-        total += scores
-        pbar.set_description("%f" % (total / i))
+        for i in range(len(scores)):
+            totals[i] += scores[i]
+        pbar.set_description("%f (%f/%f)" % (totals[0],totals[1],totals[2]))
         i += 1

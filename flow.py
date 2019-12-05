@@ -16,6 +16,7 @@ import re
 import pickle
 from skimage.transform import resize
 import cv2
+from tensorflow.python.keras.applications.imagenet_utils import preprocess_input
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -159,6 +160,7 @@ class Dataflow(tf.keras.utils.Sequence):
                 for i in range(3):
                     pre[...,i] -= int(np.round(pre[...,i].mean()))
 
+            pre = preprocess_input(pre)
             x.append(pre)
             y.append(premask)
 

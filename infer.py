@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 from skimage.transform import resize
 from settings import *
 import score
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def convert_prediction(pred):
@@ -22,6 +25,7 @@ def convert_prediction(pred):
     try:
         x = pred.squeeze().reshape(MASKSHAPE)
     except ValueError:
+        logger.warning("error reshaping mask, falling back to depth 2)")
         x = pred.squeeze().reshape(MASKSHAPE[:2] + [2])
     return np.argmax(x, axis=2)
     x = x[...,idx]
@@ -110,11 +114,8 @@ def show_random(model, df):
     plt.imshow(pred.squeeze(), cmap='gray')
     plt.title("Thresholded mask")
 
-    scores = score.my_f1score(y_true.reshape(MASKSHAPE)[...,1].squeeze(), pred.squeeze())
-    if str(scores[0]) == "nan":
-        plt.close(fig)
-        return show_random(model)
-    print("\nF1-Score: {}\nPrecision: {}\nRecall: {}".format(*scores))
+    scores = score.f1_score(y_true.reshape(MASKSHAPE)[...,1].squeeze(), pred.squeeze())
+    print("F1-Score: {}\n".format(scores))
     plt.show()
     return
 
@@ -123,6 +124,7 @@ if __name__ == "__main__":
     # Testing and inspection
     model = train.build_model()
     model = train.load_weights(model)
+    df=flow.Dataflow(files=flow.get_validation_files())
     while True:
-        show_random(model, df=flow.Dataflow(files=flow.get_validation_files()))
+        show_random(model, df)
         time.sleep(1)

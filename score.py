@@ -46,6 +46,9 @@ def tf1score(y_true, y_pred):
 def f1_loss(y_true, y_pred):
     return 1 - tf1score(tf.cast(y_true, tf.float32), y_pred)[0]
 
+def f1_score(y_true, y_pred):
+        return sklearn.metrics.f1_score(y_true.ravel().astype(int), y_pred.ravel().astype(int), average='macro')
+
 def my_f1score(y_true, y_pred):
     global TP, FP, FN, TN
     tp,fp,tn,fn = 0,0,0,0

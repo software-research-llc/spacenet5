@@ -10,43 +10,49 @@ import flow
 import cv2
 import matplotlib.pyplot as plt
 from skimage.transform import resize
-from settings import *
+import settings as S
 import score
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def convert_prediction(pred):
+def convert_prediction(pred, argmax=True):
     """
     Turn a model's prediction output into a grayscale segmentation mask.
     """
     #import pdb; pdb.set_trace()
     try:
-        x = pred.squeeze().reshape(MASKSHAPE)
+        x = pred.squeeze().reshape(S.MASKSHAPE)
     except ValueError:
         logger.warning("error reshaping mask, falling back to depth 2)")
-        x = pred.squeeze().reshape(MASKSHAPE[:2] + [2])
-    return np.argmax(x, axis=2)
-    x = x[...,idx]
-    return x#.clip(0,1)
+        x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [2])
+    if argmax is True:
+        return np.argmax(x, axis=2)
+    else:
+        return x[...,0:3], x[...,3:]
 
 
-def compress_channels(mask:np.ndarray):
+def compress_channels_old(mask:np.ndarray):
     """
     Compress an N-dimensional image, i.e. WxHxN, where N is the number of channels.
 
     Returns a grayscale (single channel) image with each pixel value being an integer
     that represents the class of the original input image at that pixel location.
     """
-    assert mask.shape == tuple(MASKSHAPE), f"expected shape {MASKSHAPE}, got {mask.shape}"
+    assert mask.shape == tuple(S.MASKSHAPE), f"expected shape {MASKSHAPE}, got {mask.shape}"
     cutoff = 0.50
-    cmpr = np.zeros(TARGETSHAPE, dtype=np.uint8)
+    cmpr = np.zeros(S.TARGETSHAPE, dtype=np.uint8)
 
     for i in range(1, mask.shape[-1]):
         cmpr[mask[:,:,i] > cutoff] = i
 
     return cmpr.squeeze()
+
+
+def compress_channels(img):
+    assert img.shape == [1,S.MASKSHAPE[0],S.MASKSHAPE[1],S.N_CLASSES], str(img.shape)
+    return np.argmax(img, axis=2)
 
 
 def decompress_channels(img:np.ndarray):
@@ -57,8 +63,8 @@ def decompress_channels(img:np.ndarray):
 
     Note: use np.stack(decompress_channels(img), axis=2) to get an N-channel image.
     """
-    assert img.shape[:2] == tuple(TARGETSHAPE[:2]), f"expected shape {TARGETSHAPE[:2]}, got {img.shape}"
-    chans = [np.zeros(TARGETSHAPE[:2], dtype=np.uint8) for _ in CLASSES]
+    assert img.shape[:2] == tuple(S.TARGETSHAPE[:2]), f"expected shape {TARGETSHAPE[:2]}, got {img.shape}"
+    chans = [np.zeros(S.TARGETSHAPE[:2], dtype=np.uint8) for _ in CLASSES]
 
     for i, chan in enumerate(chans):
         chan[img == i] = 1
@@ -95,9 +101,9 @@ def show_random(model, df):
     """
     threshold = 0.50
     idx = random.randint(0, len(df) - 1)
-    img, y_true = df[idx]
-    pred = convert_prediction(model.predict(img))
-    #pred = model.predict(img).squeeze()
+    img, y_true = df.__getitem__(idx, preprocess=False)
+    net_img, _ = df.__getitem__(idx, preprocess=True)
+    mask_img1, mask_img2 = convert_prediction(model.predict(net_img), argmax=False)
 
     fig = plt.figure()
     fig.add_subplot(1,3,1)
@@ -105,16 +111,19 @@ def show_random(model, df):
     plt.title(df.samples[idx].img_name)
 
     fig.add_subplot(1,3,2)
-    plt.imshow(pred.squeeze(), cmap='gray')
-    plt.title("Predicted mask")
+    plt.imshow(mask_img1)
+    plt.title("Mask channels 0:3")
 
-    pred = np.round(pred).astype(int)#[pred > threshold] = 1.0
-    #pred[pred < threshold] = 0.0
     fig.add_subplot(1,3,3)
-    plt.imshow(pred.squeeze(), cmap='gray')
-    plt.title("Thresholded mask")
+    plt.imshow(mask_img2)
+    plt.title("Mask channels 3:")
 
-    scores = score.f1_score(y_true.reshape(MASKSHAPE)[...,1].squeeze(), pred.squeeze())
+    scores = score.f1_score(convert_prediction(y_true), np.argmax(np.dstack([mask_img1, mask_img2]), axis=2))
+    gt = convert_prediction(y_true, argmax=True)
+    if len(gt[gt != 0]) == 0:
+        plt.close(fig)
+        logger.info("Skipping image with no buildings")
+        return show_random(model, df)
     print("F1-Score: {}\n".format(scores))
     plt.show()
     return
@@ -124,7 +133,8 @@ if __name__ == "__main__":
     # Testing and inspection
     model = train.build_model()
     model = train.load_weights(model)
-    df=flow.Dataflow(files=flow.get_validation_files())
+    S.BATCH_SIZE = 1
+    df=flow.Dataflow(files=flow.get_validation_files(), batch_size=1, shuffle=True)
     while True:
         show_random(model, df)
         time.sleep(1)

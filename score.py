@@ -6,8 +6,11 @@ import pickle
 import tqdm
 #import segmentation_models as sm
 import sklearn.metrics
+import logging
+import keras.backend as K
 
-MAXINMEM = 10
+logger = logging.getLogger(__name__)
+
 
 TP = 0
 FP = 0
@@ -46,11 +49,27 @@ def tf1score(y_true, y_pred):
 def f1_loss(y_true, y_pred):
     return 1 - tf1score(tf.cast(y_true, tf.float32), y_pred)[0]
 
+
 def f1_score(y_true, y_pred):
         return sklearn.metrics.f1_score(y_true.ravel().astype(int),
                                         y_pred.ravel().astype(int),
-                                        average='macro',
+                                        average='micro',
                                         labels=[1,2,3,4,5])
+
+
+def iou_score(y_true, y_pred):
+    gt = tf.cast(y_true, tf.bool)
+    pr = tf.cast(y_pred, tf.bool)
+
+    intersection = K.sum(gt * pr, axis=3)
+    union = K.sum(gt + pr, axis=3) - intersection
+
+    if union > 0:
+        score = intersection / union
+    else:
+        score = 0
+    return score
+
 
 def my_f1score(y_true, y_pred):
     global TP, FP, FN, TN
@@ -121,15 +140,25 @@ if __name__ == '__main__':
     model = train.build_model()
     S.BATCH_SIZE = 1
     model = train.load_weights(model)
-    df = flow.Dataflow(files=flow.get_validation_files(), batch_size=1)
+    df = flow.Dataflow(files=flow.get_validation_files(), batch_size=1, shuffle=False)
     totals = 0#[0,0,0]
     i = 1
     pbar = tqdm.tqdm(df, desc="Scoring")
     for x,y in pbar:
         pred = model.predict(x)
-        y_true = infer.convert_prediction(y).astype(int).ravel()
-        y_pred = infer.convert_prediction(np.round(pred)).astype(int).ravel()
-        scores = f1_score(y_true, y_pred)#sklearn.metrics.f1_score(y_true.astype(int), y_pred.astype(int), average='macro')
+        y_true = infer.convert_prediction(y)
+        y_pred = infer.convert_prediction(pred)
+        y_true[y_true > 1] = 1
+        y_pred[y_pred > 1] = 1
+        # skip images with no buildings
+        if len(y_true[y_true != 0]) == 0:
+            if len(y_pred[y_pred != 0]) == 0:
+                scores = 1.
+            else:
+                logger.debug("Skipping image with no buildings")
+                continue
+        else:
+            scores = f1_score(y_true, y_pred)#sklearn.metrics.f1_score(y_true.astype(int), y_pred.astype(int), average='macro')
         totals += scores
         #for i in range(len(scores)):
         #    totals[i] += scores[i]

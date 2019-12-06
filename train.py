@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 #tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 callbacks = [
-    keras.callbacks.ModelCheckpoint('logs/model', save_weights_only=True, save_best_only=False)]
+    keras.callbacks.ModelCheckpoint('deeplab-xception-best.hdf5', save_weights_only=True, save_best_only=True)]
 """"
     keras.callbacks.TensorBoard(log_dir="logs",
                                 histogram_freq=1,
@@ -55,8 +55,10 @@ def f1score(y_true, y_pred):
     f1 = 2 * (prec * rec) / (prec + rec + K.epsilon())
     return f1
 
+
 def f1_loss(y_true, y_pred):
     return 1 - f1score(y_true, y_pred)
+
 
 def save_model(model, save_path=S.MODELSTRING, pause=0):
     if pause > 0:
@@ -78,11 +80,12 @@ def load_weights(model, save_path=S.MODELSTRING):
     return model
 
 
-def build_model(architecture='xception', train=False):
+def build_model(architecture=S.ARCHITECTURE, train=False):
     inp = tf.keras.layers.Input(S.INPUTSHAPE)
+#    x = tf.image.resize(inp, size=(512,512), method=tf.image.ResizeMethod.BILINEAR)
     x = tf.keras.layers.GaussianNoise(0.0003)(inp)
     xception = deeplabmodel.Deeplabv3(input_tensor=x,#input_shape=INPUTSHAPE,
-                                  weights='pascal_voc',
+                                  weights='cityscapes',
                                   backbone=architecture,
                                   classes=S.N_CLASSES,
                                   OS=16 if train is True else 8,
@@ -96,7 +99,8 @@ def build_model(architecture='xception', train=False):
                         #preserve_aspect_ratio=True,
                         method=tf.image.ResizeMethod.BILINEAR,
                         #name="resize_xception_logits",
-                        align_corners=True)
+                        #align_corners=True
+                        )
 
     #x = xception.output
     x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
@@ -105,9 +109,9 @@ def build_model(architecture='xception', train=False):
 
 
 def main(restore: ("Restore from checkpoint", "flag", "r"),
-         architecture: ("xception or mobilenetv2", "option", "a")='xception',
+         architecture: ("xception or mobilenetv2", "option", "a")=S.ARCHITECTURE,
          save_path: ("Save path", "option", "s")=S.MODELSTRING,
-         optimizer=tf.keras.optimizers.RMSprop(),#Adam(lr=0.0001, epsilon=0.9),
+         optimizer=tf.keras.optimizers.Adam(),#(lr=0.0001, epsilon=0.9),
          loss='categorical_crossentropy',
          metrics=['binary_accuracy', 'categorical_accuracy', 'mae',
                   'binary_crossentropy', 'categorical_crossentropy'],
@@ -117,10 +121,11 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
     Train the model.
     """
 #    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
+    S.MODELSTRING = "deeplab-%s.hdf5" % architecture
     logger.info("Building model.")
     model = build_model(architecture=architecture, train=True)
     if restore:
-        load_weights(model)
+        load_weights(model, S.MODELSTRING)
 
 #    sm.utils.set_trainable(model, recompile=False)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)

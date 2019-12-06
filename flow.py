@@ -54,7 +54,7 @@ def get_test_files():
     Return a list of the paths of images belonging to the test set as
     (preimage, postimage) tuples, e.g. ("socal-pre-004.png", "socal-post-004.png").
     """
-    return get_files(TESTDIRS)
+    return get_files(S.TESTDIRS)
 
 def get_validation_files():
     """
@@ -122,7 +122,7 @@ class Dataflow(tf.keras.utils.Sequence):
         length = int(np.ceil(len(self.samples) / float(self.batch_size)))
         return length
 
-    def __getitem__(self, idx, subtract_mean=False):
+    def __getitem__(self, idx, preprocess=True):
         """
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
@@ -141,7 +141,7 @@ class Dataflow(tf.keras.utils.Sequence):
             if isinstance(self.transform, float) and random.random() < float(self.transform):
                 # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
                 rotate_dict = { 'theta': 90 * random.randint(1, 3),}
-                shear_dict = {  'shear': 0.1 * random.randint(1, 2),}
+                shear_dict = {  'shear': 0.1 * random.randint(1, 3),}
 
                 # rotate and shear the sample, but only rotate the mask
                 pre = self.image_datagen.apply_transform(pre, rotate_dict)
@@ -151,20 +151,16 @@ class Dataflow(tf.keras.utils.Sequence):
             elif isinstance(self.transform, float) and random.random() < float(self.transform):
                 # apply a Gaussian blur to the sample, not the mask
                 #random.randint(3,7)
-                ksize = 5
+                ksize = 3
                 pre = apply_gaussian_blur(pre, kernel=(ksize,ksize))
                 #premask = apply_gaussian_blur(premask, kernel=(ksize,ksize))
 
-            if subtract_mean:
-                # center by channel
-                for i in range(3):
-                    pre[...,i] -= int(np.round(pre[...,i].mean()))
-
-            pre = preprocess_input(pre)
+            if preprocess is True:
+                pre = preprocess_input(pre)
             x.append(pre)
             y.append(premask)
 
-        return np.array(x), np.array(y).astype(np.uint8).reshape([S.BATCH_SIZE, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
+        return np.array(x), np.array(y).astype(np.uint8).reshape([self.batch_size, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
 
     @staticmethod
     def from_pickle(picklefile:str=S.PICKLED_TRAINSET):
@@ -299,6 +295,10 @@ class Target:
                     logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
         return img
 
+    def multichannelchipmask(self):
+        mask = self.multichannelmask()
+        return self.chips(image=mask)
+
     def multichannelmask(self, reshape=False):
         """Get the Target's mask for supervised training of the model"""
         # Each class gets one channel, but because fillPoly() only handles up to 4 channels,
@@ -406,7 +406,14 @@ class Target:
         target.metadata = dict()
         return target
 
-
+    def chips(self, image=None, step=256, max_x=S.MASKSHAPE[0], max_y=S.MASKSHAPE[1]):
+        ret = []
+        if image is None:
+            image = self.image()
+        for i in range(0, max_x, step):
+            for j in range(0, max_y, step):
+                ret.append(image[...,i:i+step,j:j+step,:])
+        return ret
 
 
 if __name__ == '__main__':

@@ -130,12 +130,9 @@ class Dataflow(tf.keras.utils.Sequence):
         x = []
         y = []
 #        for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
-        for pre in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
-            premask = pre.multichannelmask()
-            if S.INPUTSHAPE != S.SAMPLESHAPE:
-                pre = resize(pre.image(), S.INPUTSHAPE)
-            else:
-                pre = pre.image()
+        for sample in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
+            premask = sample.multichannelmask()
+            pre = sample.image()
 
             # we want medium deformations, not severe deformations
             if isinstance(self.transform, float) and random.random() < float(self.transform):
@@ -157,10 +154,13 @@ class Dataflow(tf.keras.utils.Sequence):
 
             if preprocess is True:
                 pre = preprocess_input(pre)
-            x.append(pre)
-            y.append(premask)
 
-        return np.array(x), np.array(y).astype(np.uint8).reshape([self.batch_size, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
+            x = sample.chips(pre)
+            y = sample.chips(premask)
+            #x.append(pre)
+            #y.append(premask)
+
+        return np.array(x), np.array(y).astype(np.uint8).reshape([-1, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
 
     @staticmethod
     def from_pickle(picklefile:str=S.PICKLED_TRAINSET):

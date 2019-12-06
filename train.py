@@ -151,7 +151,7 @@ def train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
                             verbose=verbose, callbacks=callbacks,
                             validation_steps=100, shuffle=False,
                             use_multiprocessing=True,
-                            max_queue_size=10)
+                            max_queue_size=10, steps_per_epoch=16502 * 16)
     except KeyboardInterrupt:
             save_model(model, "tmp.hdf5", pause=0)
             save_model(model, save_path, pause=1)

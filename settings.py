@@ -16,8 +16,8 @@ CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-c
 N_CLASSES = len(CLASSES)
 
 # Shape of the training input images
-INPUTSHAPE = [1024,1024,3]
-MASKSHAPE = [1024,1024,N_CLASSES]
+INPUTSHAPE = [256,256,3]
+MASKSHAPE = [256,256,N_CLASSES]
 # The shape of the raw on-disk input images
 SAMPLESHAPE = [1024,1024,3]
 TARGETSHAPE = INPUTSHAPE

@@ -155,8 +155,7 @@ if __name__ == '__main__':
             if len(y_pred[y_pred != 0]) == 0:
                 scores = 1.
             else:
-                logger.debug("Skipping image with no buildings")
-                continue
+                scores = 0
         else:
             scores = f1_score(y_true, y_pred)#sklearn.metrics.f1_score(y_true.astype(int), y_pred.astype(int), average='macro')
         totals += scores

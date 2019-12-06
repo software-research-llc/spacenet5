@@ -86,21 +86,21 @@ def build_model(architecture='xception', train=False):
                                   backbone=architecture,
                                   classes=S.N_CLASSES,
                                   OS=16 if train is True else 8,
-                                  activation='softmax',
+#                                  activation='softmax',
 #                                  alpha=1.0,
 #                                  OS=8)
                                  )
-    """
+
     x = xception.get_layer('custom_logits_semantic').output
     x = tf.image.resize(x, size=S.INPUTSHAPE[:2],
                         #preserve_aspect_ratio=True,
                         method=tf.image.ResizeMethod.BILINEAR,
                         #name="resize_xception_logits",
                         align_corners=True)
-    """
-    x = xception.output
+
+    #x = xception.output
     x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
-    #x = tf.keras.layers.Activation('softmax')(x)
+    x = tf.keras.layers.Activation('softmax')(x)
     return keras.models.Model(inputs=[inp], outputs=[x])
 
 

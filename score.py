@@ -43,7 +43,7 @@ def tf1score(y_true, y_pred):
     fp = tf.reduce_sum(tf.clip_by_value(y_pred - y_true, 0, 1))
     fn = tf.reduce_sum(tf.clip_by_value(y_true - y_pred, 0, 1))
 
-    return _f1_stats(tp, fp, fn)
+    return _f1_stats(tp, fp, fn)[0]
 
 
 def f1_loss(y_true, y_pred):
@@ -56,18 +56,61 @@ def f1_score(y_true, y_pred):
                                         average='micro',
                                         labels=[1,2,3,4,5])
 
-
+@tf.function
 def iou_score(y_true, y_pred):
     gt = tf.cast(y_true, tf.bool)
-    pr = tf.cast(y_pred, tf.bool)
+    pr = tf.cast(K.round(y_pred), tf.bool)
 
-    intersection = K.sum(gt * pr, axis=3)
-    union = K.sum(gt + pr, axis=3) - intersection
+    intersection = tf.cast(tf.logical_and(gt, pr), tf.int32)
+    intersection = tf.reduce_sum(intersection)
+    union = tf.cast(tf.logical_or(gt, pr), tf.int32)
+    union = tf.reduce_sum(union)
 
     if union > 0:
-        score = intersection / union
+        score = tf.reduce_sum(intersection) / union
     else:
-        score = 0
+        score = tf.constant(0.0, dtype=tf.float64)
+    return score
+
+
+@tf.function
+def pct_correct(y_true, y_pred):
+    pr = tf.cast(tf.round(y_pred), tf.bool)
+    gt = tf.cast(y_true, tf.bool)
+
+    intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))
+    total = tf.reduce_sum(tf.cast(gt, tf.int32))
+    if total > 0:
+        return intersection / total
+    else:
+        return tf.constant(0, dtype=tf.float64)
+
+
+@tf.function
+def num_correct(y_true, y_pred):
+    pr = tf.cast(K.round(y_pred), tf.bool)
+    gt = tf.cast(y_true, tf.bool)
+
+    intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))
+    return intersection
+
+
+@tf.function
+def tensor_f1_score(y_true, y_pred):
+    gt = tf.cast(y_true, tf.bool)
+    pr = tf.cast(K.round(y_pred), tf.bool)
+
+    tp = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int64))
+    fp = tf.reduce_sum(tf.clip_by_value(tf.cast(pr, tf.int64) - tf.cast(gt, tf.int64), 0, 1))
+    fn = tf.reduce_sum(tf.clip_by_value(tf.cast(gt, tf.int64) - tf.cast(pr, tf.int64), 0, 1))
+
+    if tp + fp > 0 and tp + fn > 0:
+        prec = tp / (tp + fp)
+        rec = tp / (tp + fn)
+        score = 2 * prec * rec / (prec + rec)
+    else:
+        score = tf.constant(0.0, tf.float64)
+
     return score
 
 
@@ -142,25 +185,22 @@ if __name__ == '__main__':
     model = train.load_weights(model)
     df = flow.Dataflow(files=flow.get_validation_files(), batch_size=1, shuffle=False)
     totals = 0#[0,0,0]
-    i = 1
+    num = 1
     pbar = tqdm.tqdm(df, desc="Scoring")
-    for x,y in pbar:
-        pred = model.predict(x)
-        y_true = infer.convert_prediction(y)
-        y_pred = infer.convert_prediction(pred)
-        y_true[y_true > 1] = 1
-        y_pred[y_pred > 1] = 1
-        # skip images with no buildings
-        if len(y_true[y_true != 0]) == 0:
-            if len(y_pred[y_pred != 0]) == 0:
-                scores = 1.
-            else:
-                scores = 0
-        else:
-            scores = f1_score(y_true, y_pred)#sklearn.metrics.f1_score(y_true.astype(int), y_pred.astype(int), average='macro')
+    for x,y_ in pbar:
+        pred = model.predict(x)#np.expand_dims(x[j], axis=0))
+        y_pred = infer.weave_pred(pred)
+        y_true = infer.weave_pred(y_)
+        #for i,y in enumerate(pred):
+#        y_ = infer.convert_prediction(y_true[i])
+#        y_pred = infer.convert_prediction(y)
+            #y_true[y_true > 1] = 1
+            #y_pred[y_pred > 1] = 1
+            # skip images with no buildings
+        scores = f1_score(y_true, y_pred)#sklearn.metrics.f1_score(y_true.astype(int), y_pred.astype(int), average='macro')
         totals += scores
         #for i in range(len(scores)):
         #    totals[i] += scores[i]
-        pbar.set_description("%f" % (totals / i))
+        pbar.set_description("%f" % (totals / num))
         #pbar.set_description("%f (%f/%f)" % (totals[0],totals[1],totals[2]))
-        i += 1
+        num += 1

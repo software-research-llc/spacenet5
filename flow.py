@@ -134,6 +134,9 @@ class Dataflow(tf.keras.utils.Sequence):
             premask = sample.multichannelmask()
             pre = sample.image()
 
+            if preprocess is True:
+                pre = preprocess_input(pre)
+
             # we want medium deformations, not severe deformations
             if isinstance(self.transform, float) and random.random() < float(self.transform):
                 # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
@@ -148,12 +151,9 @@ class Dataflow(tf.keras.utils.Sequence):
             elif isinstance(self.transform, float) and random.random() < float(self.transform):
                 # apply a Gaussian blur to the sample, not the mask
                 #random.randint(3,7)
-                ksize = 3
+                ksize = 5
                 pre = apply_gaussian_blur(pre, kernel=(ksize,ksize))
                 #premask = apply_gaussian_blur(premask, kernel=(ksize,ksize))
-
-            if preprocess is True:
-                pre = preprocess_input(pre)
 
             x = sample.chips(pre)
             maskchips = sample.chips(premask)
@@ -204,7 +204,7 @@ class Building:
         string = "<Building {} from {}: {}>".format(self.uid, self.target.img_name, str(self.coords()).replace("\n", ","))
         return string
 
-    def coords(self, downvert=True, **kwargs):
+    def coords(self, downvert=False, **kwargs):
         """Parses the WKT data and caches it for subsequent calls"""
         if self._coords is not None:
             return self._coords
@@ -289,7 +289,7 @@ class Target:
 
     def mask(self):
         """Get the Target's mask for supervised training of the model"""
-        img = np.zeros(S.MASKSHAPE, dtype=np.uint8)
+        img = np.zeros(S.SAMPLESHAPE, dtype=np.uint8)
         for b in self.buildings:
             coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
             if len(coords) > 0:
@@ -420,6 +420,10 @@ class Target:
                 ret.append(image[...,i:i+step,j:j+step,:])
         return ret
 
+    @staticmethod
+    def weave(chips):
+        return np.vstack([np.hstack(chips[:4]), np.hstack(chips[4:8]), np.hstack(chips[8:12]), np.hstack(chips[12:])])
+
 
 if __name__ == '__main__':
     # Testing and data inspection
@@ -433,10 +437,10 @@ if __name__ == '__main__':
     train.load_weights(model)
     while True:
         idx = random.randint(0,len(df) - 1)
-        (pre, post) = df.samples[idx]
+        xy= df.samples[idx]
         i = 1
         fig = plt.figure()
-        for sample in (pre,post):
+        for sample in [xy]:
 
             fig.add_subplot(2,4,i)
             plt.imshow(sample.image())
@@ -451,7 +455,7 @@ if __name__ == '__main__':
             polys = []
             colors = set()
             for b in sample.buildings:
-                coords = [b.upvert(c[0], c[1]) for c in b.coords()]#[b.upvert(x,y,1024,1024) for (x,y) in zip(b.coords()[:,0], b.coords()[:,1])]
+                coords = [(c[0], c[1]) for c in b.coords()]#[b.upvert(x,y,1024,1024) for (x,y) in zip(b.coords()[:,0], b.coords()[:,1])]
                 try:
                     xs = np.array(coords)[:,0]
                     ys = np.array(coords)[:,1]
@@ -475,16 +479,17 @@ if __name__ == '__main__':
             i += 1
 
             fig.add_subplot(2,4,i)
-            plt.imshow(sample.mask().squeeze()[...,1], cmap='terrain')
+            mask = sample.multichannelchipmask()
+            mask = infer.weave_pred(mask)
+            plt.imshow(mask)
             plt.title("target mask")
             i += 1
 
             fig.add_subplot(2,4,i)
-            pred = model.predict(np.expand_dims(sample.image(), axis=0))
-            plt.imshow(infer.convert_prediction(pred))
+            pred = model.predict(np.array(sample.chips()))
+            plt.imshow(infer.weave_pred(pred))
             plt.title("Prediction")
             i += 1
-
             #fig.add_subplot(2,5,i)
             #plt.imshow(lossvalue.numpy().squeeze())
             #plt.title("Loss")

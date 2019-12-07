@@ -21,16 +21,19 @@ def convert_prediction(pred, argmax=True):
     """
     Turn a model's prediction output into a grayscale segmentation mask.
     """
-    #import pdb; pdb.set_trace()
-    try:
-        x = pred.squeeze().reshape(S.MASKSHAPE)
-    except ValueError:
-        logger.warning("error reshaping mask, falling back to depth 2)")
-        x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [2])
+    x = pred.squeeze().reshape(S.MASKSHAPE)
     if argmax is True:
         return np.argmax(x, axis=2)
     else:
         return x[...,0:3], x[...,3:]
+
+
+def weave_pred(pred):
+    img = []
+    for p in pred:
+        x = convert_prediction(p)
+        img.append(x)
+    return flow.Target.weave(img)
 
 
 def compress_channels_old(mask:np.ndarray):

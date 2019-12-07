@@ -111,10 +111,10 @@ def build_model(architecture=S.ARCHITECTURE, train=False):
 def main(restore: ("Restore from checkpoint", "flag", "r"),
          architecture: ("xception or mobilenetv2", "option", "a")=S.ARCHITECTURE,
          save_path: ("Save path", "option", "s")=S.MODELSTRING,
-         optimizer=tf.keras.optimizers.Adam(),#(lr=0.0001, epsilon=0.9),
+         optimizer=tf.keras.optimizers.Adam(lr=0.0001),
          loss='categorical_crossentropy',
-         metrics=['binary_accuracy', 'categorical_accuracy', 'mae',
-                  'binary_crossentropy', 'categorical_crossentropy'],
+         metrics=['categorical_accuracy', 'mae',
+                  score.iou_score, score.tensor_f1_score],
          verbose=1,
          epochs=100):
     """
@@ -127,7 +127,6 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
     if restore:
         load_weights(model, S.MODELSTRING)
 
-#    sm.utils.set_trainable(model, recompile=False)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE, transform=0.3, shuffle=True)
@@ -143,7 +142,7 @@ def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_s
         model.fit(train_seq, validation_data=val_seq, epochs=epochs,
                             verbose=verbose, callbacks=callbacks,
                             validation_steps=100, shuffle=False,
-                            use_multiprocessing=True,
+                            use_multiprocessing=False,
                             max_queue_size=10)
     except KeyboardInterrupt:
             save_model(model, "tmp.hdf5", pause=0)

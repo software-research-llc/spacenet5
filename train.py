@@ -130,28 +130,21 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
 #    sm.utils.set_trainable(model, recompile=False)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    logger.info("Generating dataflows.")
-    if os.path.exists("trainingsamples.pickle"):
-        train_seq = flow.Dataflow("trainingsamples.pickle")
-    else:
-        train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE, transform=0.3, shuffle=True)
-    if os.path.exists("validationsamples.pickle"):
-        val_seq = flow.Dataflow("validationsamples.pickle")
-    else:
-        val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE)
+    train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE, transform=0.3, shuffle=True)
+    val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE)
 
     logger.info("Training.")
-    train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
+    train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
     save_model(model, save_path)
 
 
-def train_step(model, train_seq, verbose, epochs, callbacks, save_path, val_seq):
+def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq):
     try:
         model.fit(train_seq, validation_data=val_seq, epochs=epochs,
                             verbose=verbose, callbacks=callbacks,
                             validation_steps=100, shuffle=False,
                             use_multiprocessing=True,
-                            max_queue_size=10, steps_per_epoch=16502 * 16)
+                            max_queue_size=10)
     except KeyboardInterrupt:
             save_model(model, "tmp.hdf5", pause=0)
             save_model(model, save_path, pause=1)

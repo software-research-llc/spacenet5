@@ -156,11 +156,17 @@ class Dataflow(tf.keras.utils.Sequence):
                 pre = preprocess_input(pre)
 
             x = sample.chips(pre)
-            y = sample.chips(premask)
+            maskchips = sample.chips(premask)
+            #import pdb; pdb.set_trace()
+            for i in range(len(maskchips)):
+                chip = np.array(maskchips[i]).astype(np.uint8).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1],
+                                                                       S.N_CLASSES)
+                y.append(chip)
+            #y = sample.chips(premask)
             #x.append(pre)
             #y.append(premask)
 
-        return np.array(x), np.array(y).astype(np.uint8).reshape([-1, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
+        return np.array(x), np.array(y)#np.array(y).astype(np.uint8).reshape([-1, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
 
     @staticmethod
     def from_pickle(picklefile:str=S.PICKLED_TRAINSET):
@@ -244,7 +250,6 @@ class Building:
         return round(x), round(y)
 
 
-
 class Target:
     """Target objects provide filenames, metadata, input images, and masks for training.
        One target per input image (i.e. two targets per pre-disaster, post-disaster set)."""
@@ -303,12 +308,12 @@ class Target:
         """Get the Target's mask for supervised training of the model"""
         # Each class gets one channel, but because fillPoly() only handles up to 4 channels,
         # we split the return 6-D image in to two parts
-        chan0 = np.ones(S.MASKSHAPE[:2], dtype=np.uint8)
-        chan1 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
-        chan2 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
-        chan3 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
-        chan4 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
-        chan5 = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
+        chan0 = np.ones(S.SAMPLESHAPE[:2], dtype=np.uint8)
+        chan1 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
+        chan2 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
+        chan3 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
+        chan4 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
+        chan5 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
 
         # Repeat chan1 because it's the background channel, and we want to zero-out the
         # pixels at those coordinates while painting with fillPoly()
@@ -406,7 +411,7 @@ class Target:
         target.metadata = dict()
         return target
 
-    def chips(self, image=None, step=256, max_x=S.MASKSHAPE[0], max_y=S.MASKSHAPE[1]):
+    def chips(self, image=None, step=256, max_x=S.SAMPLESHAPE[0], max_y=S.SAMPLESHAPE[1]):
         ret = []
         if image is None:
             image = self.image()

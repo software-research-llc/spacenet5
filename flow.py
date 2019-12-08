@@ -122,7 +122,7 @@ class Dataflow(tf.keras.utils.Sequence):
         length = int(np.ceil(len(self.samples) / float(self.batch_size)))
         return length
 
-    def __getitem__(self, idx, preprocess=True):
+    def __getitem__(self, idx, preprocess=False):
         """
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
@@ -141,7 +141,7 @@ class Dataflow(tf.keras.utils.Sequence):
             if isinstance(self.transform, float) and random.random() < float(self.transform):
                 # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
                 rotate_dict = { 'theta': 90 * random.randint(1, 3),}
-                shear_dict = {  'shear': 0.1 * random.randint(1, 3),}
+                shear_dict = {  'shear': 0.1 * random.randint(1, 2),}
 
                 # rotate and shear the sample, but only rotate the mask
                 pre = self.image_datagen.apply_transform(pre, rotate_dict)
@@ -151,7 +151,7 @@ class Dataflow(tf.keras.utils.Sequence):
             elif isinstance(self.transform, float) and random.random() < float(self.transform):
                 # apply a Gaussian blur to the sample, not the mask
                 #random.randint(3,7)
-                ksize = 5
+                ksize = 3
                 pre = apply_gaussian_blur(pre, kernel=(ksize,ksize))
                 #premask = apply_gaussian_blur(premask, kernel=(ksize,ksize))
 

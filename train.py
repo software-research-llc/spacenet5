@@ -83,9 +83,9 @@ def load_weights(model, save_path=S.MODELSTRING):
 def build_model(architecture=S.ARCHITECTURE, train=False):
     inp = tf.keras.layers.Input(S.INPUTSHAPE)
 #    x = tf.image.resize(inp, size=(512,512), method=tf.image.ResizeMethod.BILINEAR)
-    x = tf.keras.layers.GaussianNoise(0.0003)(inp)
-    xception = deeplabmodel.Deeplabv3(input_tensor=x,#input_shape=INPUTSHAPE,
-                                  weights='cityscapes',
+    #x = tf.keras.layers.GaussianNoise(0.005, name='gaussian_noise')(inp)
+    xception = deeplabmodel.Deeplabv3(input_tensor=inp,#input_shape=INPUTSHAPE,
+                                  weights='pascal_voc',
                                   backbone=architecture,
                                   classes=S.N_CLASSES,
                                   OS=16 if train is True else 8,
@@ -111,7 +111,7 @@ def build_model(architecture=S.ARCHITECTURE, train=False):
 def main(restore: ("Restore from checkpoint", "flag", "r"),
          architecture: ("xception or mobilenetv2", "option", "a")=S.ARCHITECTURE,
          save_path: ("Save path", "option", "s")=S.MODELSTRING,
-         optimizer=tf.keras.optimizers.Adam(lr=0.0001),
+         optimizer=tf.keras.optimizers.RMSprop(),#tf.keras.optimizers.Adam(lr=0.0001),
          loss='categorical_crossentropy',
          metrics=['categorical_accuracy', 'mae',
                   score.iou_score, score.tensor_f1_score],
@@ -129,7 +129,7 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE, transform=0.3, shuffle=True)
+    train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE, transform=False, shuffle=True)
     val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE)
 
     logger.info("Training.")

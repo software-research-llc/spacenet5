@@ -102,14 +102,14 @@ class Dataflow(tf.keras.utils.Sequence):
             self.samples = []
             for (pre,post) in files:
                 self.samples.append(Target.from_json(pre, df=self))
-                self.samples.append(Target.from_json(post, df=self))
+                #self.samples.append(Target.from_json(post, df=self))
             #self.samples = [(Target.from_json(pre, self.transform, df=self), Target.from_json(post, self.transform, df=self)) for (pre,post) in files]
         elif ".png" in files[0][0].lower():
             logger.info("Creating Targets from a list of PNG files")
             self.samples = []
             for (pre,post) in files:
                 self.samples.append(Target.from_png(pre, df=self))
-                self.samples.append(Target.from_png(post, df=self))
+                #self.samples.append(Target.from_png(post, df=self))
                 #self.samples = [(Target.from_png(pre, df=self), Target.from_png(post, df=self)) for (pre,post) in files]
         else:
             raise RuntimeError("Files should be in PNG, JSON, or pickle format")
@@ -310,11 +310,12 @@ class Target:
         # we split the return 6-D image in to two parts
         chan0 = np.ones(S.SAMPLESHAPE[:2], dtype=np.uint8)
         chan1 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
+        """
         chan2 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
         chan3 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
         chan4 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
         chan5 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
-
+        """
         # Repeat chan1 because it's the background channel, and we want to zero-out the
         # pixels at those coordinates while painting with fillPoly()
         #img1 = np.dstack([chan1, chan2, chan3])
@@ -340,7 +341,7 @@ class Target:
                 else:
                     raise Exception("unrecognized color")
                 cv2.fillPoly(chan0, np.array([coords]), 0)
-        img = np.dstack([chan0, chan1, chan2, chan3, chan4, chan5])
+        img = np.dstack([chan0, chan1])#, chan2, chan3, chan4, chan5])
         return img#.reshape((S.MASKSHAPE[0] * S.MASKSHAPE[1], -1))
         """
             if b.color() in [3,4,5]:

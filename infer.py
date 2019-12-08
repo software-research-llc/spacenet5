@@ -36,44 +36,6 @@ def weave_pred(pred):
     return flow.Target.weave(img)
 
 
-def compress_channels_old(mask:np.ndarray):
-    """
-    Compress an N-dimensional image, i.e. WxHxN, where N is the number of channels.
-
-    Returns a grayscale (single channel) image with each pixel value being an integer
-    that represents the class of the original input image at that pixel location.
-    """
-    assert mask.shape == tuple(S.MASKSHAPE), f"expected shape {MASKSHAPE}, got {mask.shape}"
-    cutoff = 0.50
-    cmpr = np.zeros(S.TARGETSHAPE, dtype=np.uint8)
-
-    for i in range(1, mask.shape[-1]):
-        cmpr[mask[:,:,i] > cutoff] = i
-
-    return cmpr.squeeze()
-
-
-def compress_channels(img):
-    assert img.shape == [1,S.MASKSHAPE[0],S.MASKSHAPE[1],S.N_CLASSES], str(img.shape)
-    return np.argmax(img, axis=2)
-
-
-def decompress_channels(img:np.ndarray):
-    """
-    Decompress an image that was compressed by compress_channels().
-
-    Returns one grayscale image per object class (see settings.py).
-
-    Note: use np.stack(decompress_channels(img), axis=2) to get an N-channel image.
-    """
-    assert img.shape[:2] == tuple(S.TARGETSHAPE[:2]), f"expected shape {TARGETSHAPE[:2]}, got {img.shape}"
-    chans = [np.zeros(S.TARGETSHAPE[:2], dtype=np.uint8) for _ in CLASSES]
-
-    for i, chan in enumerate(chans):
-        chan[img == i] = 1
-
-    return chans
-
 
 def infer(model, pre:np.ndarray, post:np.ndarray=None, compress:bool=True):
     """

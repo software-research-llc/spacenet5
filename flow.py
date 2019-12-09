@@ -87,32 +87,29 @@ class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
     """
-    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True):
+    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False):
         self.transform = transform
         self.shuffle = shuffle
         self.batch_size = batch_size
         self.image_datagen = ImageDataGenerator()
+        self.samples = []
 
-        if ".pickle" in files:
-            with open(files, "rb") as f:
-                logger.info("Creating Targets from pickle file")
-                self.samples = pickle.load(f)
-        elif ".json" in files[0][0].lower():
+        if ".json" in files[0][0].lower():
             logger.info("Creating Targets from JSON format files")
-            self.samples = []
-            for (pre,post) in files:
-                self.samples.append(Target.from_json(pre, df=self))
-                #self.samples.append(Target.from_json(post, df=self))
-            #self.samples = [(Target.from_json(pre, self.transform, df=self), Target.from_json(post, self.transform, df=self)) for (pre,post) in files]
+            method = Target.from_json
         elif ".png" in files[0][0].lower():
             logger.info("Creating Targets from a list of PNG files")
-            self.samples = []
-            for (pre,post) in files:
-                self.samples.append(Target.from_png(pre, df=self))
-                #self.samples.append(Target.from_png(post, df=self))
-                #self.samples = [(Target.from_png(pre, df=self), Target.from_png(post, df=self)) for (pre,post) in files]
+            method = Target.from_png
         else:
-            raise RuntimeError("Files should be in PNG, JSON, or pickle format")
+            raise RuntimeError("Files should be in PNG or JSON format")
+
+        for (pre,post) in files:
+            t_pre = method(pre, df=self)
+            t_post = method(post, df=self)
+            if buildings_only is True and len(t_pre.buildings) > 0:
+                self.samples.append((t_pre, t_post))
+            elif not buildings_only:
+                self.samples.append((t_pre, t_post))
 
         if shuffle:
             random.shuffle(self.samples)
@@ -122,51 +119,50 @@ class Dataflow(tf.keras.utils.Sequence):
         length = int(np.ceil(len(self.samples) / float(self.batch_size)))
         return length
 
-    def __getitem__(self, idx, preprocess=False):
+    def __getitem__(self, idx, preprocess=True):
         """
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
         """
         x = []
         y = []
-#        for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
-        for sample in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
-            premask = sample.multichannelmask()
-            pre = sample.image()
+#        for sample in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
+        for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
+            premask = pre.multichannelmask()
+            postmask = post.multichannelmask()
+
+            preimg = pre.image()
+            postimg = post.image()
 
             if preprocess is True:
-                pre = preprocess_input(pre)
+                preimg = preprocess_input(preimg)
+                postimg = preprocess_input(postimg)
 
             # we want medium deformations, not severe deformations
             if isinstance(self.transform, float) and random.random() < float(self.transform):
                 # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
                 rotate_dict = { 'theta': 90 * random.randint(1, 3),}
-                shear_dict = {  'shear': 0.1 * random.randint(1, 2),}
 
                 # rotate and shear the sample, but only rotate the mask
-                pre = self.image_datagen.apply_transform(pre, rotate_dict)
-                pre = self.image_datagen.apply_transform(pre, shear_dict)
+                preimg = self.image_datagen.apply_transform(preimg, rotate_dict)
+                postimg = self.image_datagen.apply_transform(postimg, rotate_dict)
+
                 premask = self.image_datagen.apply_transform(premask, rotate_dict)
+                postmask = self.image_datagen.apply_transform(postmask, rotate_dict)
 
             elif isinstance(self.transform, float) and random.random() < float(self.transform):
                 # apply a Gaussian blur to the sample, not the mask
-                #random.randint(3,7)
                 ksize = 3
-                pre = apply_gaussian_blur(pre, kernel=(ksize,ksize))
-                #premask = apply_gaussian_blur(premask, kernel=(ksize,ksize))
+                preimg = apply_gaussian_blur(preimg, kernel=(ksize,ksize))
+                postimg = apply_gaussian_blur(postimg, kernel=(ksize,ksize))
 
-            x = sample.chips(pre)
-            maskchips = sample.chips(premask)
-            #import pdb; pdb.set_trace()
-            for i in range(len(maskchips)):
-                chip = np.array(maskchips[i]).astype(np.uint8).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1],
-                                                                       S.N_CLASSES)
-                y.append(chip)
-            #y = sample.chips(premask)
-            #x.append(pre)
-            #y.append(premask)
+            x_pre = np.array(pre.chips(preimg))
+            x_post = np.array(post.chips(postimg))
 
-        return np.array(x), np.array(y)#np.array(y).astype(np.uint8).reshape([-1, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
+            y_pre = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in pre.chips(premask)])
+            y_post = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in post.chips(postmask)])
+
+        return (x_pre, x_post), y_post
 
     @staticmethod
     def from_pickle(picklefile:str=S.PICKLED_TRAINSET):
@@ -306,20 +302,13 @@ class Target:
 
     def multichannelmask(self, reshape=False):
         """Get the Target's mask for supervised training of the model"""
-        # Each class gets one channel, but because fillPoly() only handles up to 4 channels,
-        # we split the return 6-D image in to two parts
+        # Each class gets one channel
         chan0 = np.ones(S.SAMPLESHAPE[:2], dtype=np.uint8)
         chan1 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
-        """
         chan2 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
         chan3 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
         chan4 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
         chan5 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
-        """
-        # Repeat chan1 because it's the background channel, and we want to zero-out the
-        # pixels at those coordinates while painting with fillPoly()
-        #img1 = np.dstack([chan1, chan2, chan3])
-        #img2 = np.dstack([chan1, chan4, chan5, chan6])
 
         # For each building, set pixels according to (x,y) coordinates; they end up
         # being a one-hot-encoded vector corresponding to class for each (x,y) location
@@ -341,7 +330,7 @@ class Target:
                 else:
                     raise Exception("unrecognized color")
                 cv2.fillPoly(chan0, np.array([coords]), 0)
-        img = np.dstack([chan0, chan1])#, chan2, chan3, chan4, chan5])
+        img = np.dstack([chan0, chan1, chan2, chan3, chan4, chan5])
         return img#.reshape((S.MASKSHAPE[0] * S.MASKSHAPE[1], -1))
         """
             if b.color() in [3,4,5]:

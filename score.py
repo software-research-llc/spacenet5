@@ -28,7 +28,7 @@ def f1_score(y_true, y_pred):
 
 @tf.function
 def remove_background(y_pred):
-    background = tf.constant([1,0] * S.MASKSHAPE[0] * S.MASKSHAPE[1] * 16)
+    background = tf.constant([1,0,0,0,0,0] * S.MASKSHAPE[0] * S.MASKSHAPE[1] * 16)
     bg = tf.reshape(background, [-1, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
 
     pr = tf.cast(K.round(y_pred), tf.int32)
@@ -38,9 +38,8 @@ def remove_background(y_pred):
 
 @tf.function
 def iou_score(y_true, y_pred):
-    gt = tf.cast(y_true, tf.bool)
-    pr = remove_background(y_pred)
-    pr = tf.cast(pr, tf.bool)
+    gt = tf.cast(remove_background(y_true), tf.bool)
+    pr = tf.cast(remove_background(y_pred), tf.bool)
 
     intersection = tf.cast(tf.logical_and(gt, pr), tf.int32)
     intersection = tf.reduce_sum(intersection)
@@ -48,29 +47,29 @@ def iou_score(y_true, y_pred):
     union = tf.reduce_sum(union)
 
     if union > 0:
-        score = tf.reduce_sum(intersection) / union
+        score = intersection / union
     else:
-        score = tf.constant(0.5, dtype=tf.float64)
+        score = tf.constant(0.0, dtype=tf.float64)
     return score
 
 
 @tf.function
 def pct_correct(y_true, y_pred):
-    gt = tf.cast(y_true, tf.bool)
-    pr = remove_background(y_pred)
+    gt = tf.cast(remove_background(y_true), tf.bool)
+    pr = tf.cast(remove_background(y_pred), tf.bool)
 
     intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))
     total = tf.reduce_sum(tf.cast(gt, tf.int32))
     if total > 0:
         return intersection / total
     else:
-        return tf.constant(0.5, dtype=tf.float64)
+        return tf.constant(0.0, dtype=tf.float64)
 
 
 @tf.function
 def num_correct(y_true, y_pred):
     gt = tf.cast(y_true, tf.bool)
-    pr = remove_background(y_pred)
+    pr = tf.cast(remove_background(y_pred), tf.bool)
 
     intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))
     return intersection
@@ -78,10 +77,8 @@ def num_correct(y_true, y_pred):
 
 @tf.function
 def tensor_f1_score(y_true, y_pred):
-    gt = tf.cast(y_true, tf.bool)
-    pr = remove_background(y_pred)
-
-    pr = tf.cast(pr, tf.bool)
+    gt = tf.cast(remove_background(y_true), tf.bool)
+    pr = tf.cast(remove_background(y_pred), tf.bool)
 
     tp = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int64))
     fp = tf.reduce_sum(tf.clip_by_value(tf.cast(pr, tf.int64) - tf.cast(gt, tf.int64), 0, 1))
@@ -93,9 +90,9 @@ def tensor_f1_score(y_true, y_pred):
         if (prec + rec) > 0:
             score = 2 * tf.math.multiply_no_nan(prec, rec) / (prec + rec)
         else:
-            score = tf.constant(0.5, tf.float64)
+            score = tf.constant(0.0, tf.float64)
     else:
-        score = tf.constant(0.5, tf.float64)
+        score = tf.constant(0.0, tf.float64)
 
     return score
 

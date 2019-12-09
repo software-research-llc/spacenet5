@@ -7,13 +7,13 @@ BATCH_SIZE = 1
 SPLITFACTOR = 0.9
 
 # The architecture and weights to use for feature extraction (encoding)
-ARCHITECTURE = "xception"
+ARCHITECTURE = "mobilenetv2"
 MODELSTRING = "deeplab-%s.hdf5" % ARCHITECTURE
 
 # Each pixel of the net outputs (the masks) is an index in to this list
 #           0        1             2                3              4              5
 CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
-N_CLASSES = 2#len(CLASSES)
+N_CLASSES = len(CLASSES)
 
 # Shape of the training input images
 INPUTSHAPE = [256,256,3]

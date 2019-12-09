@@ -81,31 +81,26 @@ def load_weights(model, save_path=S.MODELSTRING):
 
 
 def build_model(architecture=S.ARCHITECTURE, train=False):
-    inp = tf.keras.layers.Input(S.INPUTSHAPE)
-#    x = tf.image.resize(inp, size=(512,512), method=tf.image.ResizeMethod.BILINEAR)
-    #x = tf.keras.layers.GaussianNoise(0.005, name='gaussian_noise')(inp)
-    xception = deeplabmodel.Deeplabv3(input_tensor=inp,#input_shape=INPUTSHAPE,
+    deeplab = deeplabmodel.Deeplabv3(input_shape=S.INPUTSHAPE,
                                   weights='pascal_voc',
                                   backbone=architecture,
                                   classes=S.N_CLASSES,
-                                  OS=16 if train is True else 8,
-#                                  activation='softmax',
-#                                  alpha=1.0,
-#                                  OS=8)
-                                 )
+                                  OS=16 if train is True else 8)
 
-    x = xception.get_layer('custom_logits_semantic').output
-    x = tf.image.resize(x, size=S.INPUTSHAPE[:2],
-                        #preserve_aspect_ratio=True,
-                        method=tf.image.ResizeMethod.BILINEAR,
-                        #name="resize_xception_logits",
-                        #align_corners=True
-                        )
+    decoder = keras.models.Model(inputs=deeplab.inputs, outputs=[deeplab.get_layer('custom_logits_semantic').output])
 
-    #x = xception.output
+    inp_pre = tf.keras.layers.Input(S.INPUTSHAPE)
+    inp_post = tf.keras.layers.Input(S.INPUTSHAPE)
+
+    x = decoder(inp_pre)
+    y = decoder(inp_post)
+
+    x = tf.keras.layers.Add()([x,y])
+    x = tf.image.resize(x, size=S.INPUTSHAPE[:2], method=tf.image.ResizeMethod.BILINEAR)
     x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
     x = tf.keras.layers.Activation('softmax')(x)
-    return keras.models.Model(inputs=[inp], outputs=[x])
+
+    return tf.keras.models.Model(inputs=[inp_pre, inp_post], outputs=[x])
 
 
 def main(restore: ("Restore from checkpoint", "flag", "r"),
@@ -114,9 +109,10 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
          optimizer=tf.keras.optimizers.RMSprop(),#tf.keras.optimizers.Adam(lr=0.0001),
          loss='categorical_crossentropy',
          metrics=['categorical_accuracy', 'mae',
-                  score.iou_score, score.tensor_f1_score],
+                  score.iou_score, score.num_correct, score.pct_correct,
+                  score.tensor_f1_score],
          verbose=1,
-         epochs=100):
+         epochs=15):
     """
     Train the model.
     """
@@ -129,7 +125,10 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE, transform=False, shuffle=True)
+    train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE,
+                              transform=0.3,
+                              shuffle=True,
+                              buildings_only=True)
     val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE)
 
     logger.info("Training.")
@@ -141,7 +140,7 @@ def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_s
     try:
         model.fit(train_seq, validation_data=val_seq, epochs=epochs,
                             verbose=verbose, callbacks=callbacks,
-                            validation_steps=100, shuffle=False,
+                            validation_steps=len(val_seq), shuffle=False,
                             use_multiprocessing=False,
                             max_queue_size=10)
     except KeyboardInterrupt:

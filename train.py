@@ -96,7 +96,7 @@ def build_model(architecture=S.ARCHITECTURE, train=False):
     y = decoder(inp_post)
 
     x = tf.keras.layers.Add()([x,y])
-    x = tf.image.resize(x, size=S.INPUTSHAPE[:2], method=tf.image.ResizeMethod.BILINEAR)
+    x = tf.compat.v1.image.resize(x, size=S.INPUTSHAPE[:2], method=tf.image.ResizeMethod.BILINEAR, align_corners=True)
     x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
     x = tf.keras.layers.Activation('softmax')(x)
 

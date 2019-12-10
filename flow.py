@@ -119,7 +119,7 @@ class Dataflow(tf.keras.utils.Sequence):
         length = int(np.ceil(len(self.samples) / float(self.batch_size)))
         return length
 
-    def __getitem__(self, idx, preprocess=True):
+    def __getitem__(self, idx, preprocess=False):
         """
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
@@ -427,7 +427,7 @@ if __name__ == '__main__':
     train.load_weights(model)
     while True:
         idx = random.randint(0,len(df) - 1)
-        xy= df.samples[idx]
+        xy = df.samples[idx]
         i = 1
         fig = plt.figure()
         for sample in [xy]:

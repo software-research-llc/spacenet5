@@ -371,7 +371,7 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
 
     # Image Feature branch
     shape_before = tf.shape(x)
-    b4 = GlobalAveragePooling2D()(x)
+    b4 = GlobalAveragePooling2D(name="extracted_feature_global_average_pooling")(x)
     # from (b_size, channels)->(b_size, 1, 1, channels)
     b4 = Lambda(lambda x: K.expand_dims(x, 1))(b4)
     b4 = Lambda(lambda x: K.expand_dims(x, 1))(b4)
@@ -401,9 +401,9 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
                         rate=atrous_rates[2], depth_activation=True, epsilon=1e-5)
 
         # concatenate ASPP branches & project
-        x = Concatenate()([b4, b0, b1, b2, b3])
+        x = Concatenate(name="post_aspp")([b4, b0, b1, b2, b3])
     else:
-        x = Concatenate()([b4, b0])
+        x = Concatenate(name="post_aspp")([b4, b0])
 
     x = Conv2D(256, (1, 1), padding='same',
                use_bias=False, name='concat_projection')(x)

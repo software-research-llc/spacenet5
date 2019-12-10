@@ -36,6 +36,9 @@ def weave_pred(pred):
     return flow.Target.weave(img)
 
 
+def weave(chips):
+    return flow.Target.weave(chips.squeeze())
+
 
 def infer(model, pre:np.ndarray, post:np.ndarray=None, compress:bool=True):
     """

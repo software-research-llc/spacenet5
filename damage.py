@@ -48,7 +48,7 @@ def extract_patches(pre, post, mask):
     rectangles = infer.bounding_rectangles(mask)
     for rect in rectangles:
         x,y = rect
-        if x.start+x.stop <= 1 or y.start+y.stop <= 1:
+        if x.stop-x.start <= 0 or y.stop-y.start <= 0:
             continue
         prebox = pre[x.start:x.stop,y.start:y.stop]
         postbox = post[x.start:x.stop,y.start:y.stop]

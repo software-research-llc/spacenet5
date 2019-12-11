@@ -24,17 +24,25 @@ def f1_score(y_true, y_pred):
         return sklearn.metrics.f1_score(y_true.ravel().astype(int),
                                         y_pred.ravel().astype(int),
                                         average='micro',
-                                        labels=[1,2,3,4,5])
+                                        labels=[i for i in range(1,S.N_CLASSES)])
+
+
+@tf.function
+def damage_f1_score(f1_scores:list):
+    f1 = len(f1_scores) / sum([1 / (x + 1e-5) for x in f1_scores])
+    return f1
+
 
 @tf.function
 def remove_background(y_pred):
-    background = tf.constant([1,0,0,0,0,0] * S.MASKSHAPE[0] * S.MASKSHAPE[1] * 16)
+    background = tf.constant(([1] + [0] * (S.MASKSHAPE[-1] - 1) * S.MASKSHAPE[0] * S.MASKSHAPE[1] * 16)
     bg = tf.reshape(background, [-1, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
 
     pr = tf.cast(K.round(y_pred), tf.int32)
     pr = tf.clip_by_value(pr - bg, 0, 1)
 
     return pr
+
 
 @tf.function
 def iou_score(y_true, y_pred):
@@ -68,7 +76,7 @@ def pct_correct(y_true, y_pred):
 
 @tf.function
 def num_correct(y_true, y_pred):
-    gt = tf.cast(y_true, tf.bool)
+    gt = tf.cast(remove_background(y_true), tf.bool)
     pr = tf.cast(remove_background(y_pred), tf.bool)
 
     intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))

@@ -92,10 +92,11 @@ def build_model(architecture=S.ARCHITECTURE, train=False):
     inp_pre = tf.keras.layers.Input(S.INPUTSHAPE)
     inp_post = tf.keras.layers.Input(S.INPUTSHAPE)
 
-    x = decoder(inp_pre)
-    y = decoder(inp_post)
+#    x = decoder(inp_pre)
+#    y = decoder(inp_post)
 
-    x = tf.keras.layers.Add()([x,y])
+    x = tf.keras.layers.Add()([inp_pre, inp_post])
+    x = decoder(x)
     x = tf.compat.v1.image.resize(x, size=S.INPUTSHAPE[:2], method=tf.image.ResizeMethod.BILINEAR, align_corners=True)
     x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
     x = tf.keras.layers.Activation('softmax')(x)
@@ -104,15 +105,15 @@ def build_model(architecture=S.ARCHITECTURE, train=False):
 
 
 def main(restore: ("Restore from checkpoint", "flag", "r"),
-         architecture: ("xception or mobilenetv2", "option", "a")=S.ARCHITECTURE,
-         save_path: ("Save path", "option", "s")=S.MODELSTRING,
+         architecture: ("xception or mobilenetv2", "option", "a", str)=S.ARCHITECTURE,
+         save_path: ("Save path", "option", "s", str)=S.MODELSTRING,
+         verbose: ("Keras verbosity level", "option", "v", int)=1,
+         epochs: ("Number of epochs", "option", "e", int)=25,
          optimizer=tf.keras.optimizers.RMSprop(),#tf.keras.optimizers.Adam(lr=0.0001),
          loss='categorical_crossentropy',
          metrics=['categorical_accuracy', 'mae',
                   score.iou_score, score.num_correct, score.pct_correct,
-                  score.tensor_f1_score],
-         verbose=1,
-         epochs=15):
+                  score.tensor_f1_score])
     """
     Train the model.
     """

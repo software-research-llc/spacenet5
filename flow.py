@@ -119,7 +119,7 @@ class Dataflow(tf.keras.utils.Sequence):
         length = int(np.ceil(len(self.samples) / float(self.batch_size)))
         return length
 
-    def __getitem__(self, idx, preprocess=True):
+    def __getitem__(self, idx, preprocess=False):
         """
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
@@ -150,14 +150,14 @@ class Dataflow(tf.keras.utils.Sequence):
                 premask = self.image_datagen.apply_transform(premask, rotate_dict)
                 postmask = self.image_datagen.apply_transform(postmask, rotate_dict)
 
-            elif isinstance(self.transform, float) and random.random() < float(self.transform):
+            elif False and isinstance(self.transform, float) and random.random() < float(self.transform):
                 # apply a Gaussian blur to the sample, not the mask
                 ksize = 3
                 preimg = apply_gaussian_blur(preimg, kernel=(ksize,ksize))
                 postimg = apply_gaussian_blur(postimg, kernel=(ksize,ksize))
 
-            x_pre = np.array(pre.chips(preimg))
-            x_post = np.array(post.chips(postimg))
+            x_pre = np.array(pre.chips(preimg)).astype(np.int32)
+            x_post = np.array(post.chips(postimg)).astype(np.int32)
 
             y_pre = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in pre.chips(premask)])
             y_post = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in post.chips(postmask)])
@@ -303,52 +303,24 @@ class Target:
     def multichannelmask(self, reshape=False):
         """Get the Target's mask for supervised training of the model"""
         # Each class gets one channel
-        chan0 = np.ones(S.SAMPLESHAPE[:2], dtype=np.uint8)
-        chan1 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
-        chan2 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
-        chan3 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
-        chan4 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
-        chan5 = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
+        # Fill background channel with 1s
+        chans = [np.ones(S.SAMPLESHAPE[:2], dtype=np.uint8)]
+        for i in range(1, len(S.N_CLASSES)):
+            chan = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
+            chans.append(chan)
 
         # For each building, set pixels according to (x,y) coordinates; they end up
         # being a one-hot-encoded vector corresponding to class for each (x,y) location
         for b in self.buildings:
             coords = b.coords()
             if len(coords) > 0:
-                if b.color() == 0:
-                    raise Exception("color should not be zero")
-                elif b.color() == 1:
-                    cv2.fillPoly(chan1, np.array([coords]), 1)
-                elif b.color() == 2:
-                    cv2.fillPoly(chan2, np.array([coords]), 1)
-                elif b.color() == 3:
-                    cv2.fillPoly(chan3, np.array([coords]), 1)
-                elif b.color() == 4:
-                    cv2.fillPoly(chan4, np.array([coords]), 1)
-                elif b.color() == 5:
-                    cv2.fillPoly(chan5, np.array([coords]), 1)
-                else:
-                    raise Exception("unrecognized color")
-                cv2.fillPoly(chan0, np.array([coords]), 0)
-        img = np.dstack([chan0, chan1, chan2, chan3, chan4, chan5])
+                # Set the pixels at coordinates in this class' channel to 1
+                cv2.fillPoly(chans[b.color()], np.array([coords]), 1)
+                # Zero out the background pixels for the same coordinates
+                cv2.fillPoly(chans[0], np.array([coords]), 0)
+        img = np.dstack(chans)
         return img#.reshape((S.MASKSHAPE[0] * S.MASKSHAPE[1], -1))
-        """
-            if b.color() in [3,4,5]:
-                color = [0] * 4
-                color[b.color()-2] = 1
-                if len(coords) > 0:
-                    cv2.fillPoly(img2, np.array([coords]), color)
-            else:
-                color = [0] * 3
-                color[b.color()] = 1
-                if len(coords) > 0:
-                    cv2.fillPoly(img1, np.array([coords]), color)
-        img = np.dstack([img1, img2])
-        if reshape:
-            return img.reshape((S.MASKSHAPE[0] * S.MASKSHAPE[1], -1))
-        else:
-            return img
-        """
+
     def rcnn_image(self):
         pre = self.image()
         if isinstance(self.transform, float) and random.random() < float(self.transform):
@@ -402,6 +374,7 @@ class Target:
         return target
 
     def chips(self, image=None, step=256, max_x=S.SAMPLESHAPE[0], max_y=S.SAMPLESHAPE[1]):
+        """Turn an image into 1/16th-sized chips"""
         ret = []
         if image is None:
             image = self.image()
@@ -412,6 +385,7 @@ class Target:
 
     @staticmethod
     def weave(chips):
+        """Stitch 1/16th-sized chips back together into the full size image"""
         return np.vstack([np.hstack(chips[:4]), np.hstack(chips[4:8]), np.hstack(chips[8:12]), np.hstack(chips[12:])])
 
 

@@ -2,18 +2,19 @@ import os
 from inspect import getsourcefile
 
 
-BATCH_SIZE = 1
+# The architecture to use
+ARCHITECTURE = "xception"
+
 # Train/validation split proportion
 SPLITFACTOR = 0.9
-
-# The architecture and weights to use for feature extraction (encoding)
-ARCHITECTURE = "xception"
-MODELSTRING = "deeplab-%s.hdf5" % ARCHITECTURE
+BATCH_SIZE = 1
 
 # Each pixel of the net outputs (the masks) is an index in to this list
 #           0        1             2                3              4              5
 CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
 N_CLASSES = 2#len(CLASSES)
+
+MODELSTRING = "deeplab-%s-%d.hdf5" % (ARCHITECTURE, N_CLASSES)
 
 # Shape of the training input images
 INPUTSHAPE = [256,256,3]

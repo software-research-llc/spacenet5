@@ -160,9 +160,9 @@ class Dataflow(tf.keras.utils.Sequence):
             x_post = np.array(post.chips(postimg)).astype(np.int32)
 
             y_pre = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in pre.chips(premask)])
-            y_post = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in post.chips(postmask)])
+            y_post = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], 6) for chip in post.chips(postmask)])
 
-        return (x_pre, x_post), y_post
+        return (x_pre, x_post), y_pre
 
     @staticmethod
     def from_pickle(picklefile:str=S.PICKLED_TRAINSET):
@@ -300,12 +300,13 @@ class Target:
         mask = self.multichannelmask()
         return self.chips(image=mask)
 
-    def multichannelmask(self, reshape=False):
+    def multichannelmask(self):
         """Get the Target's mask for supervised training of the model"""
         # Each class gets one channel
         # Fill background channel with 1s
         chans = [np.ones(S.SAMPLESHAPE[:2], dtype=np.uint8)]
-        for i in range(1, len(S.N_CLASSES)):
+        top = 6 if "post" in self.img_name else S.N_CLASSES
+        for i in range(1, top):
             chan = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
             chans.append(chan)
 
@@ -319,7 +320,7 @@ class Target:
                 # Zero out the background pixels for the same coordinates
                 cv2.fillPoly(chans[0], np.array([coords]), 0)
         img = np.dstack(chans)
-        return img#.reshape((S.MASKSHAPE[0] * S.MASKSHAPE[1], -1))
+        return img
 
     def rcnn_image(self):
         pre = self.image()

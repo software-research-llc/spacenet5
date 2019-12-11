@@ -113,7 +113,7 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
          loss='categorical_crossentropy',
          metrics=['categorical_accuracy', 'mae',
                   score.iou_score, score.num_correct, score.pct_correct,
-                  score.tensor_f1_score])
+                  score.tensor_f1_score]):
     """
     Train the model.
     """

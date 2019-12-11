@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import plac
 import time
+import test
 
 
 def display_images(images, names=None):
@@ -30,6 +31,7 @@ def predict_and_show(df):
         pred = model.predict(x)
 
         pred = infer.weave_pred(pred)
+        pred = test.randomize_damage(pred)
         mask = infer.weave_pred(y)
         pre = infer.weave(x[0])
         post = infer.weave(x[1])

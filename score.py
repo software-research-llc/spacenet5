@@ -8,6 +8,7 @@ import tqdm
 import sklearn.metrics
 import logging
 import keras.backend as K
+import test
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,9 @@ def _f1_stats(tp, fp, fn):
 
 
 def f1_score(y_true, y_pred):
-        return sklearn.metrics.f1_score(y_true.ravel().astype(int),
-                                        y_pred.ravel().astype(int),
-                                        average='micro',
+        return sklearn.metrics.f1_score(y_true.ravel(),
+                                        y_pred.ravel(),
+                                        average='macro',
                                         labels=[i for i in range(1,S.N_CLASSES)])
 
 
@@ -35,7 +36,7 @@ def damage_f1_score(f1_scores:list):
 
 @tf.function
 def remove_background(y_pred):
-    background = tf.constant(([1] + [0] * (S.MASKSHAPE[-1] - 1) * S.MASKSHAPE[0] * S.MASKSHAPE[1] * 16)
+    background = tf.constant(([1] + [0] * (S.MASKSHAPE[-1] - 1)) * S.MASKSHAPE[0] * S.MASKSHAPE[1] * 16)
     bg = tf.reshape(background, [-1, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
 
     pr = tf.cast(K.round(y_pred), tf.int32)
@@ -119,6 +120,7 @@ if __name__ == '__main__':
     for x,y_ in pbar:
         pred = model.predict(x)#np.expand_dims(x[j], axis=0))
         y_pred = infer.weave_pred(pred)
+        y_pred = test.randomize_damage(y_pred)
         y_true = infer.weave_pred(y_)
         scores = f1_score(y_true, y_pred)#sklearn.metrics.f1_score(y_true.astype(int), y_pred.astype(int), average='macro')
         totals += scores

@@ -42,9 +42,12 @@ def weave(chips):
     return flow.Target.weave(chips)
 
 
-def bounding_rectangles(img):
-    struct = [[1,1,1],[1,1,1],[1,1,1]]
-    rects = label(img)#, structure=struct)
+def bounding_rectangles(img, diagonals=False):
+    if diagonals is True:
+        struct = [[1,1,1],[1,1,1],[1,1,1]]
+    else:
+        struct = None
+    rects = label(img, structure=struct)
     objs = find_objects(rects[0])
     return objs
 

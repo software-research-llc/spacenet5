@@ -16,6 +16,10 @@ N_CLASSES = 2#len(CLASSES)
 
 MODELSTRING = "deeplab-%s-%d.hdf5" % (ARCHITECTURE, N_CLASSES)
 
+# The maximum length of building patches for damage classification
+DAMAGE_MAX_X = 128
+DAMAGE_MAX_Y = 128
+
 # Shape of the training input images
 INPUTSHAPE = [256,256,3]
 MASKSHAPE = [256,256,N_CLASSES]

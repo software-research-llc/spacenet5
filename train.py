@@ -130,7 +130,8 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
                               transform=0.3,
                               shuffle=True,
                               buildings_only=True)
-    val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE)
+    val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE,
+                            buildings_only=True)
 
     logger.info("Training.")
     train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)

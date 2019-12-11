@@ -23,7 +23,7 @@ def convert_prediction(pred, argmax=True):
     """
     Turn a model's prediction output into a grayscale segmentation mask.
     """
-    x = pred.squeeze().reshape(S.MASKSHAPE)
+    x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [pred.shape[-1]])
     if argmax is True:
         return np.argmax(x, axis=2)
     else:
@@ -42,13 +42,13 @@ def weave(chips):
     return flow.Target.weave(chips)
 
 
-def bounding_rectangles(img, diagonals=False):
+def bounding_rectangles(img, diagonals=True):
     if diagonals is True:
         struct = [[1,1,1],[1,1,1],[1,1,1]]
     else:
         struct = None
     rects = label(img, structure=struct)
-    objs = find_objects(rects[0])
+    objs = find_objects(rects[0])#, max_label=4)
     return objs
 
 

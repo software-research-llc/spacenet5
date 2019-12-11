@@ -119,7 +119,7 @@ class Dataflow(tf.keras.utils.Sequence):
         length = int(np.ceil(len(self.samples) / float(self.batch_size)))
         return length
 
-    def __getitem__(self, idx, preprocess=False):
+    def __getitem__(self, idx, preprocess=False, return_postmask=False):
         """
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
@@ -162,7 +162,10 @@ class Dataflow(tf.keras.utils.Sequence):
             y_pre = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in pre.chips(premask)])
             y_post = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], 6) for chip in post.chips(postmask)])
 
-        return (x_pre, x_post), y_pre
+        if return_postmask is True:
+            return (x_pre, x_post), y_post
+        else:
+            return (x_pre, x_post), y_pre
 
     @staticmethod
     def from_pickle(picklefile:str=S.PICKLED_TRAINSET):

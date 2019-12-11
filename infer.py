@@ -13,6 +13,8 @@ from skimage.transform import resize
 import settings as S
 import score
 import logging
+from scipy.ndimage import label, find_objects
+
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,13 @@ def weave_pred(pred):
 
 def weave(chips):
     return flow.Target.weave(chips)
+
+
+def bounding_rectangles(img):
+    struct = [[1,1,1],[1,1,1],[1,1,1]]
+    rects = label(img)#, structure=struct)
+    objs = find_objects(rects[0])
+    return objs
 
 
 def infer(model, pre:np.ndarray, post:np.ndarray=None, compress:bool=True):

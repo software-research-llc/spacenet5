@@ -39,7 +39,11 @@ def build_model(backbone=S.ARCHITECTURE,
     inp_pre = tf.keras.layers.Input(input_shape=(height,width,3))
     inp_post = tf.keras.layers.Input(input_shape=(height,width,3))
 
-    x = tf.image.pad_to_bounding_box(inp_pre, 0, 0, height, width)
+    # FIXME: can't do this, need a predetermined input shape
+    shape_b4 = tf.int_shape(inp_pre)
+    h = height - shape_b4[1]
+    w = width - shape_b4[2]
+    x = tf.image.pad_to_bounding_box(inp_pre, 0, w, height, 0)
     y = tf.image.pad_to_bounding_box(inp_post, 0, 0, height, width)
 
     x = tf.keras.layers.Concatenate(name='concatenated_input')([x,y])

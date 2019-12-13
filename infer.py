@@ -23,7 +23,7 @@ def convert_prediction(pred, argmax=True):
     """
     Turn a model's prediction output into a grayscale segmentation mask.
     """
-    x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [pred.shape[-1]])
+    x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [-1])# + [pred.shape[-1]])
     if argmax is True:
         return np.argmax(x, axis=2)
     else:
@@ -36,6 +36,14 @@ def weave_pred(pred):
         x = convert_prediction(p)
         img.append(x)
     return flow.Target.weave(img)
+
+
+def weave_pred_no_argmax(pred):
+    img = []
+    for p in pred:
+        x, _ = convert_prediction(p, argmax=False)
+        img.append(x)
+    return flow.Target.weave(img)[...,1]
 
 
 def weave(chips):

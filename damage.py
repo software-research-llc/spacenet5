@@ -63,8 +63,10 @@ def extract_patches(pre, post, mask, return_masks=False, max_x=S.DAMAGE_MAX_X, m
     postboxes = []
     klasses = []
     masks = []
+    # extract individual buildings from the mask
     rectangles = infer.bounding_rectangles(mask)
     for rect in rectangles:
+        # store a view for each building rectangle (region of interest) that was found
         x,y = rect
         if x.stop-x.start <= 5 or y.stop-y.start <= 5:
             continue
@@ -85,7 +87,8 @@ def extract_patches(pre, post, mask, return_masks=False, max_x=S.DAMAGE_MAX_X, m
         masks.append(retmask)
         klasses.append(klass)
 
-
+    # return all the (pre-disaster, post-disaster) ROIs, their corresponding damage classes,
+    # and optionally the mask we used
     if return_masks is True:
         if len(preboxes) < 1:
             return (None,None),None,None
@@ -107,15 +110,35 @@ class DamageDataflow(Dataflow):
         x = infer.weave(x)
         y = infer.weave(y)
 
-        return extract_patches(x, y, mask, return_masks=self.return_masks)
+        (preboxes, postboxes), klasses, masks = extract_patches(x, y,
+                                                                mask,
+                                                                return_masks=self.return_masks)
+
+        # Make the pre- and post- disaster building locations one image
+        buildings = []
+        for i in range(len(preboxes)):
+            prebox = preboxes[i]
+            postbox = postboxes[i]
+            dim = prebox.shape
+
+            concat = np.zeros(S.INPUTSHAPE)#dim[1] * 2, dim[2] * 2, dim[3])
+            concat[0:dim[1],0:dim[2],:] = prebox
+            concat[dim[1]:,dim[2]:,:] = postbox
+
+            buildings.append(concat)
+
+        # return the (pre-disaster, post-disaster) ROIs, corresponding damage classes (ground truth),
+        # the mask, and pre + post image buildings laid out in one image next to each other (one image
+        # per set) for resizing and passing to the neural network
+        return (preboxes, postboxes), klasses, masks, buildings
 
 
 def epoch(model, train_seq, val_seq, step=16):
-    for (pre,post), mask in train_seq:
+    for (pre,post), klass, mask, buildings in train_seq:
         for i in range(0, len(pre), step):
             if i+step > len(pre):
                 step = i + (i - len(pre))
-            history = model.fit([pre[i:i+step], post[i:i+step]], mask[i:i+step],
+            history = model.fit(buildings[i:i+step], klasses[i:i+step],
                                 verbose=1, shuffle=False)
 
 

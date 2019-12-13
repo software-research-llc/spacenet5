@@ -80,7 +80,22 @@ def load_weights(model, save_path=S.MODELSTRING):
     return model
 
 
-def build_model(architecture=S.ARCHITECTURE, train=False):
+def build_model(*args, **kwargs):
+    import unet
+    inp_pre = tf.keras.layers.Input(S.INPUTSHAPE)
+    inp_post = tf.keras.layers.Input(S.INPUTSHAPE)
+
+    decoder = unet.MotokimuraUnet(classes=2)
+
+    x = inp_pre#tf.keras.layers.Add()([inp_pre, inp_post])
+    x = decoder(x)
+    x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
+    x = tf.keras.layers.Activation('softmax')(x)
+
+    return tf.keras.models.Model(inputs=[inp_pre, inp_post], outputs=[x])
+
+
+def build_deeplab_model(architecture=S.ARCHITECTURE, train=False):
     deeplab = deeplabmodel.Deeplabv3(input_shape=S.INPUTSHAPE,
                                   weights='pascal_voc',
                                   backbone=architecture,
@@ -109,7 +124,7 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
          save_path: ("Save path", "option", "s", str)=S.MODELSTRING,
          verbose: ("Keras verbosity level", "option", "v", int)=1,
          epochs: ("Number of epochs", "option", "e", int)=25,
-         optimizer=tf.keras.optimizers.RMSprop(),#tf.keras.optimizers.Adam(lr=0.0001),
+         optimizer=tf.keras.optimizers.RMSprop(),
          loss='categorical_crossentropy',
          metrics=['categorical_accuracy', 'mae',
                   score.iou_score, score.num_correct, score.pct_correct,
@@ -118,7 +133,6 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
     Train the model.
     """
 #    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
-    S.MODELSTRING = "deeplab-%s.hdf5" % architecture
     logger.info("Building model.")
     model = build_model(architecture=architecture, train=True)
     if restore:
@@ -143,8 +157,8 @@ def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_s
         model.fit(train_seq, validation_data=val_seq, epochs=epochs,
                             verbose=verbose, callbacks=callbacks,
                             validation_steps=len(val_seq), shuffle=False,
-                            use_multiprocessing=False,
-                            max_queue_size=10)
+                            use_multiprocessing=True,
+                            max_queue_size=10, workers=5)
     except KeyboardInterrupt:
             save_model(model, "tmp.hdf5", pause=0)
             save_model(model, save_path, pause=1)

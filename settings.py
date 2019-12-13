@@ -3,18 +3,18 @@ from inspect import getsourcefile
 
 
 # The architecture to use
-ARCHITECTURE = "xception"
+ARCHITECTURE = "motokimura"
 
 # Train/validation split proportion
 SPLITFACTOR = 0.9
-BATCH_SIZE = 1
+BATCH_SIZE = 3
 
 # Each pixel of the net outputs (the masks) is an index in to this list
 #           0        1             2                3              4              5
 CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
 N_CLASSES = 2#len(CLASSES)
 
-MODELSTRING = "deeplab-%s-%d.hdf5" % (ARCHITECTURE, N_CLASSES)
+MODELSTRING = "%s-%d.hdf5" % (ARCHITECTURE, N_CLASSES)
 
 # The maximum length of building patches for damage classification
 DAMAGE_MAX_X = 128

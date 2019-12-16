@@ -22,8 +22,12 @@ def mode(ary):
         else:
             counts[val] += 1
 
+    # this can happen if we were passed an image with no values, and is
+    # technically an error condition -- returning "no damage" is the best
+    # we can do without causing the entire training process to die
     if len(ary) == 0:
         return 1
+
     return sorted(counts, key=lambda x: counts[x])[-1]
 
 
@@ -68,7 +72,10 @@ def build_model(backbone=S.ARCHITECTURE,
 
 def extract_patches(pre, post, mask, return_masks=False, max_x=S.DAMAGE_MAX_X, max_y=S.DAMAGE_MAX_Y):
     """
-    Extract all portions of `pre` and `post` corresponding to contiguous areas in `mask`.
+    Extract all portions of `pre` and `post` corresponding to contiguous areas in `mask`.  The ground truth is
+    determined by taking the highest frequency damage class found among the values in contiguous regions of 'mask'
+    (since it's possible for multiple buildings to have no gap between them, the mode value among buildings is the
+    one returned).
 
     Returns:
       preboxes: variably sized portions of the pre-disaster image (matching areas in input mask)
@@ -158,28 +165,47 @@ class DamageDataflow(Dataflow):
         return (preboxes, postboxes), klasses, masks, buildings
 
 
-def epoch(model, train_seq, val_seq, step=16):
-    for (pre,post), klasses, mask, buildings in train_seq:
+def epoch(model, train_seq, val_seq, noaction=False, step=16):
+    for j in range(len(train_seq)):
+        try:
+            (pre, post), klasses, mask, buildings = train_seq[j]
+        except Exception as exc:
+            logger.error(str(exc))
+            continue
+
+    #for (pre,post), klasses, mask, buildings in train_seq:
         buildings = np.array(buildings)
         klasses = np.array(klasses)
         for i in range(0, len(buildings), step):
             if i+step > len(buildings):
+                if noaction:
+                    buf1, buf2 = buildings[i:], klasses[i:]
+                    logger.info(f"{j}:{i}: {len(buf1)} samples accessed successfully.")
+                    continue
                 history = model.fit(buildings[i:], klasses[i:],
                                     verbose=2, shuffle=False)
+            if noaction:
+                buf1, buf2 = buildings[i:i+step], klasses[i:i+step]
+                logger.info(f"{j}:{i}: {len(buf1)} samples accessed successfully.")
+                continue
             history = model.fit(buildings[i:i+step], klasses[i:i+step],
                                 verbose=2, shuffle=False)
 
-def main(epochs):
+
+def main(epochs, noaction=False):
     from flow import get_training_files, get_validation_files
-    model = build_model()
-    model.compile(optimizer=tf.keras.optimizers.RMSprop(), loss='categorical_crossentropy')
-    train_seq = DamageDataflow(files=get_training_files(), shuffle=True, transform=0.3)
-    valid_seq = DamageDataflow(files=get_validation_files(), shuffle=True, transform=False)
+    if not noaction:
+        model = build_model()
+        model.compile(optimizer=tf.keras.optimizers.RMSprop(), loss='categorical_crossentropy')
+    else:
+        model = None
+    train_seq = DamageDataflow(files=get_training_files(), shuffle=False, transform=0.3)
+    valid_seq = DamageDataflow(files=get_validation_files(), shuffle=False, transform=False)
 
     try:
         for i in range(epochs):
             logger.info("Epoch %d of %d" % (i, epochs))
-            epoch(model, train_seq, valid_seq)
+            epoch(model, train_seq, valid_seq, noaction)
     except KeyboardInterrupt:
         model.model.save_weights("motokimura-damage.hdf5")
         logger.info("Saved.")
@@ -187,10 +213,11 @@ def main(epochs):
     model.model.save_weights("motokimura-damage.hdf5")
     logger.info("Saved.")
 
+
 def display():
     from show import display_images
     df = DamageDataflow(return_masks=True, batch_size=1)
-    for (xs,ys), klasses, masks, buildings in df:
+    for (xs,ys), klasses, masks, buildings in df:#[df[2152], df[2153], df[2154], df[2155]]:
         images = []
         names = []
         for i in range(len(xs)):
@@ -206,13 +233,14 @@ def display():
 
 
 def cli(show: ("Just show the data that will be fed to the network", "flag", "s"),
+        noaction: ("Dry-run by iterating through samples w/o passing to the net", "flag", "n"),
         epochs: ("Number of training epochs", "option", "e", int)=50):
 
     if show:
         display()
         sys.exit()
     else:
-        main(epochs=epochs)
+        main(epochs=epochs, noaction=noaction)
 
 if __name__ == "__main__":
     plac.call(cli)

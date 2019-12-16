@@ -126,6 +126,10 @@ class Dataflow(tf.keras.utils.Sequence):
         """
         x = []
         y = []
+        x_pre = np.empty(0)
+        x_post = np.empty(0)
+        y_pre = np.empty(0)
+        y_post = np.empty(0)
 #        for sample in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             premask = pre.multichannelmask()

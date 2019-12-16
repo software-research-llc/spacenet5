@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 #tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 callbacks = [
-    keras.callbacks.ModelCheckpoint('deeplab-xception-best.hdf5', save_weights_only=True, save_best_only=True)]
-""""
+    keras.callbacks.ModelCheckpoint(S.MODELSTRING.replace(".hdf5", "-best.hdf5"), save_weights_only=True, save_best_only=True)]
+"""
     keras.callbacks.TensorBoard(log_dir="logs",
                                 histogram_freq=1,
                                 write_graph=True,

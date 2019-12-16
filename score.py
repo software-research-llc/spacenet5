@@ -4,7 +4,6 @@ import numpy as np
 import flow
 import pickle
 import tqdm
-#import segmentation_models as sm
 import sklearn.metrics
 import logging
 import keras.backend as K
@@ -46,9 +45,16 @@ def remove_background(y_pred):
 
 
 @tf.function
-def iou_score(y_true, y_pred):
+def get_gt_pr(y_true, y_pred):
     gt = tf.cast(remove_background(y_true), tf.bool)
     pr = tf.cast(remove_background(y_pred), tf.bool)
+
+    return gt, pr
+
+
+@tf.function
+def iou_score(y_true, y_pred):
+    gt, pr = get_gt_pr(y_true, y_pred)
 
     intersection = tf.cast(tf.logical_and(gt, pr), tf.int32)
     intersection = tf.reduce_sum(intersection)
@@ -64,8 +70,7 @@ def iou_score(y_true, y_pred):
 
 @tf.function
 def pct_correct(y_true, y_pred):
-    gt = tf.cast(remove_background(y_true), tf.bool)
-    pr = tf.cast(remove_background(y_pred), tf.bool)
+    gt, pr = get_gt_pr(y_true, y_pred)
 
     intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))
     total = tf.reduce_sum(tf.cast(gt, tf.int32))
@@ -77,8 +82,7 @@ def pct_correct(y_true, y_pred):
 
 @tf.function
 def num_correct(y_true, y_pred):
-    gt = tf.cast(remove_background(y_true), tf.bool)
-    pr = tf.cast(remove_background(y_pred), tf.bool)
+    gt, pr = get_gt_pr(y_true, y_pred)
 
     intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))
     return intersection
@@ -86,8 +90,7 @@ def num_correct(y_true, y_pred):
 
 @tf.function
 def tensor_f1_score(y_true, y_pred):
-    gt = tf.cast(remove_background(y_true), tf.bool)
-    pr = tf.cast(remove_background(y_pred), tf.bool)
+    gt, pr = get_gt_pr(y_true, y_pred)
 
     tp = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int64))
     fp = tf.reduce_sum(tf.clip_by_value(tf.cast(pr, tf.int64) - tf.cast(gt, tf.int64), 0, 1))

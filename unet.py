@@ -44,7 +44,7 @@ class MotokimuraUnet():
         s.dc3 = L.Conv2D(128, kernel_size=(3,3), strides=1, padding='same')
         s.dc2 = L.Conv2DTranspose(128, kernel_size=(4,4), strides=2, padding='same')
         s.dc1 = L.Conv2D(64, kernel_size=(3,3), strides=1, padding='same')
-        s.dc0 = L.Conv2D(kwargs['classes'], kernel_size=(3,3), strides=1, padding='same')
+        s.dc0 = L.Conv2D(kwargs['classes'], kernel_size=(3,3), strides=1, padding='same', name='decoder_out')
 
         s.bnc0 = L.BatchNormalization()
         s.bnc1 = L.BatchNormalization()
@@ -74,7 +74,7 @@ class MotokimuraUnet():
         e5 = L.Activation('relu')(s.bnc5(s.c5(e4)))
         e6 = L.Activation('relu')(s.bnc6(s.c6(e5)))
         e7 = L.Activation('relu')(s.bnc7(s.c7(e6)))
-        e8 = L.Activation('relu', name='last_encoder_layer')(s.bnc8(s.c8(e7)))
+        e8 = L.Activation('relu', name='encoder_out')(s.bnc8(s.c8(e7)))
 
         d8 = L.Activation('relu')(s.bnd8(s.dc8(L.Concatenate()([e7,e8]))))
         d7 = L.Activation('relu')(s.bnd7(s.dc7(d8)))
@@ -91,15 +91,15 @@ class MotokimuraUnet():
     def convert_to_damage_classifier(self):
         del self.model
         s = self
-        s.c0 = L.Conv2D(32, kernel_size=(3,3), strides=1, dilation_rate=3, padding='same')
+        s.c0 = L.Conv2D(64, kernel_size=(3,3), strides=1, dilation_rate=3, padding='same')
         s.c1 = L.Conv2D(64, kernel_size=(4,4), strides=2, padding='same')
         s.c2 = L.Conv2D(64, kernel_size=(3,3), strides=1, dilation_rate=2, padding='same')
-        s.c3 = L.Conv2D(128, kernel_size=(4,4), strides=2, padding='same')
-        s.c4 = L.Conv2D(128, kernel_size=(3,3), strides=1, dilation_rate=3, padding='same')
-        s.c5 = L.Conv2D(256, kernel_size=(4,4), strides=2, padding='same')
-        s.c6 = L.Conv2D(256, kernel_size=(3,3), strides=1, dilation_rate=2, padding='same')
-        s.c7 = L.Conv2D(512, kernel_size=(4,4), strides=2, padding='same')
-        s.c8 = L.Conv2D(1024, kernel_size=(3,3), strides=1, dilation_rate=3, padding='same')
+        s.c3 = L.Conv2D(64, kernel_size=(4,4), strides=2, padding='same')
+        s.c4 = L.Conv2D(64, kernel_size=(3,3), strides=1, dilation_rate=3, padding='same')
+        s.c5 = L.Conv2D(128, kernel_size=(4,4), strides=2, padding='same')
+        s.c6 = L.Conv2D(128, kernel_size=(3,3), strides=1, dilation_rate=2, padding='same')
+        s.c7 = L.Conv2D(256, kernel_size=(4,4), strides=2, padding='same')
+        s.c8 = L.Conv2D(256, kernel_size=(3,3), strides=1, dilation_rate=3, padding='same')
         #s.c8 = L.Conv2D(512, kernel_size=(3,3), strides=1, padding='same')
 
         s.bnc0 = L.BatchNormalization()
@@ -121,12 +121,14 @@ class MotokimuraUnet():
         e5 = L.Activation('relu')(s.bnc5(s.c5(e4)))
         e6 = L.Activation('relu')(s.bnc6(s.c6(e5)))
         e7 = L.Activation('relu')(s.bnc7(s.c7(e6)))
-        e8 = L.Activation('relu', name='last_encoder_layer')(s.bnc8(s.c8(e7)))
+        e8 = L.Activation('relu', name='encoder_out')(s.bnc8(s.c8(e7)))
 
-        head0 = L.Flatten()(e8)
-        head1 = L.Dense(256, activation='relu')(head0)
-        head2 = L.Dense(512, activation='relu')(head1)
-        out = L.Dense(5, activation='softmax')(head2)
+        x = L.Flatten()(e8)
+        x = L.Dense(256, activation='relu')(x)
+        x = L.Dropout(0.25)(x)
+        x = L.Dense(512, activation='relu')(x)
+        x = L.Dropout(0.25)(x)
+        out = L.Dense(5, activation='softmax', name='classifier')(x)
         
         self.model = tf.keras.models.Model(inputs=[inp], outputs=[out])
         return self

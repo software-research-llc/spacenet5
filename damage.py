@@ -23,7 +23,7 @@ def mode(ary):
             counts[val] += 1
 
     # this can happen if we were passed an image with no values, and is
-    # technically an error condition -- returning "no damage" is the best
+    # technically an error condition; returning "no damage" is the best
     # we can do without causing the entire training process to die
     if len(ary) == 0:
         return 1
@@ -38,36 +38,6 @@ def build_model(backbone=S.ARCHITECTURE,
     model = unet.MotokimuraUnet(classes=2)
     model = model.convert_to_damage_classifier()
     return model
-    height = S.DAMAGE_MAX_X
-    width = S.DAMAGE_MAX_Y
-    deeplab = deeplabmodel.Deeplabv3(input_shape=(height*2,width*2),
-                                     backbone=backbone,
-                                     OS=16 if train is True else 8,
-                                     weights='pascal_voc',
-                                     classes=classes)
-
-    logits = tf.keras.models.Model(inputs=deeplab.inputs, outputs=[deeplab.get_layer("image_pooling_BN").output])
-
-    inp_pre = tf.keras.layers.Input(input_shape=(height,width,3))
-    inp_post = tf.keras.layers.Input(input_shape=(height,width,3))
-
-    # FIXME: can't do this, need a predetermined input shape
-    shape_b4 = tf.int_shape(inp_pre)
-    h = height - shape_b4[1]
-    w = width - shape_b4[2]
-    x = tf.image.pad_to_bounding_box(inp_pre, 0, w, height, 0)
-    y = tf.image.pad_to_bounding_box(inp_post, 0, 0, height, width)
-
-    x = tf.keras.layers.Concatenate(name='concatenated_input')([x,y])
-    x = logits(x)
-    x = tf.keras.layers.Flatten()(x)
-    x = tf.keras.layers.Dense(256, activation='relu')(x)
-    x = tf.keras.layers.Dropout(0.5)(x)
-    x = tf.keras.layers.Dense(256, activation='relu')(x)
-    x = tf.keras.layers.Dropout(0.5)(x)
-    x = tf.keras.layers.Dense(classes, activation='softmax')(x)
-
-    return tf.keras.models.Model(inputs=[inp_pre, inp_post], outputs=[x])
 
 
 def extract_patches(pre, post, mask, return_masks=False, max_x=S.DAMAGE_MAX_X, max_y=S.DAMAGE_MAX_Y):
@@ -129,12 +99,26 @@ def extract_patches(pre, post, mask, return_masks=False, max_x=S.DAMAGE_MAX_X, m
 
 
 class DamageDataflow(Dataflow):
+    """
+    Exactly like a Dataflow() object (see flow.py), but with its own __getitem__() method
+    suited to damage classification.
+    """
     def __init__(self, return_masks=True, *args, **kwargs):
         super(DamageDataflow, self).__init__(buildings_only=True, *args, **kwargs)
         self.return_masks = return_masks
         self.buildings_only = True
 
     def __getitem__(self, idx):
+        """
+        Get an item by index.
+
+        Returns:
+          preboxes: variably sized portions of the pre-disaster image corresponding to a single building (or contiguous ones).
+          postboxes: variably sized portions of the post-disaster image corresponding to a single building (or contiguous ones).
+          klasses: one-hot encoded list of damage classes, indices of which correspond to indices in preboxes/postboxes.
+          masks: variably sized portions of the mask; these are what dictated the regions of each prebox/postbox
+          buildings: constant-sized square of the prebox and postbox content stacked vertically with the rest zero padded.
+        """
         (x,y), mask = Dataflow.__getitem__(self, idx, preprocess=False, return_postmask=True)
         mask = infer.weave_pred(mask)
         x = infer.weave(x)

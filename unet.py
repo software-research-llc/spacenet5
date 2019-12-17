@@ -91,15 +91,15 @@ class MotokimuraUnet():
     def convert_to_damage_classifier(self):
         del self.model
         s = self
-        s.c0 = L.Conv2D(64, kernel_size=(3,3), strides=1, dilation_rate=3, padding='same')
+        s.c0 = L.Conv2D(32, kernel_size=(15,15), strides=2, padding='same')
         s.c1 = L.Conv2D(64, kernel_size=(4,4), strides=2, padding='same')
-        s.c2 = L.Conv2D(64, kernel_size=(3,3), strides=1, dilation_rate=2, padding='same')
+        s.c2 = L.Conv2D(64, kernel_size=(3,3), strides=1, padding='same')
         s.c3 = L.Conv2D(64, kernel_size=(4,4), strides=2, padding='same')
-        s.c4 = L.Conv2D(64, kernel_size=(3,3), strides=1, dilation_rate=3, padding='same')
+        s.c4 = L.Conv2D(64, kernel_size=(3,3), strides=1, padding='same')
         s.c5 = L.Conv2D(128, kernel_size=(4,4), strides=2, padding='same')
-        s.c6 = L.Conv2D(128, kernel_size=(3,3), strides=1, dilation_rate=2, padding='same')
+        s.c6 = L.Conv2D(128, kernel_size=(3,3), strides=1, padding='same')
         s.c7 = L.Conv2D(256, kernel_size=(4,4), strides=2, padding='same')
-        s.c8 = L.Conv2D(256, kernel_size=(3,3), strides=1, dilation_rate=3, padding='same')
+        s.c8 = L.Conv2D(256, kernel_size=(3,3), strides=1, padding='same')
         #s.c8 = L.Conv2D(512, kernel_size=(3,3), strides=1, padding='same')
 
         s.bnc0 = L.BatchNormalization()

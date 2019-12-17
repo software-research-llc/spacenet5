@@ -10,6 +10,10 @@ import plac
 import unet
 import sys
 import tensorflow as tf
+import os
+import sys
+import skimage
+import score
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +138,8 @@ class DamageDataflow(Dataflow):
                                                                 mask,
                                                                 return_masks=self.return_masks)
 
+        if len(preboxes) == 0:
+            return self[idx+1]
         # Make the pre- and post- disaster building locations one INPUTSHAPE-sized image by
         # placing them next to each other in the top left corner and padding the remainder
         # with zeros
@@ -165,28 +171,46 @@ class BuildingDataflow(tf.keras.utils.Sequence):
     e.g. `topdir/hurricane-harvey-pre-00001/0:1.png` is the first building in hurricane
     harvey image 00001, and the buildings in the file belong to the 'minor-damage' class.
     """
-    def __init__(self, topdir="data/buildings", batch_size=32):
+    def __init__(self, topdir="buildings", batch_size=64, train=False, validate=False):
         self.files = []
         self.topdir = topdir
         self.batch_size = batch_size
 
         dirs = os.listdir(topdir)
         for dir in dirs:
-            files = os.listdir(dir)
+            files = os.listdir(os.path.join(topdir, dir))
             for file in files:
-                self.files.append(os.path.absname(file))
+                self.files.append(os.path.abspath(os.path.join(topdir, dir, file)))
+        
+        self.files.sort()
+
+        if train:
+            self.files = self.files[:int(np.floor(len(self.files)*0.9))]
+        elif validate:
+            self.files = self.files[int(np.floor(len(self.files)*0.9)):]
+        else:
+            raise Exception("Should be either train or validate")
 
     def __len__(self):
         length = int(np.ceil(len(self.files) / float(self.batch_size)))
-        return len(self.files)
+        return length
 
     def __getitem__(self, idx):
+        x = []
+        y = []
         for filename in self.files[idx*self.batch_size:(idx+1)*self.batch_size]:
-            img = skimage.io.imread(filename)
+            try:
+                img = skimage.io.imread(filename)
+            except Exception as exc:
+                logger.error(str(exc))
+                continue
+
             klass = int(filename.split(":")[-1][0])
+            onehot = [0] * 5
+            onehot[klass] = 1
 
             x.append(img)
-            y.append(klass)
+            y.append(onehot)
 
         return np.array(x), np.array(y)
 
@@ -238,12 +262,25 @@ def main(epochs, noaction=False, restore=False):
         if restore:
             model = load_weights(model, "motokimura-damage.hdf5")
             logger.info("Weights loaded successfully.")
-        model.compile(optimizer=tf.keras.optimizers.RMSprop(), loss='categorical_crossentropy')
+        model.compile(optimizer=tf.keras.optimizers.RMSprop(),#tf.keras.optimizers.Adam(lr=0.00001),
+                      loss='categorical_crossentropy',
+                      metrics=['categorical_accuracy', score.damage_f1_score])
     else:
         model = None
-    train_seq = DamageDataflow(files=get_training_files(), shuffle=False, transform=0.3)
-    valid_seq = DamageDataflow(files=get_validation_files(), shuffle=False, transform=False)
+    train_seq = BuildingDataflow(train=True)
+    valid_seq = BuildingDataflow(validate=True)
+    callback = tf.keras.callbacks.ModelCheckpoint("damage-best.hdf5", save_weights_only=True, save_best_only=True)
 
+    try:
+        model.fit(train_seq, validation_data=valid_seq, epochs=epochs,
+                            verbose=1, callbacks=[callback],
+                            validation_steps=len(valid_seq), shuffle=False,
+                            use_multiprocessing=True,
+                            max_queue_size=10, workers=5)
+    except KeyboardInterrupt:
+        model.model.save_weights("damage.hdf5.tmp")
+        logger.info("Saved to {}".format("damage.hdf5.tmp"))
+    """
     try:
         for i in range(epochs):
             logger.info("Epoch %d of %d" % (i, epochs))
@@ -259,7 +296,7 @@ def main(epochs, noaction=False, restore=False):
         sys.exit()
     model.model.save_weights("motokimura-damage.hdf5")
     logger.info("Saved.")
-
+    """
 
 def display():
     from show import display_images

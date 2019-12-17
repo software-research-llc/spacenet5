@@ -28,12 +28,6 @@ def f1_score(y_true, y_pred):
 
 
 @tf.function
-def damage_f1_score(f1_scores:list):
-    f1 = len(f1_scores) / sum([1 / (x + 1e-5) for x in f1_scores])
-    return f1
-
-
-@tf.function
 def remove_background(y_pred):
     background = tf.constant(([1] + [0] * (S.MASKSHAPE[-1] - 1)) * S.MASKSHAPE[0] * S.MASKSHAPE[1] * 16)
     bg = tf.reshape(background, [-1, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
@@ -101,6 +95,28 @@ def tensor_f1_score(y_true, y_pred):
         rec = tp / (tp + fn)
         if (prec + rec) > 0:
             score = 2 * tf.math.multiply_no_nan(prec, rec) / (prec + rec)
+        else:
+            score = tf.constant(0.0, tf.float64)
+    else:
+        score = tf.constant(0.0, tf.float64)
+
+    return score
+
+
+@tf.function
+def damage_f1_score(y_true, y_pred):
+    gt, pr = y_true, y_pred
+
+    tp = tf.reduce_sum(gt * pr)
+    fp = tf.reduce_sum(tf.clip_by_value(pr - gt, 0, 1))
+    fn = tf.reduce_sum(tf.clip_by_value(gt - pr, 0, 1))
+
+    if (tp + fp) > 0 and (tp + fn) > 0:
+        prec = tp / (tp + fp)
+        rec = tp / (tp + fn)
+        if (prec + rec) > 0:
+            score = 2 * tf.math.multiply_no_nan(prec, rec) / (prec + rec)
+            score = tf.cast(score, tf.float64)
         else:
             score = tf.constant(0.0, tf.float64)
     else:

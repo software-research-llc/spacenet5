@@ -9,6 +9,7 @@ import tensorflow as tf
 import plac
 import unet
 import sys
+import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,11 @@ def build_model(backbone=S.ARCHITECTURE,
 
     model = unet.MotokimuraUnet(classes=2)
     model = model.convert_to_damage_classifier()
+    return model
+
+
+def load_weights(model, save_file):
+    model.model.load_weights(save_file)
     return model
 
 
@@ -149,10 +155,49 @@ class DamageDataflow(Dataflow):
         return (preboxes, postboxes), klasses, masks, buildings
 
 
+class BuildingDataflow(tf.keras.utils.Sequence):
+    """
+    A dataflow to train on building damage classification.  Expects buildings to exist 
+    in the `topdir` passed to __init__(), and to be .png format files of pre- and post-
+    disaster images laid out on top of each other.  Each pre- and post-disaster image
+    pair has multiple building images that use the pre-disaster name only for the directory
+    in which to find the buildings.  The target class for a given image is in the filename,
+    e.g. `topdir/hurricane-harvey-pre-00001/0:1.png` is the first building in hurricane
+    harvey image 00001, and the buildings in the file belong to the 'minor-damage' class.
+    """
+    def __init__(self, topdir="data/buildings", batch_size=32):
+        self.files = []
+        self.topdir = topdir
+        self.batch_size = batch_size
+
+        dirs = os.listdir(topdir)
+        for dir in dirs:
+            files = os.listdir(dir)
+            for file in files:
+                self.files.append(os.path.absname(file))
+
+    def __len__(self):
+        length = int(np.ceil(len(self.files) / float(self.batch_size)))
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        for filename in self.files[idx*self.batch_size:(idx+1)*self.batch_size]:
+            img = skimage.io.imread(filename)
+            klass = int(filename.split(":")[-1][0])
+
+            x.append(img)
+            y.append(klass)
+
+        return np.array(x), np.array(y)
+
+
+#FIXME: memory leak somewhere
 def epoch(model, train_seq, val_seq, noaction=False, step=16):
+    MEMPROFILE = False
+    import gc
     for j in range(len(train_seq)):
         try:
-            (pre, post), klasses, mask, buildings = train_seq[j]
+            (_, _), klasses, _, buildings = train_seq[j]
         except Exception as exc:
             logger.error(str(exc))
             continue
@@ -166,20 +211,33 @@ def epoch(model, train_seq, val_seq, noaction=False, step=16):
                     buf1, buf2 = buildings[i:], klasses[i:]
                     logger.info(f"{j}:{i}: {len(buf1)} samples accessed successfully.")
                     continue
-                history = model.fit(buildings[i:], klasses[i:],
-                                    verbose=2, shuffle=False)
+                model.fit(buildings[i:], klasses[i:],
+                                    verbose=2, shuffle=False, use_multiprocessing=False)
             if noaction:
                 buf1, buf2 = buildings[i:i+step], klasses[i:i+step]
                 logger.info(f"{j}:{i}: {len(buf1)} samples accessed successfully.")
                 continue
-            history = model.fit(buildings[i:i+step], klasses[i:i+step],
-                                verbose=2, shuffle=False)
+            model.fit(buildings[i:i+step], klasses[i:i+step],
+                                verbose=2, shuffle=False, use_multiprocessing=False)
+
+        if j % 100 == 0:
+            num_uncollectable = gc.collect(2)
+            logger.info("Uncollectable objects: %d" % num_uncollectable)
+        if MEMPROFILE is True and j > 100:
+            from pympler import muppy, summary
+            objs = muppy.get_objects()
+            sum = summary.summarize(objs)
+            summary.print_(sum)
+            sys.exit()
 
 
-def main(epochs, noaction=False):
+def main(epochs, noaction=False, restore=False):
     from flow import get_training_files, get_validation_files
     if not noaction:
         model = build_model()
+        if restore:
+            model = load_weights(model, "motokimura-damage.hdf5")
+            logger.info("Weights loaded successfully.")
         model.compile(optimizer=tf.keras.optimizers.RMSprop(), loss='categorical_crossentropy')
     else:
         model = None
@@ -193,6 +251,11 @@ def main(epochs, noaction=False):
     except KeyboardInterrupt:
         model.model.save_weights("motokimura-damage.hdf5")
         logger.info("Saved.")
+        logger.info("Profiling heap...")
+        from pympler import muppy, summary
+        objs = muppy.get_objects()
+        sum = summary.summarize(objs)
+        summary.print_(sum)
         sys.exit()
     model.model.save_weights("motokimura-damage.hdf5")
     logger.info("Saved.")
@@ -218,13 +281,14 @@ def display():
 
 def cli(show: ("Just show the data that will be fed to the network", "flag", "s"),
         noaction: ("Dry-run by iterating through samples w/o passing to the net", "flag", "n"),
+        restore: ("Load saved weights to continue training", "flag", "r"),
         epochs: ("Number of training epochs", "option", "e", int)=50):
 
     if show:
         display()
         sys.exit()
     else:
-        main(epochs=epochs, noaction=noaction)
+        main(epochs=epochs, noaction=noaction, restore=restore)
 
 if __name__ == "__main__":
     plac.call(cli)

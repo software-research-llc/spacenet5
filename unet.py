@@ -129,7 +129,7 @@ class MotokimuraUnet():
         x = L.Dense(512, activation='relu')(x)
         x = L.Dropout(0.25)(x)
         out = L.Dense(5, activation='softmax', name='classifier')(x)
-        
+
         self.model = tf.keras.models.Model(inputs=[inp], outputs=[out])
         return self
 

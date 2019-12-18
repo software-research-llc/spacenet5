@@ -58,7 +58,7 @@ def randomize_damage(img):
 if __name__ == '__main__':
     # load the localization (segmentation) model
     model = train.build_model(train=False)
-    model = train.load_weights(model)
+    model = train.load_weights(model, S.MODELSTRING.replace(".hdf5", "-best.hdf5"))
 
     # load the damage classification model
     dmg_model = damage.build_model()
@@ -85,17 +85,27 @@ if __name__ == '__main__':
         # damage classification
         filename = filename.replace("localization", "damage")
         pre, post = infer.weave(x), infer.weave(y)
-        dmgdict = damage.extract_patches(pre, post, mask, return_dict=True)
+        try:
+            dmgdict = damage.extract_patches(pre, post, mask, return_dict=True)
+        except Exception as exc:
+            logger.error(str(exc))
+            write_solution(names=[filename], images=[mask])
+            pbar.update(1)
+            i += 1
+            continue
 
         buildings = damage.get_buildings(dmgdict['prebox'], dmgdict['postbox'])
 
         # FIXME: do something smart with un-classified
         for k, (x,y) in enumerate(dmgdict['bbox']):
-            # set all "1" pixels from the localization step to the predicted damage class
-            klass = dmg_model.predict(np.expand_dims(buildings[k], axis=0))
-            box = mask[x.start:x.stop,y.start:y.stop]
-            # klass is one-hot encoded and ranges from 0 to 4
-            box[box > 0] = np.argmax(klass) + 1
+            try:
+                # set all "1" pixels from the localization step to the predicted damage class
+                klass = dmg_model.predict(np.expand_dims(buildings[k], axis=0))
+                box = mask[x.start:x.stop,y.start:y.stop]
+                # klass is one-hot encoded and ranges from 0 to 4
+                box[box > 0] = np.argmax(klass) + 1
+            except Exception as exc:
+                logger.error(str(exc))
 
         write_solution(names=[filename], images=[mask])
 

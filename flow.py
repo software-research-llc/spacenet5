@@ -1,3 +1,4 @@
+import sys
 import glob
 import random
 import os
@@ -83,6 +84,12 @@ def apply_gaussian_blur(img:np.ndarray, kernel=(5,5)):
     return ret.reshape(img.shape)
 
 
+def convert_postmask_to_premask(postmask):
+    chan1 = postmask[...,0].copy()
+    chan2 = np.argmax(postmask, axis=2)
+    np.clip(chan2, 0, 1)
+    return np.dstack([chan1,chan2])
+
 class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
@@ -132,8 +139,9 @@ class Dataflow(tf.keras.utils.Sequence):
         y_post = np.empty(0)
 #        for sample in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
-            premask = pre.multichannelmask()
+            #premask = pre.multichannelmask()
             postmask = post.multichannelmask()
+            premask = convert_postmask_to_premask(postmask)
 
             preimg = pre.image()
             postimg = post.image()
@@ -170,6 +178,12 @@ class Dataflow(tf.keras.utils.Sequence):
             return (x_pre, x_post), y_post
         else:
             return (x_pre, x_post), y_pre
+
+    def prune_to(self, filename):
+        for samples in df.samples:
+            if filename in samples[0].img_name or filename in samples[1].img_name:
+                return samples
+        return None
 
     @staticmethod
     def from_pickle(picklefile:str=S.PICKLED_TRAINSET):
@@ -405,6 +419,8 @@ if __name__ == '__main__':
     import train
     import score
     df = Dataflow()
+    if len(sys.argv) > 1:
+        df.samples = [df.prune_to(sys.argv[1])]
     model = train.build_model()
     train.load_weights(model)
     while True:
@@ -412,7 +428,7 @@ if __name__ == '__main__':
         xy= df.samples[idx]
         i = 1
         fig = plt.figure()
-        for sample in [xy]:
+        for sample in xy:
 
             fig.add_subplot(2,4,i)
             plt.imshow(sample.image())
@@ -452,6 +468,7 @@ if __name__ == '__main__':
 
             fig.add_subplot(2,4,i)
             mask = sample.multichannelchipmask()
+            mask = sample.chips(mask)
             mask = infer.weave_pred(mask)
             plt.imshow(mask)
             plt.title("target mask")
@@ -459,9 +476,10 @@ if __name__ == '__main__':
 
             fig.add_subplot(2,4,i)
             pred = model.predict(np.array(sample.chips()))
-            plt.imshow(infer.weave_pred(pred))
+            plt.imshow(infer.weave_pred_no_argmax(pred))
             plt.title("Prediction")
             i += 1
+            toggle += 1
             #fig.add_subplot(2,5,i)
             #plt.imshow(lossvalue.numpy().squeeze())
             #plt.title("Loss")

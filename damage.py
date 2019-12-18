@@ -49,6 +49,7 @@ def build_model(backbone=S.ARCHITECTURE,
 
 def load_weights(model, save_file=S.DMG_MODELSTRING):
     model.model.load_weights(save_file)
+    logger.info("Loaded {} successfully.".format(save_file))
     return model
 
 
@@ -91,24 +92,27 @@ def extract_patches(pre, post, mask, return_masks=False, return_dict=False, max_
         prebox = pre[x.start:x.stop,y.start:y.stop]
         postbox = post[x.start:x.stop,y.start:y.stop]
         retmask = mask[x.start:x.stop,y.start:y.stop]
-
+        #import pdb; pdb.set_trace()
         klass = mask[x.start:x.stop,y.start:y.stop]
         klass = mode(klass[np.nonzero(klass)])
         if klass > 5 or klass < 0:
             logger.warning("Unrecognized class! Setting to appropriate value")
             klass = 1
-        preboxes.append(prebox)#.astype(np.uint8))
-        postboxes.append(postbox)#.astype(np.uint8))
+        preboxes.append(np.ascontiguousarray(prebox))#.astype(np.uint8))
+        postboxes.append(np.ascontiguousarray(postbox))#.astype(np.uint8))
         masks.append(retmask)
         klass_one_hot = [0] * 5
         klass_one_hot[klass-1] = 1
         klasses.append(klass_one_hot)
         xys.append((x,y))
 
+#    import pdb; pdb.set_trace()
+    preboxes = np.asarray(preboxes)
+    postboxes = np.asarray(postboxes)
     # return all of the above plus the (x,y) bounding boxes
     if return_dict:
-        retdict = { 'bbox': xys, 'class': klasses, 'mask': np.array(masks),
-                    'prebox': np.array(preboxes), 'postbox': np.array(postboxes) }
+        retdict = { 'bbox': xys, 'class': klasses, 'mask': np.array(masks, copy=False),
+                    'prebox': preboxes, 'postbox': postboxes }
         return retdict
 
     # return all the (pre-disaster, post-disaster) ROIs, their corresponding damage classes,
@@ -117,12 +121,27 @@ def extract_patches(pre, post, mask, return_masks=False, return_dict=False, max_
     if return_masks is True:
         if len(preboxes) < 1:
             return (np.empty(0),np.empty(0)),[],np.empty(0)
-        return (np.array(preboxes), np.array(postboxes)), klasses, np.array(masks)
+        return (np.array(preboxes, copy=False), np.array(postboxes, copy=False)), klasses, np.array(masks, copy=False)
     else:
         if len(preboxes) < 1:
             return (np.empty(0),np.empty(0)),[]
-        return (np.array(preboxes), np.array(postboxes)), klasses
+        return (np.array(preboxes, copy=False), np.array(postboxes, copy=False)), klasses
 
+
+def get_buildings(preboxes, postboxes):
+        buildings = []
+        for i in range(len(preboxes)):
+            prebox = preboxes[i]
+            postbox = postboxes[i]
+            dim = prebox.shape
+
+            concat = np.zeros(S.INPUTSHAPE, dtype=prebox.dtype)#dim[1] * 2, dim[2] * 2, dim[3])
+            concat[0:dim[0],0:dim[1],:] = prebox
+            concat[dim[0]:dim[0]*2,0:dim[1],:] = postbox
+
+            buildings.append(concat)
+
+        return buildings
 
 class DamageDataflow(Dataflow):
     """
@@ -231,7 +250,7 @@ class BuildingDataflow(tf.keras.utils.Sequence):
             x.append(img)
             y.append(onehot)
 
-        return np.array(x), np.array(y)
+        return np.array(x, copy=False), np.array(y, copy=False)
 
 
 #FIXME: memory leak somewhere

@@ -11,6 +11,7 @@ import train
 import flow
 import infer
 import logging
+import damage
 
 logger = logging.getLogger(__name__)
 
@@ -61,19 +62,20 @@ if __name__ == '__main__':
 
     # load the damage classification model
     dmg_model = damage.build_model()
-    dmg_model = damage.load_weights(dmg_model)
+    dmg_model = damage.load_weights(dmg_model, "damage-best.hdf5")
 
     # get a dataflow for the test files
-    df = flow.Dataflow(files=flow.get_test_files(), transform=False, shuffle=False, buildings_only=False)
+    df = flow.Dataflow(files=flow.get_test_files(), transform=False,
+                       shuffle=False, buildings_only=False, batch_size=1)
 
     i = 0
     pbar = tqdm.tqdm(total=len(df))
     # x = pre-disaster image, y = post-disaster image
-    for x, y in df:
+    for (x, y), _ in df:
         filename = os.path.basename(df.samples[i][0].img_name)
         filename = filename.replace("pre", "localization").replace(".png", "_prediction.png") 
-        if os.path.exists(os.path.join("solution", filename)):
-            continue
+        #if os.path.exists(os.path.join("solution", filename)):
+        #    continue
 
         # localization (segmentation)
         pred = model.predict(x)
@@ -82,13 +84,16 @@ if __name__ == '__main__':
 
         # damage classification
         filename = filename.replace("localization", "damage")
-        dmgdict = damage.extract_patches(x, y, mask, return_dict=True)
+        pre, post = infer.weave(x), infer.weave(y)
+        dmgdict = damage.extract_patches(pre, post, mask, return_dict=True)
+
+        buildings = damage.get_buildings(dmgdict['prebox'], dmgdict['postbox'])
 
         # FIXME: do something smart with un-classified
         for k, (x,y) in enumerate(dmgdict['bbox']):
             # set all "1" pixels from the localization step to the predicted damage class
-            klass = dmgdict['class'][k]
-            box = mask[x.start:x.stop,y.start:y.stop,:]
+            klass = dmg_model.predict(np.expand_dims(buildings[k], axis=0))
+            box = mask[x.start:x.stop,y.start:y.stop]
             # klass is one-hot encoded and ranges from 0 to 4
             box[box > 0] = np.argmax(klass) + 1
 

@@ -92,7 +92,7 @@ def build_model(*args, **kwargs):
     x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
     x = tf.keras.layers.Activation('softmax')(x)
 
-    return tf.keras.models.Model(inputs=[inp_pre, inp_post], outputs=[x])
+    return tf.keras.models.Model(inputs=[inp_pre], outputs=[x])
 
 
 def build_deeplab_model(architecture=S.ARCHITECTURE, train=False):

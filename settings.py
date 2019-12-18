@@ -8,7 +8,7 @@ DAMAGE_ARCHITECTURE = 'resnet50'
 
 # Train/validation split proportion
 SPLITFACTOR = 0.9
-BATCH_SIZE = 3
+BATCH_SIZE = 2
 
 #           0        1             2                3              4              5
 CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
@@ -22,8 +22,8 @@ DAMAGE_MAX_X = 128
 DAMAGE_MAX_Y = 128
 
 # Shape of the training input images
-INPUTSHAPE = [256,256,3]
-MASKSHAPE = [256,256,N_CLASSES]
+INPUTSHAPE = [1024,1024,3]
+MASKSHAPE = [1024,1024,N_CLASSES]
 # The shape of the raw on-disk input images
 SAMPLESHAPE = [1024,1024,3]
 TARGETSHAPE = INPUTSHAPE

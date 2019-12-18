@@ -27,22 +27,22 @@ class MotokimuraUnet():
             raise KeyError("pass number of classes as classes=N")
         s = self
         s.c0 = L.Conv2D(64, kernel_size=(3,3), strides=1, padding='same')
-        s.c1 = L.Conv2D(128, kernel_size=(4,4), strides=2, padding='same')
-        s.c2 = L.Conv2D(128, kernel_size=(3,3), strides=1, padding='same')
-        s.c3 = L.Conv2D(256, kernel_size=(4,4), strides=2, padding='same')
-        s.c4 = L.Conv2D(256, kernel_size=(3,3), strides=1, padding='same')
-        s.c5 = L.Conv2D(512, kernel_size=(4,4), strides=2, padding='same')
-        s.c6 = L.Conv2D(512, kernel_size=(3,3), strides=1, padding='same')
-        s.c7 = L.Conv2D(1024, kernel_size=(4,4), strides=2, padding='same')
-        s.c8 = L.Conv2D(1024, kernel_size=(3,3), strides=1, padding='same')
+        s.c1 = L.Conv2D(64, kernel_size=(4,4), strides=2, padding='same')
+        s.c2 = L.Conv2D(64, kernel_size=(3,3), strides=1, padding='same')
+        s.c3 = L.Conv2D(128, kernel_size=(4,4), strides=2, padding='same')
+        s.c4 = L.Conv2D(128, kernel_size=(3,3), strides=1, padding='same')
+        s.c5 = L.Conv2D(256, kernel_size=(4,4), strides=2, padding='same')
+        s.c6 = L.Conv2D(256, kernel_size=(3,3), strides=1, padding='same')
+        s.c7 = L.Conv2D(512, kernel_size=(4,4), strides=2, padding='same')
+        s.c8 = L.Conv2D(512, kernel_size=(3,3), strides=1, padding='same')
 
-        s.dc8 = L.Conv2DTranspose(1024, kernel_size=(4,4), strides=2, padding='same')
-        s.dc7 = L.Conv2D(1024, kernel_size=(3,3), strides=1, padding='same')
-        s.dc6 = L.Conv2DTranspose(512, kernel_size=(4,4), strides=2, padding='same')
+        s.dc8 = L.Conv2DTranspose(512, kernel_size=(4,4), strides=2, padding='same')
+        s.dc7 = L.Conv2D(512, kernel_size=(3,3), strides=1, padding='same')
+        s.dc6 = L.Conv2DTranspose(256, kernel_size=(4,4), strides=2, padding='same')
         s.dc5 = L.Conv2D(256, kernel_size=(3,3), strides=1, padding='same')
-        s.dc4 = L.Conv2DTranspose(256, kernel_size=(4,4), strides=2, padding='same')
+        s.dc4 = L.Conv2DTranspose(128, kernel_size=(4,4), strides=2, padding='same')
         s.dc3 = L.Conv2D(128, kernel_size=(3,3), strides=1, padding='same')
-        s.dc2 = L.Conv2DTranspose(128, kernel_size=(4,4), strides=2, padding='same')
+        s.dc2 = L.Conv2DTranspose(64, kernel_size=(4,4), strides=2, padding='same')
         s.dc1 = L.Conv2D(64, kernel_size=(3,3), strides=1, padding='same')
         s.dc0 = L.Conv2D(kwargs['classes'], kernel_size=(3,3), strides=1, padding='same', name='decoder_out')
 
@@ -165,6 +165,54 @@ class MotokimuraUnet():
 
     def __call__(self, *args, **kwargs):
         return self.model(*args, **kwargs)
+
+
+class DamageClassifier(MotokimuraUnet):
+    def __init__(self, inp_pre, inp_post, classes=5, filters=16):
+        inp_pre = tf.compat.v1.image.resize(inp_pre,
+                                            size=[S.INPUTSHAPE[0]//4, S.INPUTSHAPE[1]//4],
+                                            align_corners=True,
+                                            method=tf.image.ResizeMethod.BILINEAR)
+        inp_post = tf.compat.v1.image.resize(inp_post,
+                                             size=[S.INPUTSHAPE[0]//4, S.INPUTSHAPE[1]//4],
+                                             align_corners=True,
+                                             method=tf.image.ResizeMethod.BILINEAR)
+
+        self.c0 = L.Conv2D(filters, kernel_size=(3,3), strides=1, padding='same')
+        self.bn0 = L.BatchNormalization()
+        self.d0 = L.Conv2DTranspose(filters, kernel_size=(4,4), strides=2, padding='same')
+        self.c1 = L.Conv2D(filters*2, kernel_size=(4,4), strides=2, padding='same')
+        self.bn1 = L.BatchNormalization()
+        self.d1 = L.Conv2DTranspose(filters*2, kernel_size=(3,3), strides=1, padding='same')
+
+        def melt(self, x):
+            x = self.c0(x)
+            x = self.bn0(x)
+            x = self.d0(x)
+            x = self.c1(x)
+            x = self.bn1(x)
+            x = self.d1(x)
+            return x
+
+        x = melt(self, inp_pre)
+        y = melt(self, inp_post)
+
+        x = L.Concatenate()([x,y])
+        x = L.Conv2D(filters, kernel_size=(5,5), dilation_rate=3, padding='same')(x)
+        x = L.BatchNormalization()(x)
+        x = L.Activation('relu')(x)
+        x = L.Conv2D(classes, kernel_size=(3,3), strides=1, padding='same')(x)
+        x = L.Conv2D(classes, kernel_size=(4,4), strides=2, padding='same')(x)
+
+        x = tf.compat.v1.image.resize(x,
+                                      size=[S.INPUTSHAPE[0], S.INPUTSHAPE[1]],
+                                      align_corners=True,
+                                      method=tf.image.ResizeMethod.BILINEAR)
+        x = L.Reshape((-1,classes))
+        x = L.Activation('softmax')(x)
+
+        self.model = tf.keras.models.Model(inputs=[inp_pre, inp_post], outputs=[x])
+
 
 
 def Discriminator():

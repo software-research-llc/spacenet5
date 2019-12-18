@@ -42,24 +42,6 @@ callbacks = [
 #preprocess_input = sm.get_preprocessing(BACKBONE)
 
 
-def f1score(y_true, y_pred):
-    TP = tf.reduce_sum(y_true * y_pred)
-    FN = tf.reduce_sum(y_true - y_pred)
-    FP = tf.reduce_sum(y_pred - y_true)
-
-#    FN = K.sum(tf.logical_and(pred != targ, targ == one))
-#    FP = K.sum(tf.logical_and(pred == one, targ != one))
-
-    prec = TP / (TP + FP + K.epsilon())
-    rec = TP / (TP + FN + K.epsilon())
-    f1 = 2 * (prec * rec) / (prec + rec + K.epsilon())
-    return f1
-
-
-def f1_loss(y_true, y_pred):
-    return 1 - f1score(y_true, y_pred)
-
-
 def save_model(model, save_path=S.MODELSTRING, pause=0):
     if pause > 0:
         sys.stderr.write("Saving in")
@@ -126,8 +108,7 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
          epochs: ("Number of epochs", "option", "e", int)=50,
          optimizer=tf.keras.optimizers.RMSprop(),
          loss='categorical_crossentropy',
-         metrics=['categorical_accuracy', 'mae',
-                  score.iou_score, score.num_correct, score.pct_correct,
+         metrics=[score.num_correct, score.pct_correct,
                   score.tensor_f1_score]):
     """
     Train the model.
@@ -158,7 +139,7 @@ def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_s
                             verbose=verbose, callbacks=callbacks,
                             validation_steps=len(val_seq), shuffle=False,
                             use_multiprocessing=True,
-                            max_queue_size=10, workers=5)
+                            max_queue_size=10)
     except KeyboardInterrupt:
             save_model(model, "tmp.hdf5", pause=0)
             save_model(model, save_path, pause=1)

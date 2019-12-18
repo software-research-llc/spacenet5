@@ -29,7 +29,7 @@ def f1_score(y_true, y_pred):
 
 @tf.function
 def remove_background(y_pred):
-    background = tf.constant(([1] + [0] * (S.MASKSHAPE[-1] - 1)) * S.MASKSHAPE[0] * S.MASKSHAPE[1] * 16)
+    background = tf.constant(([1] + [0] * (S.MASKSHAPE[-1] - 1)) * S.MASKSHAPE[0] * S.MASKSHAPE[1] * S.BATCH_SIZE)
     bg = tf.reshape(background, [-1, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
 
     pr = tf.cast(K.round(y_pred), tf.int32)
@@ -86,9 +86,9 @@ def num_correct(y_true, y_pred):
 def tensor_f1_score(y_true, y_pred):
     gt, pr = get_gt_pr(y_true, y_pred)
 
-    tp = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int64))
-    fp = tf.reduce_sum(tf.clip_by_value(tf.cast(pr, tf.int64) - tf.cast(gt, tf.int64), 0, 1))
-    fn = tf.reduce_sum(tf.clip_by_value(tf.cast(gt, tf.int64) - tf.cast(pr, tf.int64), 0, 1))
+    tp = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))
+    fp = tf.reduce_sum(tf.clip_by_value(tf.cast(pr, tf.int32) - tf.cast(gt, tf.int32), 0, 1))
+    fn = tf.reduce_sum(tf.clip_by_value(tf.cast(gt, tf.int32) - tf.cast(pr, tf.int32), 0, 1))
 
     if (tp + fp) > 0 and (tp + fn) > 0:
         prec = tp / (tp + fp)

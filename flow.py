@@ -87,7 +87,7 @@ def apply_gaussian_blur(img:np.ndarray, kernel=(5,5)):
 def convert_postmask_to_premask(postmask):
     chan1 = postmask[...,0].copy()
     chan2 = np.argmax(postmask, axis=2)
-    np.clip(chan2, 0, 1)
+    chan2 = np.clip(chan2, 0, 1)
     return np.dstack([chan1,chan2])
 
 class Dataflow(tf.keras.utils.Sequence):
@@ -131,8 +131,10 @@ class Dataflow(tf.keras.utils.Sequence):
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
         """
-        x = []
-        y = []
+        x_pres = []
+        y_pres = []
+        x_posts = []
+        y_posts = []
         x_pre = np.empty(0)
         x_post = np.empty(0)
         y_pre = np.empty(0)
@@ -168,16 +170,31 @@ class Dataflow(tf.keras.utils.Sequence):
                 preimg = apply_gaussian_blur(preimg, kernel=(ksize,ksize))
                 postimg = apply_gaussian_blur(postimg, kernel=(ksize,ksize))
 
-            x_pre = np.array(pre.chips(preimg)).astype(np.int32)
-            x_post = np.array(post.chips(postimg)).astype(np.int32)
+            x_pre = np.array(preimg).astype(np.int32)
+            x_post = np.array(postimg).astype(np.int32)
 
-            y_pre = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in pre.chips(premask)])
-            y_post = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], 6) for chip in post.chips(postmask)])
+            y_pre = np.array(premask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES))
+            y_post = np.array(postmask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], 6))
+
+            x_pres.append(x_pre)
+            x_posts.append(x_post)
+            y_pres.append(y_pre)
+            y_posts.append(y_post)
+            #x_pre = np.array(pre.chips(preimg)).astype(np.int32)
+            #x_post = np.array(post.chips(postimg)).astype(np.int32)
+
+            #y_pre = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in pre.chips(premask)])
+            #y_post = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], 6) for chip in post.chips(postmask)])
+
+        x_pres = np.array(x_pres)
+        x_posts = np.array(x_posts)
+        y_pres = np.array(y_pres)
+        y_posts = np.array(y_posts)
 
         if return_postmask is True:
-            return (x_pre, x_post), y_post
+            return (x_pres, x_posts), y_posts
         else:
-            return (x_pre, x_post), y_pre
+            return (x_pres, x_posts), y_pres
 
     def prune_to(self, filename):
         for samples in df.samples:

@@ -14,6 +14,7 @@ import os
 import sys
 import skimage
 import score
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -38,19 +39,20 @@ def mode(ary):
 
 def build_model(backbone=S.ARCHITECTURE,
                 train=False,
-                classes=4):
+                classes=5):
 
     model = unet.MotokimuraUnet(classes=2)
     model = model.convert_to_damage_classifier()
+    model.model = tf.keras.applications.ResNet50(classes=classes, include_top=True, input_shape=S.INPUTSHAPE, weights=None)
     return model
 
 
-def load_weights(model, save_file):
+def load_weights(model, save_file=S.DMG_MODELSTRING):
     model.model.load_weights(save_file)
     return model
 
 
-def extract_patches(pre, post, mask, return_masks=False, max_x=S.DAMAGE_MAX_X, max_y=S.DAMAGE_MAX_Y):
+def extract_patches(pre, post, mask, return_masks=False, return_dict=False, max_x=S.DAMAGE_MAX_X, max_y=S.DAMAGE_MAX_Y):
     """
     Extract all portions of `pre` and `post` corresponding to contiguous areas in `mask`.  The ground truth is
     determined by taking the highest frequency damage class found among the values in contiguous regions of 'mask'
@@ -62,18 +64,25 @@ def extract_patches(pre, post, mask, return_masks=False, max_x=S.DAMAGE_MAX_X, m
       postboxes: variably sized portions of the post-disaster image (matching areas in input mask)
       klasses: one-hot encoded list of damage classes, indices of which correspond to indices in preboxes/postboxes
       masks (optional): variably sized portions of the mask corresponding to preboxes/postboxes (e.g. for debugging)
+
+        ** or if return_dict=True **
+
+      retdict (optional): a dictionary with all of the above, plus the (x,y) coords of objs within the mask
     """
     preboxes = []
     postboxes = []
     klasses = []
     masks = []
+    xys = []
     # extract individual buildings from the mask
     rectangles = infer.bounding_rectangles(mask)
     for rect in rectangles:
         # store a view for each building rectangle (region of interest) that was found
         x,y = rect
+        # skip objects that are smaller than 5 pixels
         if x.stop-x.start <= 5 or y.stop-y.start <= 5:
             continue
+        # also skip any objects that are larger than the net's input size
         if x.stop-x.start >= max_x:
             x = slice(x.start, x.start + max_x - 1)
         if y.stop-y.start >= max_y:
@@ -94,6 +103,13 @@ def extract_patches(pre, post, mask, return_masks=False, max_x=S.DAMAGE_MAX_X, m
         klass_one_hot = [0] * 5
         klass_one_hot[klass-1] = 1
         klasses.append(klass_one_hot)
+        xys.append((x,y))
+
+    # return all of the above plus the (x,y) bounding boxes
+    if return_dict:
+        retdict = { 'bbox': xys, 'class': klasses, 'mask': np.array(masks),
+                    'prebox': np.array(preboxes), 'postbox': np.array(postboxes) }
+        return retdict
 
     # return all the (pre-disaster, post-disaster) ROIs, their corresponding damage classes,
     # and optionally the mask we used.
@@ -171,7 +187,7 @@ class BuildingDataflow(tf.keras.utils.Sequence):
     e.g. `topdir/hurricane-harvey-pre-00001/0:1.png` is the first building in hurricane
     harvey image 00001, and the buildings in the file belong to the 'minor-damage' class.
     """
-    def __init__(self, topdir="buildings", batch_size=64, train=False, validate=False):
+    def __init__(self, topdir="buildings", batch_size=50, train=False, validate=False, shuffle=True):
         self.files = []
         self.topdir = topdir
         self.batch_size = batch_size
@@ -190,6 +206,9 @@ class BuildingDataflow(tf.keras.utils.Sequence):
             self.files = self.files[int(np.floor(len(self.files)*0.9)):]
         else:
             raise Exception("Should be either train or validate")
+
+        if shuffle:
+            random.shuffle(self.files)
 
     def __len__(self):
         length = int(np.ceil(len(self.files) / float(self.batch_size)))
@@ -260,8 +279,8 @@ def main(epochs, noaction=False, restore=False):
     if not noaction:
         model = build_model()
         if restore:
-            model = load_weights(model, "motokimura-damage.hdf5")
-            logger.info("Weights loaded successfully.")
+            model = load_weights(model, S.DMG_MODELSTRING)
+            logger.info("Weights loaded from {} successfully.".format(S.DMG_MODELSTRING))
         model.compile(optimizer=tf.keras.optimizers.RMSprop(),#tf.keras.optimizers.Adam(lr=0.00001),
                       loss='categorical_crossentropy',
                       metrics=['categorical_accuracy', score.damage_f1_score])
@@ -269,7 +288,7 @@ def main(epochs, noaction=False, restore=False):
         model = None
     train_seq = BuildingDataflow(train=True)
     valid_seq = BuildingDataflow(validate=True)
-    callback = tf.keras.callbacks.ModelCheckpoint("damage-best.hdf5", save_weights_only=True, save_best_only=True)
+    callback = tf.keras.callbacks.ModelCheckpoint(S.DMG_MODELSTRING.replace(".hdf5", "-best.hdf5"), save_weights_only=True, save_best_only=True)
 
     try:
         model.fit(train_seq, validation_data=valid_seq, epochs=epochs,
@@ -278,8 +297,8 @@ def main(epochs, noaction=False, restore=False):
                             use_multiprocessing=True,
                             max_queue_size=10, workers=5)
     except KeyboardInterrupt:
-        model.model.save_weights("damage.hdf5.tmp")
-        logger.info("Saved to {}".format("damage.hdf5.tmp"))
+        model.model.save_weights(S.DMG_MODELSTRING)
+        logger.info("Saved to {}".format(S.DMG_MODELSTRING))
     """
     try:
         for i in range(epochs):

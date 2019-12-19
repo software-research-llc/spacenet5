@@ -329,21 +329,39 @@ class Building:
         return round(x), round(y)
 
     def extract_from_images(self, pre:np.ndarray, post:np.ndarray):
+        """
+        Slice out the patches of `pre` and `post` corresponding to the location of this building,
+        then return them stacked on top of each other and zero-padded to S.DMG_SAMPLESHAPE.
+
+        i.e. get individual pre-disaster and post-disaster buildings for training
+
+        Returns: (box, subtype)
+
+            box:     the stacked image.
+            subtype: the damage class (subtype) of the buildings in the post-disaster image
+        """
         mask = np.zeros(pre.shape[:2], dtype=np.uint8)#S.SAMPLESHAPE)#[S.DMG_SAMPLESHAPE[0]//2,S.DMG_SAMPLESHAPE[1]//2], dtype=np.uint8)
-        ret = np.zeros(S.DMG_SAMPLESHAPE)
+        #ret = np.zeros(S.DMG_SAMPLESHAPE)
 
         cv2.fillPoly(mask,np.array([self.coords()]), 1)
         contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
         for c in contours:
             x,y,w,h = cv2.boundingRect(c)
-            #ret[0:w,0:h,:] = pre[x:x+w,y:y+h,:]
-            #ret[w:w+w,0:h,:] = post[x:x+w,y:y+h,:]
-            preview = pre[y:y+h,x:x+w,:]
-            postview = post[y:y+h,x:x+w,:]
-            ret = np.vstack([preview,postview])
 
-        return (ret, self.color())
+            # extract buildings along with a 5 pixel boundary
+            x_ = np.max([0,x-5])
+            y_ = np.max([0,y-5])
+            preview = pre[y_:y+h+10,x_:x+w+10,:]
+            postview = post[y_:y+h+10,x_:x+w+10,:]
+            tiny = np.vstack([preview,postview])
+
+            x,y,z = tiny.shape
+            x,y = np.min([S.DMG_SAMPLESHAPE[0],x]), np.min([S.DMG_SAMPLESHAPE[1],y])
+            box = np.zeros(S.DMG_SAMPLESHAPE, dtype=np.uint8)
+            box[0:x,0:y,:] = tiny.astype(np.uint8)[:S.DMG_SAMPLESHAPE[0],:S.DMG_SAMPLESHAPE[1],:]
+
+        return (box, self.color())
 
 
 class Target:

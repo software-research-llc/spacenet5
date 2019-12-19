@@ -154,6 +154,10 @@ class Dataflow(tf.keras.utils.Sequence):
         return_postmask = self.return_postmask
 #        for sample in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
+            if 'test' in pre.img_name or 'test' in post.img_name:
+                x_pre, x_post = pre.image(), post.image()
+                return np.expand_dims(np.dstack([x_pre, x_post]), axis=0), pre.img_name
+
             premask = pre.multichannelmask()
             postmask = post.multichannelmask()
             if not return_postmask:
@@ -193,12 +197,14 @@ class Dataflow(tf.keras.utils.Sequence):
             if interlace is True:
                 x_pre, x_post = interlace(x_pre, x_post)
             elif self.return_stacked is True:
+                """
                 # stack pre & post chans adjacently (red/red, blue/blue, green/green)
                 chans = []
                 for chan in range(3):
                     chans.append(x_pre[...,chan])
                     chans.append(x_post[...,chan])
-                stacked.append(np.dstack(chans))
+                """
+                stacked.append(np.dstack([x_pre, x_post]))
 
             x_pres.append(x_pre)
             x_posts.append(x_post)

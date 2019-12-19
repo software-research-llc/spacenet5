@@ -55,7 +55,7 @@ def randomize_damage(img):
     return img
 
 
-if __name__ == '__main__':
+def damage_by_building_classification():
     # load the localization (segmentation) model
     S.MODELSTRING = "motokimura-2.hdf5"
     S.N_CLASSES = 2
@@ -116,3 +116,31 @@ if __name__ == '__main__':
 
         pbar.update(1)
         i += 1
+
+def damage_by_segmentation():
+    model = train.build_model(train=False)
+    model = train.load_weights(model, S.MODELSTRING)
+    df = flow.Dataflow(files=flow.get_test_files(), transform=False,
+                       batch_size=1, buildings_only=False, shuffle=False,
+                       return_postmask=False, return_stacked=True)
+    pbar = tqdm.tqdm(total=len(df))
+
+    for image,filename in df:
+        filename = os.path.basename(filename)
+        filename = filename.replace("pre", "localization").replace(".png", "_prediction.png") 
+        #if os.path.exists(os.path.join("solution", filename)):
+        #    continue
+
+        # localization (segmentation)
+        pred = model.predict(image)
+        mask = infer.convert_prediction(pred)
+        write_solution(names=[filename], images=[mask])
+        
+        filename = filename.replace("localization", "damage")
+        write_solution(names=[filename], images=[mask])
+
+        pbar.update(1)
+
+
+if __name__ == '__main__':
+    damage_by_segmentation()

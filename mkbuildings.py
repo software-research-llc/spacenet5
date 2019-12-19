@@ -12,6 +12,41 @@ import flow
 OUTPUT_DIR = "data/buildings"
 
 
+def extract_all(df, output_dir=OUTPUT_DIR):
+    """
+    Likely to exhaust system RAM before it finishes, but will return all individual
+    buildings in a list of (preimg-slice, postimg-slice, damage-subtype) tuples.
+    """
+    ret = []
+    for (pre, post) in tqdm.tqdm(df.samples):
+        preimg = pre.image()
+        postimg = post.image()
+        for bldg in sample.buildings:
+            prebox = bldg.extract_from_image(preimg)
+            postbox = bldg.extract_from_image(postimg)
+            ret.append( (prebox,postbox,bldg.color()) )
+
+    return ret
+
+
+def write_all(output_dir=OUTPUT_DIR):
+    df = flow.BuildingDataflow(shuffle=False)
+    filelist = list(map(lambda x: os.path.basename(x[0]), flow.get_training_files()))
+    pbar = tqdm.tqdm(total=len(filelist))
+
+    for i,buildings in enumerate(df):
+        prename = filelist[i]
+        prename = prename.replace(".json", "").replace(".png", "")
+        dirname = os.path.join(output_dir, prename)
+        if not os.path.exists(dirname):
+            os.mkdir(dirname)
+
+        for j, (prebox,postbox,klass) in enumerate(buildings):
+
+            outfile = os.path.join(dirname, str(j) + ":" + str(klass) + ".png")
+            skimage.io.imsave(outfile, comboimg, check_contrast=False)
+
+
 def run(output_dir=OUTPUT_DIR):
     df = damage.DamageDataflow(files=flow.get_training_files(), shuffle=False)
     filelist = list(map(lambda x: os.path.basename(x[0]), flow.get_training_files()))

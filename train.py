@@ -64,18 +64,17 @@ def load_weights(model, save_path=S.MODELSTRING):
 
 def build_model(*args, **kwargs):
     import unet
-    inp_pre = tf.keras.layers.Input(S.INPUTSHAPE)
-    inp_post = tf.keras.layers.Input(S.INPUTSHAPE)
+    inp_stacked = tf.keras.layers.Input(S.INPUTSHAPE)
 
     decoder = unet.MotokimuraUnet(classes=S.N_CLASSES)
 
-    x = inp_post#tf.keras.layers.Add()([inp_pre, inp_post])
-    x = decoder(x)
+    #x = inp_stacked#tf.keras.layers.Add()([inp_pre, inp_post])
+    x = decoder(inp_stacked)
     x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
     x = tf.keras.layers.Activation('softmax')(x)
 
-    return tf.keras.models.Model(inputs=[inp_pre,inp_post], outputs=[x])
-
+    m = tf.keras.models.Model(inputs=[inp_stacked], outputs=[x])
+    return m
 
 def build_deeplab_model(architecture=S.ARCHITECTURE, train=False):
     deeplab = deeplabmodel.Deeplabv3(input_shape=S.INPUTSHAPE,
@@ -126,10 +125,12 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
                               transform=0.3,
                               shuffle=True,
                               buildings_only=True,
-                              return_postmask=True)
+                              return_postmask=True,
+                              return_stacked=True)
     val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE,
                             buildings_only=True,
-                            return_postmask=True)
+                            return_postmask=True,
+                            return_stacked=True)
 
     logger.info("Training.")
     train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)

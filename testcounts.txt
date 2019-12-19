@@ -1,0 +1,2 @@
+no-damage    minor-damage    major-damage     destroyed     un-classified
+ 80,000         11,000          8,000           8,000           2,500

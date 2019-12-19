@@ -242,7 +242,7 @@ class BuildingDataflow(Dataflow):
     def __init__(self, *args, **kwargs):
         super(BuildingDataflow, self).__init__(buildings_only=True, *args, **kwargs)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx, limit=64):
         boxes = []
         classes = []
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
@@ -252,9 +252,15 @@ class BuildingDataflow(Dataflow):
             for bldg in post.buildings:
                 img, klass = bldg.extract_from_images(preimg,postimg)
                 boxes.append(img)
-                classes.append(klass)
 
-        return boxes, classes
+                # make all `un-classified` buildings the most common damage type
+                if klass == 5:
+                    klass = 1
+                onehot = [0] * 5
+                onehot[klass] = 1
+                classes.append(onehot)
+
+        return np.array(boxes[:limit]), np.array(classes[:limit])
 
 
 class Building:

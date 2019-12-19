@@ -1,3 +1,4 @@
+from flow import BuildingDataflow, get_training_files, get_validation_files
 import numpy as np
 import logging
 import infer
@@ -37,13 +38,16 @@ def mode(ary):
     return sorted(counts, key=lambda x: counts[x])[-1]
 
 
+class ModelShell(unet.MotokimuraUnet):
+    def __init__(self):
+        self.model = None
+
 def build_model(backbone=S.ARCHITECTURE,
                 train=False,
                 classes=5):
 
-    model = unet.MotokimuraUnet(classes=2)
-    model = model.convert_to_damage_classifier()
-    model.model = tf.keras.applications.ResNet50(classes=classes, include_top=True, input_shape=S.INPUTSHAPE, weights=None)
+    model = ModelShell()
+    model.model = tf.keras.applications.ResNet50(classes=classes, include_top=True, input_shape=S.DMG_SAMPLESHAPE, weights=None)
     return model
 
 
@@ -294,7 +298,6 @@ def epoch(model, train_seq, val_seq, noaction=False, step=16):
 
 
 def main(epochs, noaction=False, restore=False):
-    from flow import get_training_files, get_validation_files
     if not noaction:
         model = build_model()
         if restore:
@@ -305,8 +308,8 @@ def main(epochs, noaction=False, restore=False):
                       metrics=['categorical_accuracy', score.damage_f1_score])
     else:
         model = None
-    train_seq = BuildingDataflow(train=True)
-    valid_seq = BuildingDataflow(validate=True)
+    train_seq = BuildingDataflow(files=get_training_files())
+    valid_seq = BuildingDataflow(files=get_validation_files())
     callback = tf.keras.callbacks.ModelCheckpoint(S.DMG_MODELSTRING.replace(".hdf5", "-best.hdf5"), save_weights_only=True, save_best_only=True)
 
     try:
@@ -338,20 +341,12 @@ def main(epochs, noaction=False, restore=False):
 
 def display():
     from show import display_images
-    df = DamageDataflow(return_masks=True, batch_size=1)
-    for (xs,ys), klasses, masks, buildings in df:#[df[2152], df[2153], df[2154], df[2155]]:
-        images = []
-        names = []
-        for i in range(len(xs)):
-            images.append(xs[i])
-            images.append(ys[i])
-            images.append(masks[i])
-            images.append(buildings[i])
-            names.append(klasses[i])
-            names.append(klasses[i])
-            names.append(klasses[i])
-            names.append(klasses[i])
-        display_images(images, names)
+    df = flow.BuildingDataflow()
+    for i in range(len(df)):
+        boxes, klasses = df[i]
+        show.display_images(boxes, list(map(lambda x: str(x), klasses)))
+    
+    sys.exit()
 
 
 def cli(show: ("Just show the data that will be fed to the network", "flag", "s"),

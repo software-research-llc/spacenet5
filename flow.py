@@ -102,7 +102,8 @@ class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
     """
-    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False, interlace=False, return_postmask=True):
+    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False, interlace=False, return_postmask=True, return_stacked=False):
+        self.return_stacked = return_stacked
         self.return_postmask = return_postmask
         self.transform = transform
         self.shuffle = shuffle
@@ -145,6 +146,7 @@ class Dataflow(tf.keras.utils.Sequence):
         y_pres = []
         x_posts = []
         y_posts = []
+        stacked = []
         x_pre = np.empty(0)
         x_post = np.empty(0)
         y_pre = np.empty(0)
@@ -190,26 +192,35 @@ class Dataflow(tf.keras.utils.Sequence):
 
             if interlace is True:
                 x_pre, x_post = interlace(x_pre, x_post)
+            elif self.return_stacked is True:
+                # stack pre & post chans adjacently (red/red, blue/blue, green/green)
+                chans = []
+                for chan in range(3):
+                    chans.append(x_pre[...,chan])
+                    chans.append(x_post[...,chan])
+                stacked.append(np.dstack(chans))
 
             x_pres.append(x_pre)
             x_posts.append(x_post)
             y_pres.append(y_pre)
             y_posts.append(y_post)
+
             #x_pre = np.array(pre.chips(preimg)).astype(np.int32)
             #x_post = np.array(post.chips(postimg)).astype(np.int32)
 
             #y_pre = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in pre.chips(premask)])
             #y_post = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], 6) for chip in post.chips(postmask)])
 
-        x_pres = np.array(x_pres)
-        x_posts = np.array(x_posts)
-        y_pres = np.array(y_pres)
-        y_posts = np.array(y_posts)
+        x_pres = np.array(x_pres, copy=False)
+        x_posts = np.array(x_posts, copy=False)
+        y_pres = np.array(y_pres, copy=False)
+        y_posts = np.array(y_posts, copy=False)
 
-        if return_postmask is True:
-            return (x_pres, x_posts), y_posts
+        y_ret = y_posts if return_postmask is True else y_pres
+        if self.return_stacked is True:
+            return np.array(stacked, copy=False), y_ret
         else:
-            return (x_pres, x_posts), y_pres
+            return (x_pres, x_posts), y_ret
 
     def prune_to(self, filename):
         for samples in df.samples:
@@ -225,6 +236,25 @@ class Dataflow(tf.keras.utils.Sequence):
     def to_pickle(self, picklefile:str=S.PICKLED_TRAINSET):
         with open(picklefile, "wb") as f:
             return pickle.dump(self, f)
+
+
+class BuildingDataflow(Dataflow):
+    def __init__(self, *args, **kwargs):
+        super(BuildingDataflow, self).__init__(buildings_only=True, *args, **kwargs)
+
+    def __getitem__(self, idx):
+        boxes = []
+        classes = []
+        for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
+            preimg = pre.image()
+            postimg = post.image()
+
+            for bldg in post.buildings:
+                img, klass = bldg.extract_from_images(preimg,postimg)
+                boxes.append(img)
+                classes.append(klass)
+
+        return boxes, classes
 
 
 class Building:
@@ -297,6 +327,23 @@ class Building:
         x = x / (new_x / orig_x)
         y = y / (new_y / orig_y)
         return round(x), round(y)
+
+    def extract_from_images(self, pre:np.ndarray, post:np.ndarray):
+        mask = np.zeros(pre.shape[:2], dtype=np.uint8)#S.SAMPLESHAPE)#[S.DMG_SAMPLESHAPE[0]//2,S.DMG_SAMPLESHAPE[1]//2], dtype=np.uint8)
+        ret = np.zeros(S.DMG_SAMPLESHAPE)
+
+        cv2.fillPoly(mask,np.array([self.coords()]), 1)
+        contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+        for c in contours:
+            x,y,w,h = cv2.boundingRect(c)
+            #ret[0:w,0:h,:] = pre[x:x+w,y:y+h,:]
+            #ret[w:w+w,0:h,:] = post[x:x+w,y:y+h,:]
+            preview = pre[y:y+h,x:x+w,:]
+            postview = post[y:y+h,x:x+w,:]
+            ret = np.vstack([preview,postview])
+
+        return (ret, self.color())
 
 
 class Target:
@@ -371,9 +418,9 @@ class Target:
             color = b.color() if b.color() != 5 else 1
             if len(coords) > 0:
                 # Set the pixels at coordinates in this class' channel to 1
-                cv2.fillConvexPoly(chans[color], np.array([coords]), 1)
+                cv2.fillPoly(chans[color], np.array([coords]), 1)
                 # Zero out the background pixels for the same coordinates
-                cv2.fillConvexPoly(chans[0], np.array([coords]), 0)
+                cv2.fillPoly(chans[0], np.array([coords]), 0)
         img = np.dstack(chans)
         return img
 

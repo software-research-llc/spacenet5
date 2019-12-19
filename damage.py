@@ -196,7 +196,7 @@ class DamageDataflow(Dataflow):
         return (preboxes, postboxes), klasses, masks, buildings
 
 
-class BuildingDataflow(tf.keras.utils.Sequence):
+class BuildingDataflow_old(tf.keras.utils.Sequence):
     """
     A dataflow to train on building damage classification.  Expects buildings to exist 
     in the `topdir` passed to __init__(), and to be .png format files of pre- and post-

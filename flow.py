@@ -90,14 +90,24 @@ def convert_postmask_to_premask(postmask):
     chan2 = np.clip(chan2, 0, 1)
     return np.dstack([chan1,chan2])
 
+
+def interlace(pre, post, step=3):
+    pre = pre.copy()
+    pre[range(0, pre.shape[0], step),range(0,pre.shape[1],step)] = post[range(0,post.shape[0],step),range(0,post.shape[1],step)]
+
+    return pre, post
+
+
 class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
     """
-    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False):
+    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False, interlace=False, return_postmask=True):
+        self.return_postmask = return_postmask
         self.transform = transform
         self.shuffle = shuffle
         self.batch_size = batch_size
+        self.interlace = interlace
         self.image_datagen = ImageDataGenerator()
         self.samples = []
 
@@ -126,7 +136,7 @@ class Dataflow(tf.keras.utils.Sequence):
         length = int(np.ceil(len(self.samples) / float(self.batch_size)))
         return length
 
-    def __getitem__(self, idx, preprocess=False, return_postmask=False):
+    def __getitem__(self, idx, preprocess=False):
         """
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
@@ -139,11 +149,13 @@ class Dataflow(tf.keras.utils.Sequence):
         x_post = np.empty(0)
         y_pre = np.empty(0)
         y_post = np.empty(0)
+        return_postmask = self.return_postmask
 #        for sample in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
-            #premask = pre.multichannelmask()
+            premask = pre.multichannelmask()
             postmask = post.multichannelmask()
-            premask = convert_postmask_to_premask(postmask)
+            if not return_postmask:
+                premask = convert_postmask_to_premask(postmask)
 
             preimg = pre.image()
             postimg = post.image()
@@ -170,11 +182,14 @@ class Dataflow(tf.keras.utils.Sequence):
                 preimg = apply_gaussian_blur(preimg, kernel=(ksize,ksize))
                 postimg = apply_gaussian_blur(postimg, kernel=(ksize,ksize))
 
-            x_pre = np.array(preimg).astype(np.int32)
-            x_post = np.array(postimg).astype(np.int32)
+            x_pre = np.array(preimg, copy=False)#.astype(np.int32)
+            x_post = np.array(postimg, copy=False)#.astype(np.int32)
 
-            y_pre = np.array(premask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES))
-            y_post = np.array(postmask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], 6))
+            y_pre = np.array(premask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], -1), copy=False)
+            y_post = np.array(postmask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], -1), copy=False)
+
+            if interlace is True:
+                x_pre, x_post = interlace(x_pre, x_post)
 
             x_pres.append(x_pre)
             x_posts.append(x_post)
@@ -329,7 +344,6 @@ class Target:
             if len(coords) > 0:
                 try:
                     cv2.fillPoly(img, np.array([coords]), b.color())
-                    cv2.fillConvexPoly(img, coords, b.color())
                 except Exception as exc:
                     logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
         return img
@@ -352,11 +366,14 @@ class Target:
         # being a one-hot-encoded vector corresponding to class for each (x,y) location
         for b in self.buildings:
             coords = b.coords()
+            # "un-classified" buildings will cause an error during evaluation, so don't train
+            # for them
+            color = b.color() if b.color() != 5 else 1
             if len(coords) > 0:
                 # Set the pixels at coordinates in this class' channel to 1
-                cv2.fillPoly(chans[b.color()], np.array([coords]), 1)
+                cv2.fillConvexPoly(chans[color], np.array([coords]), 1)
                 # Zero out the background pixels for the same coordinates
-                cv2.fillPoly(chans[0], np.array([coords]), 0)
+                cv2.fillConvexPoly(chans[0], np.array([coords]), 0)
         img = np.dstack(chans)
         return img
 

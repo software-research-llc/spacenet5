@@ -313,8 +313,8 @@ def main(epochs, noaction=False, restore=False):
         model.fit(train_seq, validation_data=valid_seq, epochs=epochs,
                             verbose=1, callbacks=[callback],
                             validation_steps=len(valid_seq), shuffle=False,
-                            use_multiprocessing=True,
-                            max_queue_size=10, workers=5)
+                            use_multiprocessing=False,
+                            max_queue_size=10)
     except KeyboardInterrupt:
         model.model.save_weights(S.DMG_MODELSTRING)
         logger.info("Saved to {}".format(S.DMG_MODELSTRING))

@@ -57,7 +57,10 @@ def randomize_damage(img):
 
 if __name__ == '__main__':
     # load the localization (segmentation) model
-    model = train.build_model(train=False)
+    S.MODELSTRING = "motokimura-2.hdf5"
+    S.N_CLASSES = 2
+    S.BATCH_SIZE = 1
+    model = train.build_model(train=False, classes=2)
     model = train.load_weights(model, S.MODELSTRING.replace(".hdf5", "-best.hdf5"))
 
     # load the damage classification model
@@ -101,6 +104,8 @@ if __name__ == '__main__':
             try:
                 # set all "1" pixels from the localization step to the predicted damage class
                 klass = dmg_model.predict(np.expand_dims(buildings[k], axis=0))
+                if klass < 0 or klass > 3:
+                    logger.warning("Damage class {} in {} is being clipped to [0,3].".format(klass,filename))
                 box = mask[x.start:x.stop,y.start:y.stop]
                 # klass is one-hot encoded and ranges from 0 to 4
                 box[box > 0] = np.argmax(klass) + 1

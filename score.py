@@ -29,10 +29,10 @@ def f1_score(y_true, y_pred):
 
 @tf.function
 def remove_background(y_pred):
-    background = tf.constant(([1] + [0] * (S.MASKSHAPE[-1] - 1)) * S.MASKSHAPE[0] * S.MASKSHAPE[1] * S.BATCH_SIZE)
-    bg = tf.reshape(background, [-1, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
+    background = tf.constant(([1] + [0] * (S.MASKSHAPE[-1] - 1)) * S.MASKSHAPE[0] * S.MASKSHAPE[1] * S.BATCH_SIZE, dtype=tf.int64)
+    bg = tf.reshape(background, [S.BATCH_SIZE, S.MASKSHAPE[0] * S.MASKSHAPE[1], -1])
 
-    pr = tf.cast(K.round(y_pred), tf.int32)
+    pr = tf.cast(K.round(y_pred), tf.int64)
     pr = tf.clip_by_value(pr - bg, 0, 1)
 
     return pr
@@ -50,9 +50,9 @@ def get_gt_pr(y_true, y_pred):
 def iou_score(y_true, y_pred):
     gt, pr = get_gt_pr(y_true, y_pred)
 
-    intersection = tf.cast(tf.logical_and(gt, pr), tf.int32)
+    intersection = tf.cast(tf.logical_and(gt, pr), tf.int64)
     intersection = tf.reduce_sum(intersection)
-    union = tf.cast(tf.logical_or(gt, pr), tf.int32)
+    union = tf.cast(tf.logical_or(gt, pr), tf.int64)
     union = tf.reduce_sum(union)
 
     if union > 0:
@@ -63,11 +63,11 @@ def iou_score(y_true, y_pred):
 
 
 @tf.function
-def pct_correct(y_true, y_pred):
+def recall(y_true, y_pred):
     gt, pr = get_gt_pr(y_true, y_pred)
 
-    intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))
-    total = tf.reduce_sum(tf.cast(gt, tf.int32))
+    intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int64))
+    total = tf.reduce_sum(tf.cast(gt, tf.int64))
     if total > 0:
         return intersection / total
     else:
@@ -78,7 +78,7 @@ def pct_correct(y_true, y_pred):
 def num_correct(y_true, y_pred):
     gt, pr = get_gt_pr(y_true, y_pred)
 
-    intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))
+    intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int64))
     return intersection
 
 
@@ -86,9 +86,9 @@ def num_correct(y_true, y_pred):
 def tensor_f1_score(y_true, y_pred):
     gt, pr = get_gt_pr(y_true, y_pred)
 
-    tp = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int32))
-    fp = tf.reduce_sum(tf.clip_by_value(tf.cast(pr, tf.int32) - tf.cast(gt, tf.int32), 0, 1))
-    fn = tf.reduce_sum(tf.clip_by_value(tf.cast(gt, tf.int32) - tf.cast(pr, tf.int32), 0, 1))
+    tp = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int64))
+    fp = tf.reduce_sum(tf.clip_by_value(tf.cast(pr, tf.int64) - tf.cast(gt, tf.int64), 0, 1))
+    fn = tf.reduce_sum(tf.clip_by_value(tf.cast(gt, tf.int64) - tf.cast(pr, tf.int64), 0, 1))
 
     if (tp + fp) > 0 and (tp + fn) > 0:
         prec = tp / (tp + fp)

@@ -67,14 +67,14 @@ def build_model(*args, **kwargs):
     inp_pre = tf.keras.layers.Input(S.INPUTSHAPE)
     inp_post = tf.keras.layers.Input(S.INPUTSHAPE)
 
-    decoder = unet.MotokimuraUnet(classes=2)
+    decoder = unet.MotokimuraUnet(classes=S.N_CLASSES)
 
-    x = inp_pre#tf.keras.layers.Add()([inp_pre, inp_post])
+    x = inp_post#tf.keras.layers.Add()([inp_pre, inp_post])
     x = decoder(x)
     x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
     x = tf.keras.layers.Activation('softmax')(x)
 
-    return tf.keras.models.Model(inputs=[inp_pre], outputs=[x])
+    return tf.keras.models.Model(inputs=[inp_pre,inp_post], outputs=[x])
 
 
 def build_deeplab_model(architecture=S.ARCHITECTURE, train=False):
@@ -107,13 +107,14 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
          verbose: ("Keras verbosity level", "option", "v", int)=1,
          epochs: ("Number of epochs", "option", "e", int)=50,
          optimizer=tf.keras.optimizers.RMSprop(),
-         loss='categorical_crossentropy',
-         metrics=[score.num_correct, score.pct_correct,
-                  score.tensor_f1_score]):
+         loss='categorical_crossentropy'):
     """
     Train the model.
     """
 #    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
+    metrics=['accuracy', score.num_correct,
+             score.recall,
+             score.tensor_f1_score]
     logger.info("Building model.")
     model = build_model(architecture=architecture, train=True)
     if restore:
@@ -124,9 +125,11 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
     train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE,
                               transform=0.3,
                               shuffle=True,
-                              buildings_only=True)
+                              buildings_only=True,
+                              return_postmask=True)
     val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE,
-                            buildings_only=True)
+                            buildings_only=True,
+                            return_postmask=True)
 
     logger.info("Training.")
     train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
@@ -138,8 +141,8 @@ def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_s
         model.fit(train_seq, validation_data=val_seq, epochs=epochs,
                             verbose=verbose, callbacks=callbacks,
                             validation_steps=len(val_seq), shuffle=False,
-                            use_multiprocessing=True,
-                            max_queue_size=10)
+                            #use_multiprocessing=True,
+                            max_queue_size=10)#, workers=8)
     except KeyboardInterrupt:
             save_model(model, "tmp.hdf5", pause=0)
             save_model(model, save_path, pause=1)

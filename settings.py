@@ -8,11 +8,11 @@ DAMAGE_ARCHITECTURE = 'resnet50'
 
 # Train/validation split proportion
 SPLITFACTOR = 0.9
-BATCH_SIZE = 2
+BATCH_SIZE = 1
 
 #           0        1             2                3              4              5
 CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
-N_CLASSES = 2#len(CLASSES)
+N_CLASSES = len(CLASSES)
 
 MODELSTRING = "%s-%d.hdf5" % (ARCHITECTURE, N_CLASSES)
 DMG_MODELSTRING = "damage-%s.hdf5" % DAMAGE_ARCHITECTURE

@@ -23,7 +23,26 @@ def display_images(images, names=None):
     plt.show()
 
 
-def predict_and_show(df):
+def predict_and_show(df, argmax=True):
+    model = train.build_model()
+    model = train.load_weights(model)
+
+    for (pre,post), mask in df:
+        pred = model.predict([pre,post])
+        if argmax:
+            pred = infer.convert_prediction(pred, argmax=argmax)
+        else:
+            pred, _ = infer.convert_prediction(pred, argmax=argmax)
+            pred = pred[...,1]
+
+        if argmax:
+            mask = infer.convert_prediction(mask, argmax=argmax)
+        else:
+            mask, _ = infer.convert_prediction(mask, argmax=argmax)
+            mask = mask[...,1]
+
+        display_images([pre, post, mask, pred], ["Pre", "Post", "Ground Truth", "Prediction"])
+
     model = train.build_model()
     model = train.load_weights(model)
 
@@ -39,18 +58,7 @@ def predict_and_show(df):
 
 
 def predict_and_show_no_argmax(df):
-    model = train.build_model()
-    model = train.load_weights(model)
-
-    for (pre,post), mask in df:
-        pred = model.predict(pre)
-        pred, _ = infer.convert_prediction(pred, argmax=False)
-        pred = pred[...,1]
-
-        mask, _ = infer.convert_prediction(mask, argmax=False)
-        mask = mask[...,1]
-
-        display_images([pre, post, mask, pred], ["Pre", "Post", "Ground Truth", "Prediction"])
+    return predict_and_show(df, argmax=False)
 
 
 def show(df, channels):
@@ -75,7 +83,7 @@ def main(predict: ("Do prediction", "flag", "p"),
          argmax: ("Don't argmax() over the channel axis", "flag", "a"),
          image: ("Show this specific image", "option", "i")=""):
 
-    df = flow.Dataflow(files=flow.get_validation_files(), shuffle=True, batch_size=1)
+    df = flow.Dataflow(files=flow.get_validation_files(), shuffle=True, batch_size=1, buildings_only=True)
     if image:
         for i in range(len(df.samples)):
             if image in df.samples[i][0].img_name or image in df.samples[i][1].img_name:

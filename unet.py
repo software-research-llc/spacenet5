@@ -27,25 +27,38 @@ class MotokimuraUnet():
             raise KeyError("pass number of classes as classes=N")
         s = self
         factor = 5
-        s.c0 = L.Conv2D(2 ** factor, kernel_size=(3,3), strides=1, padding='same')
-        s.c1 = L.Conv2D(2 ** (factor+1), kernel_size=(4,4), strides=2, padding='same')
-        s.c2 = L.Conv2D(2 ** (factor+1), kernel_size=(3,3), strides=1, padding='same')
-        s.c3 = L.Conv2D(2 ** (factor+2), kernel_size=(4,4), strides=2, padding='same')
-        s.c4 = L.Conv2D(2 ** (factor+2), kernel_size=(3,3), strides=1, padding='same')
-        s.c5 = L.Conv2D(2 ** (factor+3), kernel_size=(4,4), strides=2, padding='same')
-        s.c6 = L.Conv2D(2 ** (factor+3), kernel_size=(3,3), strides=1, padding='same')
-        s.c7 = L.Conv2D(2 ** (factor+4), kernel_size=(4,4), strides=2, padding='same')
-        s.c8 = L.Conv2D(2 ** (factor+4), kernel_size=(3,3), strides=1, padding='same')
+        s.c0 = L.Conv2D(2 ** (factor), kernel_size=(3,3), strides=1, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.c1 = L.Conv2D(2 ** (factor+1), kernel_size=(4,4), strides=2, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.c2 = L.Conv2D(2 ** (factor+1), kernel_size=(3,3), strides=1, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.c3 = L.Conv2D(2 ** (factor+2), kernel_size=(4,4), strides=2, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.c4 = L.Conv2D(2 ** (factor+2), kernel_size=(3,3), strides=1, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.c5 = L.Conv2D(2 ** (factor+3), kernel_size=(4,4), strides=2, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.c6 = L.Conv2D(2 ** (factor+3), kernel_size=(3,3), strides=1, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.c7 = L.Conv2D(2 ** (factor+4), kernel_size=(4,4), strides=2, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.c8 = L.Conv2D(2 ** (factor+4), kernel_size=(3,3), strides=1, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
 
-        s.dc8 = L.Conv2DTranspose(2 ** (factor+4), kernel_size=(4,4), strides=2, padding='same')
-        s.dc7 = L.Conv2D(2 ** (factor+4), kernel_size=(3,3), strides=1, padding='same')
-        s.dc6 = L.Conv2DTranspose(2 ** (factor+3), kernel_size=(4,4), strides=2, padding='same')
-        s.dc5 = L.Conv2D(2 ** (factor+3), kernel_size=(3,3), strides=1, padding='same')
-        s.dc4 = L.Conv2DTranspose(2 ** (factor+2), kernel_size=(4,4), strides=2, padding='same')
-        s.dc3 = L.Conv2D(2 ** (factor+2), kernel_size=(3,3), strides=1, padding='same')
-        s.dc2 = L.Conv2DTranspose(2 ** (factor+1), kernel_size=(4,4), strides=2, padding='same')
-        s.dc1 = L.Conv2D(2 ** (factor), kernel_size=(3,3), strides=1, padding='same')
-        s.dc0 = L.Conv2D(kwargs['classes'], kernel_size=(3,3), strides=1, padding='same', name='decoder_out')
+        s.dc8 = L.Conv2DTranspose(2 ** (factor+5), kernel_size=(4,4), strides=2, padding='same')
+        s.dc7 = L.Conv2D(2 ** (factor+4), kernel_size=(3,3), strides=1, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.dc6 = L.Conv2DTranspose(2 ** (factor+4), kernel_size=(4,4), strides=2, padding='same')
+        s.dc5 = L.Conv2D(2 ** (factor+3), kernel_size=(3,3), strides=1, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.dc4 = L.Conv2DTranspose(2 ** (factor+3), kernel_size=(4,4), strides=2, padding='same')
+        s.dc3 = L.Conv2D(2 ** (factor+2), kernel_size=(3,3), strides=1, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.dc2 = L.Conv2DTranspose(2 ** (factor+2), kernel_size=(4,4), strides=2, padding='same')
+        s.dc1 = L.Conv2D(2 ** (factor+1), kernel_size=(3,3), strides=1, padding='same',
+                        activity_regularizer=tf.keras.regularizers.l2(0.0000001))
+        s.dc0 = L.Conv2D(kwargs['classes'], kernel_size=(1,1), strides=1, padding='same', name='decoder_out')
 
         s.bnc0 = L.BatchNormalization()
         s.bnc1 = L.BatchNormalization()

@@ -27,7 +27,13 @@ def predict_and_show(df, argmax=True):
     model = train.build_model()
     model = train.load_weights(model)
 
-    for (pre,post),mask in df:
+    for imgs, mask in df:
+        if len(imgs) == 2:
+            pre = imgs[0]
+            post = imgs[1]
+        else:
+            pre = imgs
+            post = imgs
         mask = infer.convert_prediction(mask)
         pred = model.predict((pre,post))
 
@@ -41,39 +47,36 @@ def predict_and_show_no_argmax(df):
     return predict_and_show(df, argmax=False)
 
 
-def show(df, channels):
+def show(df):
     i = 0
-    for (x1,x2),y in df:
-        pre = infer.weave(x1)
-        post = infer.weave(x2)
-        mask = infer.weave_pred(y)
+    for imgs, masks in df:
+        if len(imgs) == 2:
+            pre = imgs[0]
+            post = imgs[1]
+        else:
+            pre = imgs
+            post = imgs
+
+        mask = infer.convert_prediction(y)
 
         prename = df.samples[i][0].img_name
         postname = df.samples[i][1].img_name
 
-        premask = df.samples[i][0].multichannelchipmask()
-        premask = infer.weave_pred(premask)
-
-        display_images([pre, post, premask, mask], [prename, postname, "Pre mask", "Post mask"])
+        display_images([pre, post, summed, averaged, meaned, mask], [prename, postname, "Sum", "Average", "Avg - mean(avg)", "Mask"])
         i += 1
-        time.sleep(0.5)
 
 
 def main(predict: ("Do prediction", "flag", "p"),
-         argmax: ("Don't argmax() over the channel axis", "flag", "a"),
          image: ("Show this specific image", "option", "i")=""):
 
-    df = flow.Dataflow(files=flow.get_validation_files(), shuffle=True, batch_size=1, buildings_only=True, return_stacked=False)
+    df = flow.Dataflow(files=flow.get_validation_files(), shuffle=True, batch_size=1, buildings_only=True, return_stacked=False, transform=0.5, return_average=True)
     if image:
         for i in range(len(df.samples)):
             if image in df.samples[i][0].img_name or image in df.samples[i][1].img_name:
                 df.samples = [df.samples[i]]
 
     if predict:
-        if argmax:
-            predict_and_show_no_argmax(df)
-        else:
-            predict_and_show(df)
+        predict_and_show(df)
     else:
         show(df)
 

@@ -3,12 +3,12 @@ from inspect import getsourcefile
 
 
 # The architecture to use
-ARCHITECTURE = "motokimura"
+ARCHITECTURE = "motokimura-avg"
 DAMAGE_ARCHITECTURE = 'resnet50'
 
 # Train/validation split proportion
 SPLITFACTOR = 0.9
-BATCH_SIZE = 1
+BATCH_SIZE = 2
 
 #           0        1             2                3              4              5
 CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']

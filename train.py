@@ -64,17 +64,18 @@ def load_weights(model, save_path=S.MODELSTRING):
 
 def build_model(*args, **kwargs):
     import unet
-    pre = tf.keras.layers.Input(S.INPUTSHAPE)
-    post = tf.keras.layers.Input(S.INPUTSHAPE)
-    
+    #pre = tf.keras.layers.Input(S.INPUTSHAPE)
+    #post = tf.keras.layers.Input(S.INPUTSHAPE)
+    inp = tf.keras.layers.Input(S.INPUTSHAPE)
+
     decoder = unet.MotokimuraUnet(classes=S.N_CLASSES)
 
     #x = inp_stacked#tf.keras.layers.Add()([inp_pre, inp_post])
-    x = decoder(post)
+    x = decoder(inp)
     x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
     x = tf.keras.layers.Activation('softmax')(x)
 
-    m = tf.keras.models.Model(inputs=[pre, post], outputs=[x])
+    m = tf.keras.models.Model(inputs=[inp], outputs=[x])
     return m
 
 
@@ -128,11 +129,13 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
                               shuffle=True,
                               buildings_only=True,
                               return_postmask=True,
-                              return_stacked=False)
+                              return_stacked=False,
+                              return_average=True)
     val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE,
                             buildings_only=True,
                             return_postmask=True,
-                            return_stacked=False)
+                            return_stacked=False,
+                            return_average=True)
 
     logger.info("Training.")
     train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)

@@ -135,7 +135,8 @@ class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
     """
-    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False, interlace=False, return_postmask=True, return_stacked=False):
+    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False, interlace=False, return_postmask=True, return_stacked=False, return_average=False):
+        self.return_average = return_average
         self.return_stacked = return_stacked
         self.return_postmask = return_postmask
         self.transform = transform
@@ -175,6 +176,7 @@ class Dataflow(tf.keras.utils.Sequence):
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
         """
+        x_avgs = []
         x_pres = []
         y_pres = []
         x_posts = []
@@ -198,13 +200,17 @@ class Dataflow(tf.keras.utils.Sequence):
 
             preimg = pre.image()
             postimg = post.image()
+            avgimg = ((preimg.astype(np.uint32) + postimg.astype(np.uint32)) / 2).astype(np.uint8)
 
             # un-classified screws everything up, so we zero them all out
             preimg, postimg, postmask = eliminate_unclassified(preimg, postimg, postmask)
 
             if preprocess is True:
-                preimg = preprocess_input(preimg)
-                postimg = preprocess_input(postimg)
+                if not self.return_average:
+                    preimg = preprocess_input(preimg)
+                    postimg = preprocess_input(postimg)
+                else:
+                    avgimg = preprocess_input(avgimg)
 
             # training deformations
             if isinstance(self.transform, float) and random.random() < float(self.transform):
@@ -212,20 +218,29 @@ class Dataflow(tf.keras.utils.Sequence):
                 rotate_dict = { 'theta': 90 * random.randint(1, 3),}
 
                 # rotate and shear the sample, but only rotate the mask
-                preimg = self.image_datagen.apply_transform(preimg, rotate_dict)
-                postimg = self.image_datagen.apply_transform(postimg, rotate_dict)
+                if not self.return_average:
+                    preimg = self.image_datagen.apply_transform(preimg, rotate_dict)
+                    postimg = self.image_datagen.apply_transform(postimg, rotate_dict)
+                else:
+                    avgimg = self.image_datagen.apply_transform(avgimg, rotate_dict)
 
                 premask = self.image_datagen.apply_transform(premask, rotate_dict)
                 postmask = self.image_datagen.apply_transform(postmask, rotate_dict)
 
-            if isinstance(self.transform, float) and random.random() < float(self.transform):
+            if False and isinstance(self.transform, float) and random.random() < float(self.transform):
                 # apply a Gaussian blur to the sample, not the mask
                 ksize = 3
-                preimg = apply_gaussian_blur(preimg, kernel=(ksize,ksize))
-                postimg = apply_gaussian_blur(postimg, kernel=(ksize,ksize))
+                if not self.return_average:
+                    preimg = apply_gaussian_blur(preimg, kernel=(ksize,ksize))
+                    postimg = apply_gaussian_blur(postimg, kernel=(ksize,ksize))
+                else:
+                    avgimg = apply_gaussian_blur(avgimg, kernel=(ksize,ksize))
 
-            x_pre = np.array(preimg, copy=False)#.astype(np.int32)
-            x_post = np.array(postimg, copy=False)#.astype(np.int32)
+            if not self.return_average:
+                x_pre = np.array(preimg, copy=False)#.astype(np.int32)
+                x_post = np.array(postimg, copy=False)#.astype(np.int32)
+            else:
+                x_avg = np.array(avgimg, copy=False)
 
             y_pre = np.array(premask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], -1), copy=False)
             y_post = np.array(postmask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], -1), copy=False)
@@ -242,8 +257,11 @@ class Dataflow(tf.keras.utils.Sequence):
                 """
                 stacked.append(np.dstack([x_pre, x_post]))
 
-            x_pres.append(x_pre)
-            x_posts.append(x_post)
+            if not self.return_average:
+                x_pres.append(x_pre)
+                x_posts.append(x_post)
+            else:
+                x_avgs.append(x_avg)
             y_pres.append(y_pre)
             y_posts.append(y_post)
 
@@ -253,13 +271,19 @@ class Dataflow(tf.keras.utils.Sequence):
             #y_pre = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], S.N_CLASSES) for chip in pre.chips(premask)])
             #y_post = np.array([chip.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], 6) for chip in post.chips(postmask)])
 
-        x_pres = np.array(x_pres, copy=False)
-        x_posts = np.array(x_posts, copy=False)
+        if not self.return_average:
+            x_pres = np.array(x_pres, copy=False)
+            x_posts = np.array(x_posts, copy=False)
+        else:
+            x_avgs = np.array(x_avgs, copy=False)
+
         y_pres = np.array(y_pres, copy=False)
         y_posts = np.array(y_posts, copy=False)
 
         y_ret = y_posts if return_postmask is True else y_pres
-        if self.return_stacked is True:
+        if self.return_average is True:
+            return np.array(x_avgs, copy=False), y_ret
+        elif self.return_stacked is True:
             return np.array(stacked, copy=False), y_ret
         else:
             return (x_pres, x_posts), y_ret

@@ -23,7 +23,7 @@ def _f1_stats(tp, fp, fn):
 def f1_score(y_true, y_pred):
         return sklearn.metrics.f1_score(y_true.ravel(),
                                         y_pred.ravel(),
-                                        average='macro',
+                                        average='micro',
                                         labels=[i for i in range(1,S.N_CLASSES)])
 
 
@@ -138,9 +138,8 @@ if __name__ == '__main__':
     pbar = tqdm.tqdm(df, desc="Scoring")
     for x,y_ in pbar:
         pred = model.predict(x)#np.expand_dims(x[j], axis=0))
-        y_pred = infer.weave_pred(pred)
-        y_pred = test.randomize_damage(y_pred)
-        y_true = infer.weave_pred(y_)
+        y_pred = infer.convert_prediction(pred)
+        y_true = infer.convert_prediction(y_)
         scores = f1_score(y_true, y_pred)#sklearn.metrics.f1_score(y_true.astype(int), y_pred.astype(int), average='macro')
         totals += scores
         pbar.set_description("%f" % (totals / num))

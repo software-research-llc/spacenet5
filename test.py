@@ -57,37 +57,50 @@ def randomize_damage(img):
 
 def damage_by_building_classification():
     # load the localization (segmentation) model
-    S.MODELSTRING = "motokimura-2.hdf5"
-    S.N_CLASSES = 2
+    #S.MODELSTRING = "motokimura-6-stacked.hdf5"
+    #S.N_CLASSES = 2
     S.BATCH_SIZE = 1
-    model = train.build_model(train=False, classes=2)
+    model = train.build_model(architecture=S.ARCHITECTURE, train=True)
     model = train.load_weights(model, S.MODELSTRING.replace(".hdf5", "-best.hdf5"))
 
     # load the damage classification model
     dmg_model = damage.build_model()
-    dmg_model = damage.load_weights(dmg_model, "damage-best.hdf5")
+    dmg_model = damage.load_weights(dmg_model, "damage-resnet50-best.hdf5")
 
     # get a dataflow for the test files
     df = flow.Dataflow(files=flow.get_test_files(), transform=False,
-                       shuffle=False, buildings_only=False, batch_size=1)
-
+                       shuffle=False, buildings_only=False, batch_size=1,
+                       return_stacked=True)
     i = 0
     pbar = tqdm.tqdm(total=len(df))
     # x = pre-disaster image, y = post-disaster image
-    for (x, y), _ in df:
-        filename = os.path.basename(df.samples[i][0].img_name)
+    for stacked, filename in df:
+        filename = os.path.basename(filename)
+        x = stacked
+        #filename = os.path.basename(df.samples[i][0].img_name)
         filename = filename.replace("pre", "localization").replace(".png", "_prediction.png") 
         #if os.path.exists(os.path.join("solution", filename)):
         #    continue
 
         # localization (segmentation)
         pred = model.predict(x)
-        mask = infer.weave_pred(pred)
+        mask = infer.convert_prediction(pred)
         write_solution(names=[filename], images=[mask])
 
         # damage classification
         filename = filename.replace("localization", "damage")
-        pre, post = infer.weave(x), infer.weave(y)
+        pre, post = stacked[...,:3], stacked[...,3:]#df.samples[i][0].image(), df.samples[i][1].image()
+        boxes, coords = flow.Building.get_all_in(pre, post, mask)
+        if len(boxes) > 0:
+            labels = dmg_model.predict(boxes)
+            for k, c in enumerate(coords):
+                x,y,w,h = c
+                mask[y:y+h,x:x+w] = np.argmax(labels[k])
+
+        write_solution(names=[filename], images=[mask])
+        pbar.update(1)
+        i += 1
+        """
         try:
             dmgdict = damage.extract_patches(pre, post, mask, return_dict=True)
         except Exception as exc:
@@ -116,6 +129,7 @@ def damage_by_building_classification():
 
         pbar.update(1)
         i += 1
+        """
 
 def damage_by_segmentation():
     model = train.build_model(train=False)
@@ -143,4 +157,5 @@ def damage_by_segmentation():
 
 
 if __name__ == '__main__':
-    damage_by_segmentation()
+    damage_by_building_classification()
+    #damage_by_segmentation()

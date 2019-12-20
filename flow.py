@@ -18,6 +18,7 @@ import pickle
 from skimage.transform import resize
 import cv2
 from tensorflow.python.keras.applications.imagenet_utils import preprocess_input
+#from infer import convert_prediction
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -98,6 +99,38 @@ def interlace(pre, post, step=3):
     return pre, post
 
 
+def convert_prediction(pred, argmax=True, threshold=None):
+    """
+    Turn a model's prediction output into a grayscale segmentation mask.
+    """
+    x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [-1])# + [pred.shape[-1]])
+    if argmax is True:
+        if isinstance(threshold, float):
+            x[x<threshold] = 0
+            x[:,:,0] = 0
+            thresh = np.argmax(x, axis=2)
+            return thresh
+        else:
+            return np.argmax(x, axis=2)
+    else:
+        return x[...,0:3], x[...,3:]
+
+
+def eliminate_unclassified(pre, post, warped_mask):
+    mask = convert_prediction(warped_mask)
+    mask = np.dstack([mask,mask,mask])
+    pre = pre.squeeze()
+    post = post.squeeze()
+    #mask = np.expand_dims(mask, axis=0)
+
+    pre[mask==5] = 0
+    post[mask==5] = 0
+
+    warped_mask[warped_mask==(0,0,0,0,0,1)] = 0
+
+    return pre,post,warped_mask
+
+
 class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
@@ -160,17 +193,20 @@ class Dataflow(tf.keras.utils.Sequence):
 
             premask = pre.multichannelmask()
             postmask = post.multichannelmask()
-            if not return_postmask:
-                premask = convert_postmask_to_premask(postmask)
+            #if not return_postmask:
+            #    premask = convert_postmask_to_premask(postmask)
 
             preimg = pre.image()
             postimg = post.image()
+
+            # un-classified screws everything up, so we zero them all out
+            preimg, postimg, postmask = eliminate_unclassified(preimg, postimg, postmask)
 
             if preprocess is True:
                 preimg = preprocess_input(preimg)
                 postimg = preprocess_input(postimg)
 
-            # we want medium deformations, not severe deformations
+            # training deformations
             if isinstance(self.transform, float) and random.random() < float(self.transform):
                 # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
                 rotate_dict = { 'theta': 90 * random.randint(1, 3),}
@@ -182,7 +218,7 @@ class Dataflow(tf.keras.utils.Sequence):
                 premask = self.image_datagen.apply_transform(premask, rotate_dict)
                 postmask = self.image_datagen.apply_transform(postmask, rotate_dict)
 
-            elif False and isinstance(self.transform, float) and random.random() < float(self.transform):
+            if isinstance(self.transform, float) and random.random() < float(self.transform):
                 # apply a Gaussian blur to the sample, not the mask
                 ksize = 3
                 preimg = apply_gaussian_blur(preimg, kernel=(ksize,ksize))
@@ -260,8 +296,8 @@ class BuildingDataflow(Dataflow):
                 boxes.append(img)
 
                 # make all `un-classified` buildings the most common damage type
-                if klass == 5:
-                    klass = 1
+                #if klass == 5:
+                #    klass = 5
                 onehot = [0] * 5
                 onehot[klass] = 1
                 classes.append(onehot)
@@ -339,6 +375,36 @@ class Building:
         x = x / (new_x / orig_x)
         y = y / (new_y / orig_y)
         return round(x), round(y)
+
+    @staticmethod
+    def get_all_in(pre, post, mask):
+        pre = pre.squeeze()#astype(np.uint8)
+        post = post.squeeze()#astype(np.uint8)
+        mask = mask.astype(np.uint8)
+        boxes = []
+        coords = []
+        contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+        for c in contours:
+            x,y,w,h = cv2.boundingRect(c)
+            if w < 5 or h < 5:
+                continue
+            # extract buildings along with a 5 pixel boundary
+            x_ = np.max([0,x-5])
+            y_ = np.max([0,y-5])
+            preview = pre[y_:y+h+10,x_:x+w+10,:]
+            postview = post[y_:y+h+10,x_:x+w+10,:]
+            tiny = np.vstack([preview,postview])
+
+            x,y,z = tiny.shape
+            x,y = np.min([S.DMG_SAMPLESHAPE[0],x]), np.min([S.DMG_SAMPLESHAPE[1],y])
+            box = np.zeros(S.DMG_SAMPLESHAPE, dtype=np.uint8)
+            box[0:x,0:y,:] = tiny.astype(np.uint8)[:S.DMG_SAMPLESHAPE[0],:S.DMG_SAMPLESHAPE[1],:]
+
+            boxes.append(box)
+            coords.append((x,y,w,h))
+
+        return np.array(boxes), np.array(coords)
 
     def extract_from_images(self, pre:np.ndarray, post:np.ndarray):
         """
@@ -445,7 +511,7 @@ class Target:
             coords = b.coords()
             # "un-classified" buildings will cause an error during evaluation, so don't train
             # for them
-            color = b.color() if b.color() != 5 else 1
+            color = b.color()# if b.color() != 5 else 1
             if len(coords) > 0:
                 # Set the pixels at coordinates in this class' channel to 1
                 cv2.fillPoly(chans[color], np.array([coords]), 1)
@@ -526,7 +592,6 @@ if __name__ == '__main__':
     # Testing and data inspection
     import time
     import ordinal_loss
-    import infer
     import train
     import score
     df = Dataflow()
@@ -578,19 +643,18 @@ if __name__ == '__main__':
             i += 1
 
             fig.add_subplot(2,4,i)
-            mask = sample.multichannelchipmask()
-            mask = sample.chips(mask)
-            mask = infer.weave_pred(mask)
+            mask = sample.multichannelmask()
+            mask = convert_prediction(mask)
             plt.imshow(mask)
             plt.title("target mask")
             i += 1
 
-            fig.add_subplot(2,4,i)
-            pred = model.predict(np.array(sample.chips()))
-            plt.imshow(infer.weave_pred_no_argmax(pred))
-            plt.title("Prediction")
-            i += 1
-            toggle += 1
+#            fig.add_subplot(2,4,i)
+#            pred = model.predict(np.array(sample.chips()))
+#jj            plt.imshow(infer.weave_pred_no_argmax(pred))
+ #           plt.title("Prediction")
+            #i += 1
+            #toggle += 1
             #fig.add_subplot(2,5,i)
             #plt.imshow(lossvalue.numpy().squeeze())
             #plt.title("Loss")

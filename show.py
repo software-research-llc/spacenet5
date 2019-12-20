@@ -27,19 +27,14 @@ def predict_and_show(df, argmax=True):
     model = train.build_model()
     model = train.load_weights(model)
 
-    for stacked,mask in df:
-        x = []
-        x.append(stacked[...,0:3])
-        x.append(stacked[...,3:])
+    for (pre,post),mask in df:
         mask = infer.convert_prediction(mask)
-        pred = model.predict(stacked)
+        pred = model.predict((pre,post))
 
         maxed = infer.convert_prediction(pred, argmax=True)
         pred1,pred2 = infer.convert_prediction(pred, argmax=False)
-        pre = x[0]
-        post = x[1]
 
-        display_images([pre, post, pred1, pred2, maxed, mask], ["Pre", "Post", "Pred1", "Pred2", "Argmax", "Ground Truth"])
+        display_images([pre, post, maxed, pred1, pred2, mask], ["Pre", "Post", "Argmax", "Pred1", "Pred2", "Ground Truth"])
 
 
 def predict_and_show_no_argmax(df):
@@ -68,7 +63,7 @@ def main(predict: ("Do prediction", "flag", "p"),
          argmax: ("Don't argmax() over the channel axis", "flag", "a"),
          image: ("Show this specific image", "option", "i")=""):
 
-    df = flow.Dataflow(files=flow.get_validation_files(), shuffle=True, batch_size=1, buildings_only=True, return_stacked=True)
+    df = flow.Dataflow(files=flow.get_validation_files(), shuffle=True, batch_size=1, buildings_only=True, return_stacked=False)
     if image:
         for i in range(len(df.samples)):
             if image in df.samples[i][0].img_name or image in df.samples[i][1].img_name:
@@ -83,4 +78,5 @@ def main(predict: ("Do prediction", "flag", "p"),
         show(df)
 
 if __name__ == '__main__':
+    S.BATCH_SIZE = 1
     plac.call(main)

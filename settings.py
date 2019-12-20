@@ -14,7 +14,7 @@ BATCH_SIZE = 1
 CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
 N_CLASSES = len(CLASSES)
 
-MODELSTRING = "%s-%d-stacked.hdf5" % (ARCHITECTURE, N_CLASSES)
+MODELSTRING = "%s-%d.hdf5" % (ARCHITECTURE, N_CLASSES)
 DMG_MODELSTRING = "damage-%s.hdf5" % DAMAGE_ARCHITECTURE
 
 # The maximum length of building patches for damage classification
@@ -22,7 +22,7 @@ DAMAGE_MAX_X = 128
 DAMAGE_MAX_Y = 128
 
 # Shape of the training input images
-INPUTSHAPE = [1024,1024,6]
+INPUTSHAPE = [1024,1024,3]
 MASKSHAPE = [1024,1024,N_CLASSES]
 # The shape of the raw on-disk input images
 SAMPLESHAPE = [1024,1024,3]

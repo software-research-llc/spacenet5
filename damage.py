@@ -1,8 +1,6 @@
-from flow import BuildingDataflow, get_training_files, get_validation_files
 import numpy as np
 import logging
 import infer
-from flow import Dataflow
 import train
 import deeplabmodel
 import settings as S
@@ -16,6 +14,7 @@ import sys
 import skimage
 import score
 import random
+from flow import Dataflow, BuildingDataflow, get_training_files, get_validation_files
 
 logger = logging.getLogger(__name__)
 

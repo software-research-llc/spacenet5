@@ -6,7 +6,7 @@ import os
 import sys
 import skimage
 import train
-import flow
+from flow import Dataflow, BuildingDataflow, Target, get_training_files, get_validation_files, get_test_files
 import cv2
 import matplotlib.pyplot as plt
 from skimage.transform import resize
@@ -19,17 +19,19 @@ from scipy.ndimage import label, find_objects
 logger = logging.getLogger(__name__)
 
 
-def convert_prediction(pred, argmax=True, threshold=0.3):
+def convert_prediction(pred, argmax=True, threshold=None):
     """
     Turn a model's prediction output into a grayscale segmentation mask.
     """
     x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [-1])# + [pred.shape[-1]])
     if argmax is True:
-        x[x<threshold] = 0
-        x[:,:,0] = 0
-        thresh = np.argmax(x, axis=2)
-        return thresh
-        return np.argmax(x, axis=2)
+        if isinstance(threshold, float):
+            x[x<threshold] = 0
+            x[:,:,0] = 0
+            thresh = np.argmax(x, axis=2)
+            return thresh
+        else:
+            return np.argmax(x, axis=2)
     else:
         return x[...,0:3], x[...,3:]
 
@@ -39,7 +41,7 @@ def weave_pred(pred):
     for p in pred:
         x = convert_prediction(p)
         img.append(x)
-    return flow.Target.weave(img)
+    return Target.weave(img)
 
 
 def weave_pred_no_argmax(pred):
@@ -47,11 +49,11 @@ def weave_pred_no_argmax(pred):
     for p in pred:
         x, _ = convert_prediction(p, argmax=False)
         img.append(x)
-    return flow.Target.weave(img)[...,1]
+    return Target.weave(img)[...,1]
 
 
 def weave(chips):
-    return flow.Target.weave(chips)
+    return Target.weave(chips)
 
 
 def bounding_rectangles(img, diagonals=True):
@@ -126,7 +128,7 @@ if __name__ == "__main__":
     model = train.build_model()
     model = train.load_weights(model)
     S.BATCH_SIZE = 1
-    df=flow.Dataflow(files=flow.get_validation_files(), batch_size=1, shuffle=True)
+    df=Dataflow(files=get_validation_files(), batch_size=1, shuffle=True)
     while True:
         show_random(model, df)
         time.sleep(1)

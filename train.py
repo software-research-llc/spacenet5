@@ -20,6 +20,7 @@ import layers
 import deeplabmodel
 import infer
 import score
+import ordinal_loss
 
 logger = logging.getLogger(__name__)
 
@@ -27,16 +28,16 @@ logger = logging.getLogger(__name__)
 #tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 callbacks = [
-    keras.callbacks.ModelCheckpoint(S.MODELSTRING.replace(".hdf5", "-best.hdf5"), save_weights_only=True, save_best_only=True)]
-"""
-    keras.callbacks.TensorBoard(log_dir="logs",
-                                histogram_freq=1,
-                                write_graph=True,
-                                write_images=True,
-                                embeddings_freq=0,
-                                update_freq=100),
+    keras.callbacks.ModelCheckpoint(S.MODELSTRING.replace(".hdf5", "-best.hdf5"), save_weights_only=True, save_best_only=True),
+
+    keras.callbacks.TensorBoard(log_dir="logs"),
+                                #histogram_freq=1,
+                                #write_graph=True,
+                                #write_images=True,
+                                #embeddings_freq=0),
+                                #update_freq=100),
 ]
-"""
+
 
 #metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
 #preprocess_input = sm.get_preprocessing(BACKBONE)
@@ -109,7 +110,7 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
          verbose: ("Keras verbosity level", "option", "v", int)=1,
          epochs: ("Number of epochs", "option", "e", int)=50,
          optimizer=tf.keras.optimizers.RMSprop(),
-         loss='categorical_crossentropy'):
+         loss=ordinal_loss.loss):
     """
     Train the model.
     """
@@ -147,6 +148,7 @@ def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_s
         model.fit(train_seq, validation_data=val_seq, epochs=epochs,
                             verbose=verbose, callbacks=callbacks,
                             validation_steps=len(val_seq), shuffle=False,
+                            #steps_per_epoch=500,
                             #use_multiprocessing=True,
                             max_queue_size=10)#, workers=8)
     except KeyboardInterrupt:

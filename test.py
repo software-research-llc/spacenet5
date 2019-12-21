@@ -12,11 +12,12 @@ import flow
 import infer
 import logging
 import damage
+import plac
 
 logger = logging.getLogger(__name__)
 
 
-def write_solution(names:list, images:list, path="solution"):
+def write_solution(path, names:list, images:list):
     """
     Write out .png image(s).
     """
@@ -55,10 +56,13 @@ def randomize_damage(img):
     return img
 
 
-def damage_by_building_classification():
+def damage_by_building_classification(path):
+    """
+    Generate solution .png files, classifying damage using contiguous
+    regions in the segmentation model's predicted masks in order extract
+    individual building polygons from pre-disaster and post-disaster images.
+    """
     # load the localization (segmentation) model
-    #S.MODELSTRING = "motokimura-6-stacked.hdf5"
-    #S.N_CLASSES = 2
     S.BATCH_SIZE = 1
     model = train.build_model(architecture=S.ARCHITECTURE, train=True)
     model = train.load_weights(model, S.MODELSTRING.replace(".hdf5", "-best.hdf5"))
@@ -85,7 +89,7 @@ def damage_by_building_classification():
         # localization (segmentation)
         pred = model.predict(x)
         mask = infer.convert_prediction(pred)
-        write_solution(names=[filename], images=[mask])
+        write_solution(names=[filename], images=[mask], path=path)
 
         # damage classification
         filename = filename.replace("localization", "damage")
@@ -97,46 +101,22 @@ def damage_by_building_classification():
                 x,y,w,h = c
                 mask[y:y+h,x:x+w] = np.argmax(labels[k])
 
-        write_solution(names=[filename], images=[mask])
+        write_solution(names=[filename], images=[mask], path=path)
         pbar.update(1)
         i += 1
-        """
-        try:
-            dmgdict = damage.extract_patches(pre, post, mask, return_dict=True)
-        except Exception as exc:
-            logger.error(str(exc))
-            write_solution(names=[filename], images=[mask])
-            pbar.update(1)
-            i += 1
-            continue
 
-        buildings = damage.get_buildings(dmgdict['prebox'], dmgdict['postbox'])
 
-        # FIXME: do something smart with un-classified
-        for k, (x,y) in enumerate(dmgdict['bbox']):
-            try:
-                # set all "1" pixels from the localization step to the predicted damage class
-                klass = dmg_model.predict(np.expand_dims(buildings[k], axis=0))
-                if klass < 0 or klass > 3:
-                    logger.warning("Damage class {} in {} is being clipped to [0,3].".format(klass,filename))
-                box = mask[x.start:x.stop,y.start:y.stop]
-                # klass is one-hot encoded and ranges from 0 to 4
-                box[box > 0] = np.argmax(klass) + 1
-            except Exception as exc:
-                logger.error(str(exc))
-
-        write_solution(names=[filename], images=[mask])
-
-        pbar.update(1)
-        i += 1
-        """
-
-def damage_by_segmentation():
+def damage_by_segmentation(path):
+    """
+    Generate solution .png files, using a single multiclass segmentation
+    model to do so.
+    """
     model = train.build_model(train=False)
     model = train.load_weights(model, S.MODELSTRING)
     df = flow.Dataflow(files=flow.get_test_files(), transform=False,
                        batch_size=1, buildings_only=False, shuffle=False,
-                       return_postmask=False, return_stacked=True)
+                       return_postmask=False, return_stacked=False,
+                       return_average=True)
     pbar = tqdm.tqdm(total=len(df))
 
     for image,filename in df:
@@ -146,16 +126,27 @@ def damage_by_segmentation():
         #    continue
 
         # localization (segmentation)
-        pred = model.predict(image)
+        pred = model.predict([image])
         mask = infer.convert_prediction(pred)
-        write_solution(names=[filename], images=[mask])
+        write_solution(names=[filename], images=[mask], path=path)
         
         filename = filename.replace("localization", "damage")
-        write_solution(names=[filename], images=[mask])
+        write_solution(names=[filename], images=[mask], path=path)
 
         pbar.update(1)
 
 
+def cli(outdir: "The path to write solutions to",
+        segmentation: ("Use a multiclass segmentation model", "flag", "s"),
+        building: ("Use a binary segmentation model and individual building classifier", "flag", "b")):
+
+    if segmentation:
+        damage_by_segmentation(outdir)
+    elif building:
+        damage_by_building_classification(outdir)
+    else:
+        logger.error()
+
+
 if __name__ == '__main__':
-    damage_by_building_classification()
-    #damage_by_segmentation()
+    plac.call(cli)

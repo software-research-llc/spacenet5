@@ -12,6 +12,7 @@ import test
 logger = logging.getLogger(__name__)
 
 
+
 def _f1_stats(tp, fp, fn):
     prec = tp / (tp + fp)
     rec = tp / (tp + fn)
@@ -21,14 +22,21 @@ def _f1_stats(tp, fp, fn):
 
 
 def f1_score(y_true, y_pred):
-        return sklearn.metrics.f1_score(y_true.ravel(),
-                                        y_pred.ravel(),
-                                        average='micro',
-                                        labels=[i for i in range(1,S.N_CLASSES)])
+    """
+    sklearn.metrics.f1_score (only for numpy.ndarray objects).
+    """
+    return sklearn.metrics.f1_score(y_true.ravel(),
+                                    y_pred.ravel(),
+                                    average='micro',
+                                    labels=[i for i in range(1,S.N_CLASSES)])
 
 
 @tf.function
 def remove_background(y_pred):
+    """
+    Takes a one-hot encoded prediction and removes the background pixels (which are at index 0),
+    returning the rounded predictions.
+    """
     background = tf.constant(([1] + [0] * (S.MASKSHAPE[-1] - 1)) * S.MASKSHAPE[0] * S.MASKSHAPE[1] * S.BATCH_SIZE, dtype=tf.int64)
     bg = tf.reshape(background, [S.BATCH_SIZE, S.MASKSHAPE[0] * S.MASKSHAPE[1], -1])
 
@@ -40,6 +48,9 @@ def remove_background(y_pred):
 
 @tf.function
 def get_gt_pr(y_true, y_pred):
+    """
+    Removes background pixels and returns input tensors cast to a boolean data type.
+    """
     gt = tf.cast(remove_background(y_true), tf.bool)
     pr = tf.cast(remove_background(y_pred), tf.bool)
 
@@ -48,6 +59,9 @@ def get_gt_pr(y_true, y_pred):
 
 @tf.function
 def iou_score(y_true, y_pred):
+    """
+    Return an intersection over union score.
+    """
     gt, pr = get_gt_pr(y_true, y_pred)
 
     intersection = tf.cast(tf.logical_and(gt, pr), tf.int64)
@@ -64,6 +78,10 @@ def iou_score(y_true, y_pred):
 
 @tf.function
 def recall(y_true, y_pred):
+    """
+    Returns recall score: true positives / (true positives + false negatives),
+    i.e. the percentage of pixels that didn't go unnoticed.
+    """
     gt, pr = get_gt_pr(y_true, y_pred)
 
     intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int64))
@@ -76,6 +94,9 @@ def recall(y_true, y_pred):
 
 @tf.function
 def num_correct(y_true, y_pred):
+    """
+    Returns the raw number of correct pixel predictions (true positives).
+    """
     gt, pr = get_gt_pr(y_true, y_pred)
 
     intersection = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int64))
@@ -84,6 +105,9 @@ def num_correct(y_true, y_pred):
 
 @tf.function
 def tensor_f1_score(y_true, y_pred):
+    """
+    Global F1-score, excluding background pixels.  Treats all other classes as a single class.
+    """
     gt, pr = get_gt_pr(y_true, y_pred)
 
     tp = tf.reduce_sum(tf.cast(tf.logical_and(gt, pr), tf.int64))

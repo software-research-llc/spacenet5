@@ -17,6 +17,7 @@ import re
 import pickle
 from skimage.transform import resize
 import cv2
+import glob
 from tensorflow.python.keras.applications.imagenet_utils import preprocess_input
 #from infer import convert_prediction
 
@@ -24,22 +25,43 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def get_glob_path(filename):
+    for path in S.IMAGEDIRS:
+        matches = glob.glob(os.path.join(path, filename))
+        if len(matches) != 0:
+            return os.path.abspath(os.path.join(path, matches[-1]))
+
+    raise FileNotFoundError(filename)
+
+
 def get_abs_path(filename):
-    if os.path.exists(filename):
+    if "*" in filename or "?" in filename:
+        return get_glob_path(filename)
+    elif os.path.exists(filename):
         return filename
+
     for path in S.IMAGEDIRS:
         fullpath = os.path.join(path, filename)
         if os.path.exists(fullpath):
             return os.path.abspath(fullpath)
-    raise Exception("could not find {} in any directory".format(filename))
+
+    raise FileNotFoundError(filename)
+
+
+def get_image(filename):
+    """
+    Get the full path of an image in the known dataset(s).  Accepts
+    shell glob patterns.
+    """
+    return get_abs_path(filename)
+
 
 def get_files(directories):
     """
     Return a list of all files found in all directories we're given.  The files are
     sorted lexicographically by filename (not full path) and returned in (pre, post) pairs.
 
-    Note that we assume the file list is well formed, i.e. that all pairs exist and match by
-    name.
+    No checks are performed, and files are found with glob patterns `*pre*` and `*post*`.
     """
     prefiles = []
     postfiles = []
@@ -78,6 +100,12 @@ def get_training_files():
 
 
 def apply_gaussian_blur(img:np.ndarray, kernel=(5,5)):
+    """
+    Apply a Gaussian blur effect to an image; default kernel size is (5,5),
+    and dimensions must both be odd.  Smaller numbers mean less blur.
+
+    Blur is applied to channels individually.
+    """
     chans = []
     for i in range(img.shape[-1]):
         chans.append(cv2.GaussianBlur(img[...,i].squeeze(), kernel, cv2.BORDER_DEFAULT))
@@ -86,6 +114,9 @@ def apply_gaussian_blur(img:np.ndarray, kernel=(5,5)):
 
 
 def convert_postmask_to_premask(postmask):
+    """
+    Take a post-disaster mask, and return a copy with values > 1 replaced by 1.
+    """
     chan1 = postmask[...,0].copy()
     chan2 = np.argmax(postmask, axis=2)
     chan2 = np.clip(chan2, 0, 1)
@@ -93,6 +124,10 @@ def convert_postmask_to_premask(postmask):
 
 
 def interlace(pre, post, step=3):
+    """
+    Interlay a pre- and post-disaster image set, returning an image composed of pixels
+    from each image in an alternating fashion.
+    """
     pre = pre.copy()
     pre[range(0, pre.shape[0], step),range(0,pre.shape[1],step)] = post[range(0,post.shape[0],step),range(0,post.shape[1],step)]
 
@@ -101,7 +136,16 @@ def interlace(pre, post, step=3):
 
 def convert_prediction(pred, argmax=True, threshold=None):
     """
-    Turn a model's prediction output into a grayscale segmentation mask.
+    Turn a model's prediction output (one-hot encoded) into a grayscale (segmented) mask.
+
+    Parameters:
+        pred: one-hot encoded array of dimensions (height*width, num_classes)
+        argmax (optional): boolean, determines whether np.argmax() is used.
+        threshold (optional): float, if specified determines the min value to consider true.
+
+    Returns:
+        a grayscale mask of (width, height) composed of integer values corresponding to pixel
+        class at each (x,y) location.
     """
     x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [-1])# + [pred.shape[-1]])
     if argmax is True:
@@ -117,15 +161,25 @@ def convert_prediction(pred, argmax=True, threshold=None):
 
 
 def eliminate_unclassified(pre, post, warped_mask):
+    """
+    Takes a pre-disaster, post-disaster, and a mask.  Zeros-out the location of all
+    "un-classified" buildings found in the mask provided by altering the input array
+    values at those locations, then zeros out the mask values at those locations as
+    well and returns all three.
+    """
+    # get a (width,height,channels) sized version of input mask with integer values
     mask = convert_prediction(warped_mask)
     mask = np.dstack([mask,mask,mask])
+
+    # remove superfluous dimensions (caused by a batch size of 1)
     pre = pre.squeeze()
     post = post.squeeze()
-    #mask = np.expand_dims(mask, axis=0)
 
+    # zero out the pre-disaster and post-disaster image locations
     pre[mask==5] = 0
     post[mask==5] = 0
 
+    # zero out the mask locations
     warped_mask[warped_mask==(0,0,0,0,0,1)] = 0
 
     return pre,post,warped_mask
@@ -136,15 +190,25 @@ class Dataflow(tf.keras.utils.Sequence):
     A tf.keras.utils.Sequence subclass to feed data to the model.
     """
     def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False, interlace=False, return_postmask=True, return_stacked=False, return_average=False):
+        # boolean, return pre- and post-disaster images added together and divided by 2 (their average)
         self.return_average = return_average
+        # boolean, return pre- and post- stacked channelwise
         self.return_stacked = return_stacked
+        # boolean, return the post-disaster mask, not the pre-disaster mask (pre-disaster is the default)
         self.return_postmask = return_postmask
+        # float, if provided the percent of samples that will be deformed for training
         self.transform = transform
+        # boolean, whether to shuffle (randomize order of) the samples or not
         self.shuffle = shuffle
+        # int, how many values to return per __getitem__() call
         self.batch_size = batch_size
+        # boolean, whether to return an interlaced value, see interlace()
         self.interlace = interlace
+
+        # deformation object to apply to images (so sample and mask pixel locations correspond)
         self.image_datagen = ImageDataGenerator()
         self.samples = []
+        self._do_shuffle = False
 
         if ".json" in files[0][0].lower():
             logger.info("Creating Targets from JSON format files")
@@ -176,22 +240,32 @@ class Dataflow(tf.keras.utils.Sequence):
         pre_image and post_image are the pre-disaster and post-disaster samples.
         premask is the uint8, single channel localization target we're training to predict.
         """
+        if self.shuffle is True and self._do_shuffle is True:
+            self._do_shuffle = False
+            random.shuffle(self.samples)
+        elif self.shuffle is True and idx == len(self):
+            # reshuffle samples next call
+            self._do_shuffle = True
+
         x_avgs = []
         x_pres = []
         y_pres = []
         x_posts = []
         y_posts = []
         stacked = []
-        x_pre = np.empty(0)
-        x_post = np.empty(0)
-        y_pre = np.empty(0)
-        y_post = np.empty(0)
+        #x_pre = np.empty(0)
+        #x_post = np.empty(0)
+        #y_pre = np.empty(0)
+        #y_post = np.empty(0)
         return_postmask = self.return_postmask
-#        for sample in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
+
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             if 'test' in pre.img_name or 'test' in post.img_name:
                 x_pre, x_post = pre.image(), post.image()
-                return np.expand_dims(np.dstack([x_pre, x_post]), axis=0), pre.img_name
+                if self.return_average is True:
+                    return np.expand_dims( (x_pre.astype(np.uint32) + x_post.astype(np.uint32) / 2).astype(np.uint8), axis=0 ), pre.img_path
+                else:
+                    return np.expand_dims(np.dstack([x_pre, x_post]), axis=0), pre.img_path
 
             premask = pre.multichannelmask()
             postmask = post.multichannelmask()
@@ -202,7 +276,7 @@ class Dataflow(tf.keras.utils.Sequence):
             postimg = post.image()
             avgimg = ((preimg.astype(np.uint32) + postimg.astype(np.uint32)) / 2).astype(np.uint8)
 
-            # un-classified screws everything up, so we zero them all out
+            # un-classified screws training up (test set doesn't include that value), so we zero them all out
             preimg, postimg, postmask = eliminate_unclassified(preimg, postimg, postmask)
 
             if preprocess is True:
@@ -214,10 +288,10 @@ class Dataflow(tf.keras.utils.Sequence):
 
             # training deformations
             if isinstance(self.transform, float) and random.random() < float(self.transform):
-                # Rotate 90-270 degrees, shear by 0.1-0.2 degrees
+                # Rotate 90-270 degrees
                 rotate_dict = { 'theta': 90 * random.randint(1, 3),}
 
-                # rotate and shear the sample, but only rotate the mask
+                # rotate the sample and mask by the same angle together
                 if not self.return_average:
                     preimg = self.image_datagen.apply_transform(preimg, rotate_dict)
                     postimg = self.image_datagen.apply_transform(postimg, rotate_dict)
@@ -227,8 +301,8 @@ class Dataflow(tf.keras.utils.Sequence):
                 premask = self.image_datagen.apply_transform(premask, rotate_dict)
                 postmask = self.image_datagen.apply_transform(postmask, rotate_dict)
 
-            if False and isinstance(self.transform, float) and random.random() < float(self.transform):
-                # apply a Gaussian blur to the sample, not the mask
+            if isinstance(self.transform, float) and random.random() < float(self.transform):
+                # apply a Gaussian blur to the sample, but not the mask
                 ksize = 3
                 if not self.return_average:
                     preimg = apply_gaussian_blur(preimg, kernel=(ksize,ksize))
@@ -248,13 +322,6 @@ class Dataflow(tf.keras.utils.Sequence):
             if interlace is True:
                 x_pre, x_post = interlace(x_pre, x_post)
             elif self.return_stacked is True:
-                """
-                # stack pre & post chans adjacently (red/red, blue/blue, green/green)
-                chans = []
-                for chan in range(3):
-                    chans.append(x_pre[...,chan])
-                    chans.append(x_post[...,chan])
-                """
                 stacked.append(np.dstack([x_pre, x_post]))
 
             if not self.return_average:

@@ -11,13 +11,23 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-def loss(y_true, y_pred):
+def loss_axis1(y_true, y_pred):
     if K.int_shape(y_pred)[1] is None:
         logger.debug("None value in K.int_shape")
         return losses.categorical_crossentropy(y_true, y_pred)
 
     weights = K.cast(K.abs(K.argmax(y_true, axis=1) - K.argmax(y_pred, axis=1))/(K.int_shape(y_pred)[1] - 1), dtype='float32')
     return (1.0 + weights) * losses.categorical_crossentropy(y_true, y_pred)
+
+def loss_axis2(y_true, y_pred):
+    if K.int_shape(y_pred)[2] is None:
+        logger.debug("None value in K.int_shape")
+        return losses.categorical_crossentropy(y_true, y_pred)
+
+    weights = K.cast(K.abs(K.argmax(y_true, axis=2) - K.argmax(y_pred, axis=2))/(K.int_shape(y_pred)[2] - 1), dtype='float32')
+    return (1.0 + weights) * losses.categorical_crossentropy(y_true, y_pred)
+
+loss = loss_axis2
 
 #def loss(y_true, y_pred):
 #    """

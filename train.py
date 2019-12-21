@@ -110,7 +110,7 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
          verbose: ("Keras verbosity level", "option", "v", int)=1,
          epochs: ("Number of epochs", "option", "e", int)=50,
          optimizer=tf.keras.optimizers.RMSprop(),
-         loss=ordinal_loss.loss):
+         loss='categorical_crossentropy'):
     """
     Train the model.
     """
@@ -130,13 +130,13 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
                               shuffle=True,
                               buildings_only=True,
                               return_postmask=True,
-                              return_stacked=False,
-                              return_average=True)
+                              return_stacked=True,
+                              return_average=False)
     val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE,
                             buildings_only=True,
                             return_postmask=True,
-                            return_stacked=False,
-                            return_average=True)
+                            return_stacked=True,
+                            return_average=False)
 
     logger.info("Training.")
     train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)

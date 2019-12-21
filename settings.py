@@ -3,7 +3,7 @@ from inspect import getsourcefile
 
 
 # The architecture to use
-ARCHITECTURE = "motokimura-avg"
+ARCHITECTURE = "motokimura-stacked"
 DAMAGE_ARCHITECTURE = 'resnet50'
 
 # Train/validation split proportion
@@ -22,7 +22,7 @@ DAMAGE_MAX_X = 128
 DAMAGE_MAX_Y = 128
 
 # Shape of the training input images
-INPUTSHAPE = [1024,1024,3]
+INPUTSHAPE = [1024,1024,6]
 MASKSHAPE = [1024,1024,N_CLASSES]
 # The shape of the raw on-disk input images
 SAMPLESHAPE = [1024,1024,3]

@@ -19,11 +19,18 @@ from scipy.ndimage import label, find_objects
 logger = logging.getLogger(__name__)
 
 
-def convert_prediction(pred, argmax=True, threshold=None):
+def convert_prediction(pred, argmax=True, threshold=None, focus_upper=True):
     """
     Turn a model's prediction output into a grayscale segmentation mask.
+
+    Takes a one hot encoded (batch_size, width * height, classes)
+    array and converts.
     """
     x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [-1])# + [pred.shape[-1]])
+    if focus_upper is True:
+        one = x[...,0:3]
+        two = x[...,3:] * 2
+        x = np.dstack([one,two])
     if argmax is True:
         if isinstance(threshold, float):
             x[x<threshold] = 0

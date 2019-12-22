@@ -27,7 +27,7 @@ def loss_axis2(y_true, y_pred):
     weights = K.cast(K.abs(K.argmax(y_true, axis=2) - K.argmax(y_pred, axis=2))/(K.int_shape(y_pred)[2] - 1), dtype='float32')
     return (1.0 + weights) * losses.categorical_crossentropy(y_true, y_pred)
 
-loss = loss_axis2
+loss = loss_axis1
 
 #def loss(y_true, y_pred):
 #    """

@@ -51,6 +51,8 @@ def get_gt_pr(y_true, y_pred):
     """
     Removes background pixels and returns input tensors cast to a boolean data type.
     """
+#    y_true = tf.reshape(y_true, [S.BATCH_SIZE, 1024 * 1024, S.N_CLASSES])
+#    y_pred = tf.reshape(y_pred, [S.BATCH_SIZE, 1024 * 1024, S.N_CLASSES])
     gt = tf.cast(remove_background(y_true), tf.bool)
     pr = tf.cast(remove_background(y_pred), tf.bool)
 

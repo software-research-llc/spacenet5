@@ -63,18 +63,40 @@ def load_weights(model, save_path=S.MODELSTRING):
     return model
 
 
+def to_categorical(tensor):
+    return tf.keras.utils.to_categorical(tensor)#, S.N_CLASSES)
+
+
+def build_sm_model(*args, **kwargs):
+    tf.keras.backend.set_image_data_format('channels_last')
+    import segmentation_models as sm
+    sm.set_framework('tf.keras')
+
+    inp_pre = tf.keras.layers.Input(S.INPUTSHAPE)
+    inp = tf.keras.layers.Input(S.INPUTSHAPE)
+    m = sm.Unet('efficientnetb0', weights=None, input_shape=S.INPUTSHAPE, activation='softmax', *args, **kwargs)
+    #m.set_trainable('true')
+
+    x = m(inp)
+#    x = tf.one_hot(x, S.N_CLASSES, axis=-1)
+    #tf.keras.utils.to_categorical(x)#, num_classes=S.N_CLASSES)
+    #x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
+    #x = tf.keras.layers.Activation('softmax')(x)
+
+    return tf.keras.models.Model(inputs=[inp_pre, inp], outputs=[x])
+
+
 def build_model(*args, **kwargs):
     import unet
-    #pre = tf.keras.layers.Input(S.INPUTSHAPE)
-    #post = tf.keras.layers.Input(S.INPUTSHAPE)
-    inp = tf.keras.layers.Input(S.INPUTSHAPE)
+    L = tf.keras.layers
+    R = tf.keras.regularizers
 
     decoder = unet.MotokimuraUnet(classes=S.N_CLASSES)
-
-    #x = inp_stacked#tf.keras.layers.Add()([inp_pre, inp_post])
+    
+    inp = L.Input(S.INPUTSHAPE)
     x = decoder(inp)
-    x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
-    x = tf.keras.layers.Activation('softmax')(x)
+    x = L.Reshape((-1,S.N_CLASSES))(x)
+    x = L.Activation('softmax')(x)
 
     m = tf.keras.models.Model(inputs=[inp], outputs=[x])
     return m
@@ -109,16 +131,19 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
          save_path: ("Save path", "option", "s", str)=S.MODELSTRING,
          verbose: ("Keras verbosity level", "option", "v", int)=1,
          epochs: ("Number of epochs", "option", "e", int)=50,
+         initial_epoch: ("Initial epoch to continue from", "option", "i", int)=1,
          optimizer=tf.keras.optimizers.RMSprop(),
          loss='categorical_crossentropy'):
     """
     Train the model.
     """
 #    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
-    metrics=['accuracy', score.num_correct,
+    metrics=['accuracy',
+             score.num_correct,
              score.recall,
              score.tensor_f1_score]
     logger.info("Building model.")
+    #model = build_sm_model()
     model = build_model(architecture=architecture, train=True)
     if restore:
         load_weights(model, S.MODELSTRING)
@@ -129,21 +154,21 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
                               transform=0.3,
                               shuffle=True,
                               buildings_only=True,
-                              return_postmask=True,
+                              return_postmask=False,
                               return_stacked=True,
                               return_average=False)
     val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE,
                             buildings_only=True,
-                            return_postmask=True,
+                            return_postmask=False,
                             return_stacked=True,
                             return_average=False)
 
     logger.info("Training.")
-    train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq)
+    train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq, initial_epoch)
     save_model(model, save_path)
 
 
-def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq):
+def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq, initial_epoch):
     try:
         model.fit(train_seq, validation_data=val_seq, epochs=epochs,
                             verbose=verbose, callbacks=callbacks,

@@ -65,11 +65,11 @@ def damage_by_building_classification(path):
     # load the localization (segmentation) model
     S.BATCH_SIZE = 1
     model = train.build_model(architecture=S.ARCHITECTURE, train=True)
-    model = train.load_weights(model, S.MODELSTRING.replace(".hdf5", "-best.hdf5"))
+    model = train.load_weights(model, S.MODELSTRING)#.replace(".hdf5", "-best.hdf5"))
 
     # load the damage classification model
     dmg_model = damage.build_model()
-    dmg_model = damage.load_weights(dmg_model, "damage-resnet50-best.hdf5")
+    dmg_model = damage.load_weights(dmg_model, S.DMG_MODELSTRING)
 
     # get a dataflow for the test files
     df = flow.Dataflow(files=flow.get_test_files(), transform=False,
@@ -136,14 +136,47 @@ def damage_by_segmentation(path):
         pbar.update(1)
 
 
+def damage_random(path):
+    """
+    Generate solution .png files using random damage.
+    """
+    model = train.build_model(train=False, save_path="motokimura-stacked-2-best.hdf5")
+    model = train.load_weights(model, S.MODELSTRING)
+    df = flow.Dataflow(files=flow.get_test_files(), transform=False,
+                       batch_size=1, buildings_only=False, shuffle=False,
+                       return_postmask=False, return_stacked=True,
+                       return_average=False)
+    pbar = tqdm.tqdm(total=len(df))
+
+    for image,filename in df:
+        filename = os.path.basename(filename)
+        filename = filename.replace("pre", "localization").replace(".png", "_prediction.png") 
+        #if os.path.exists(os.path.join("solution", filename)):
+        #    continue
+
+        # localization (segmentation)
+        pred = model.predict([image])
+        mask = infer.convert_prediction(pred)
+        write_solution(names=[filename], images=[mask], path=path)
+       
+        mask = randomize_damage(mask)
+        filename = filename.replace("localization", "damage")
+        write_solution(names=[filename], images=[mask], path=path)
+
+        pbar.update(1)
+
+
 def cli(outdir: "The path to write solutions to",
         segmentation: ("Use a multiclass segmentation model", "flag", "s"),
-        building: ("Use a binary segmentation model and individual building classifier", "flag", "b")):
+        building: ("Use a binary segmentation model and individual building classifier", "flag", "b"),
+        random: ("Randomize damage", "flag", "r")):
 
     if segmentation:
         damage_by_segmentation(outdir)
     elif building:
         damage_by_building_classification(outdir)
+    elif random:
+        damage_random(outdir)
     else:
         logger.error()
 

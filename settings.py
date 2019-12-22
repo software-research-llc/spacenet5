@@ -4,7 +4,7 @@ from inspect import getsourcefile
 
 # The architecture to use
 ARCHITECTURE = "motokimura-stacked"
-DAMAGE_ARCHITECTURE = 'resnet50'
+DAMAGE_ARCHITECTURE = 'nasnetlarge'
 
 # Train/validation split proportion
 SPLITFACTOR = 0.9
@@ -12,14 +12,14 @@ BATCH_SIZE = 2
 
 #           0        1             2                3              4              5
 CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
-N_CLASSES = len(CLASSES)
+N_CLASSES = 2#len(CLASSES)
 
 MODELSTRING = "%s-%d.hdf5" % (ARCHITECTURE, N_CLASSES)
 DMG_MODELSTRING = "damage-%s.hdf5" % DAMAGE_ARCHITECTURE
 
 # The maximum length of building patches for damage classification
-DAMAGE_MAX_X = 128
-DAMAGE_MAX_Y = 128
+DAMAGE_MAX_X = 224
+DAMAGE_MAX_Y = 224
 
 # Shape of the training input images
 INPUTSHAPE = [1024,1024,6]
@@ -29,7 +29,8 @@ SAMPLESHAPE = [1024,1024,3]
 TARGETSHAPE = INPUTSHAPE
 
 # size of combination pre+post building images
-DMG_SAMPLESHAPE = [256,256,3]
+DMG_SAMPLESHAPE = [128,128,3]
+DMG_INPUTSHAPE = DMG_SAMPLESHAPE
 
 # The training and validation set files (pickled versions for faster loading)
 PICKLED_TRAINSET = "trainingsamples.pickle"

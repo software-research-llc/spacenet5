@@ -73,12 +73,14 @@ def get_files(directories):
                                              " != len(postdisaster): {} {}".format(len(prefiles), len(postfiles))
     return list(zip(sorted(prefiles, key=sortfunc), sorted(postfiles, key=sortfunc)))
 
+
 def get_test_files():
     """
     Return a list of the paths of images belonging to the test set as
     (preimage, postimage) tuples, e.g. ("socal-pre-004.png", "socal-post-004.png").
     """
     return get_files(S.TESTDIRS)
+
 
 def get_validation_files():
     """
@@ -89,6 +91,7 @@ def get_validation_files():
     files = get_files(S.LABELDIRS)
     length = len(files)
     return files[int(length*S.SPLITFACTOR):]
+
 
 def get_training_files():
     """
@@ -269,8 +272,8 @@ class Dataflow(tf.keras.utils.Sequence):
 
             premask = pre.multichannelmask()
             postmask = post.multichannelmask()
-            #if not return_postmask:
-            #    premask = convert_postmask_to_premask(postmask)
+            if not return_postmask:
+                premask = convert_postmask_to_premask(postmask)
 
             preimg = pre.image()
             postimg = post.image()
@@ -318,6 +321,13 @@ class Dataflow(tf.keras.utils.Sequence):
 
             y_pre = np.array(premask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], -1), copy=False)
             y_post = np.array(postmask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], -1), copy=False)
+            #y_pre = np.array(premask.astype(int), copy=False)
+            #y_post = np.array(postmask.astype(int), copy=False)
+
+            #y_pre = convert_prediction(y_pre)
+            #y_post = convert_prediction(y_post)
+            #y_pre = y_pre.reshape(1, 1024, 1024, 1)
+            #y_post = y_pre.reshape(1, 1024, 1024, 1)
 
             if interlace is True:
                 x_pre, x_post = interlace(x_pre, x_post)
@@ -373,27 +383,45 @@ class Dataflow(tf.keras.utils.Sequence):
 
 class BuildingDataflow(Dataflow):
     def __init__(self, *args, **kwargs):
-        super(BuildingDataflow, self).__init__(buildings_only=True, *args, **kwargs)
+        super(BuildingDataflow, self).__init__(buildings_only=True, batch_size=1, *args, **kwargs)
+        self.limit = 80
 
-    def __getitem__(self, idx, limit=64):
+    def __getitem__(self, idx):
         boxes = []
         classes = []
+        step = 24
+        limit = self.limit
+
         for (pre, post) in self.samples[idx*self.batch_size:(idx+1)*self.batch_size]:
             preimg = pre.image()
             postimg = post.image()
 
             for bldg in post.buildings:
-                img, klass = bldg.extract_from_images(preimg,postimg)
+                # skip un-classified
+                img, klass = bldg.extract_from_images_by_contours(preimg,postimg)
+                if klass == 5:
+                    klass = 4
                 boxes.append(img)
+                #classes.append(klass)
+                """
+                for i in range(0, len(img), step):
+                    for j in range(0, len(img[i]), step):
+                        boxes.append(img[i:i+step,j:j+step,...])
+                        classes.append(klass)
+                """
 
                 # make all `un-classified` buildings the most common damage type
                 #if klass == 5:
                 #    klass = 5
-                onehot = [0] * 5
-                onehot[klass] = 1
+                onehot = [0] * 4
+                onehot[int(klass - 1)] = 1
                 classes.append(onehot)
 
-        return np.array(boxes[:limit]), np.array(classes[:limit])
+        shuffled = list(zip(boxes, classes))
+        random.shuffle(shuffled)
+        boxes, classes = zip(*shuffled)
+
+        return np.array(boxes)[:limit], np.array(classes)[:limit]
 
 
 class Building:
@@ -469,6 +497,9 @@ class Building:
 
     @staticmethod
     def get_all_in(pre, post, mask):
+        if pre.shape[-1] > 3:
+            post = pre[...,3:]
+            pre = pre[...,:3]
         pre = pre.squeeze()#astype(np.uint8)
         post = post.squeeze()#astype(np.uint8)
         mask = mask.astype(np.uint8)
@@ -481,11 +512,11 @@ class Building:
             if w < 5 or h < 5:
                 continue
             # extract buildings along with a 5 pixel boundary
-            x_ = np.max([0,x-5])
-            y_ = np.max([0,y-5])
-            preview = pre[y_:y+h+10,x_:x+w+10,:]
-            postview = post[y_:y+h+10,x_:x+w+10,:]
-            tiny = np.vstack([preview,postview])
+            x_ = np.max([0,x])
+            y_ = np.max([0,y])
+            preview = pre[y_:y+h,x_:x+w,:]
+            postview = post[y_:y+h,x_:x+w,:]
+            tiny = postview#np.vstack([preview,postview])
 
             x,y,z = tiny.shape
             x,y = np.min([S.DMG_SAMPLESHAPE[0],x]), np.min([S.DMG_SAMPLESHAPE[1],y])
@@ -497,7 +528,20 @@ class Building:
 
         return np.array(boxes), np.array(coords)
 
-    def extract_from_images(self, pre:np.ndarray, post:np.ndarray):
+    def extract_from_images(self, pre, post):
+        boxes = []
+        classes = []
+        coords = self.coords()
+        x,y,w,h = cv2.boundingRect(np.array(coords))
+
+        for img in [post]:
+            box = img[y:y+h,x:x+w,...]
+            boxes.append(box)
+            classes.append(self.color())
+
+        return np.hstack(boxes), np.array(classes, copy=False)
+
+    def extract_from_images_by_contours(self, pre:np.ndarray, post:np.ndarray):
         """
         Slice out the patches of `pre` and `post` corresponding to the location of this building,
         then return them stacked on top of each other and zero-padded to S.DMG_SAMPLESHAPE.
@@ -509,28 +553,34 @@ class Building:
             box:     the stacked image.
             subtype: the damage class (subtype) of the buildings in the post-disaster image
         """
+        boxes = []
         mask = np.zeros(pre.shape[:2], dtype=np.uint8)#S.SAMPLESHAPE)#[S.DMG_SAMPLESHAPE[0]//2,S.DMG_SAMPLESHAPE[1]//2], dtype=np.uint8)
         #ret = np.zeros(S.DMG_SAMPLESHAPE)
 
-        cv2.fillPoly(mask,np.array([self.coords()]), 1)
+        cv2.fillPoly(mask,np.array([self.coords()]), 255)
         contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
+        logger.debug(f"number of building contours: {len(contours)}")
         for c in contours:
             x,y,w,h = cv2.boundingRect(c)
 
             # extract buildings along with a 5 pixel boundary
-            x_ = np.max([0,x-5])
-            y_ = np.max([0,y-5])
-            preview = pre[y_:y+h+10,x_:x+w+10,:]
-            postview = post[y_:y+h+10,x_:x+w+10,:]
-            tiny = np.vstack([preview,postview])
+            x_ = x#np.max([0,x-5])
+            y_ = y#np.max([0,y-5])
+            preview = pre[y_:y+h,x_:x+w,:]
+            postview = post[y_:y+h,x_:x+w,:]
+            #np.stack([preview,postview])
+            tiny = postview
+
+            #tiny = np.vstack([preview,postview])
 
             x,y,z = tiny.shape
             x,y = np.min([S.DMG_SAMPLESHAPE[0],x]), np.min([S.DMG_SAMPLESHAPE[1],y])
             box = np.zeros(S.DMG_SAMPLESHAPE, dtype=np.uint8)
             box[0:x,0:y,:] = tiny.astype(np.uint8)[:S.DMG_SAMPLESHAPE[0],:S.DMG_SAMPLESHAPE[1],:]
 
-        return (box, self.color())
+
+        return box, self.color()
 
 
 class Target:
@@ -562,7 +612,10 @@ class Target:
             b.wkt = feature.get('wkt', None)
             b.uid = prop['uid']
             b.target = self
+            #if len(b.coords()) > 1:
             self.buildings.append(b)
+            #else:
+            #    continue
 
             if b.klass is None:
                 key = "pre"

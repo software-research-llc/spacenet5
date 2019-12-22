@@ -37,16 +37,92 @@ def mode(ary):
     return sorted(counts, key=lambda x: counts[x])[-1]
 
 
+class LSTMDamageClassifier():
+    def __init__(self):
+        L = tf.keras.layers
+        R = tf.keras.regularizers
+        dim1, dim2 = S.DMG_INPUTSHAPE[0], S.DMG_INPUTSHAPE[1]
+        chans = S.DMG_INPUTSHAPE[2]
+
+        inp = L.Input(S.DMG_INPUTSHAPE)
+        x = L.LSTM(dim1 * dim2 * chans * 2, return_sequences=True)(inp)
+        x = L.Dropout(0.1)
+        x = L.LSTM(dim1 * dim2 * chans * 2, return_sequences=True)(x)
+        x = L.Dropout(0.1)
+        x = L.LSTM(dim1 * dim2 * chans * 2, return_sequences=False)(x)
+        x = L.Flatten()(x)
+        x = L.Reshape((-1,5))
+        x = L.Dense(dim1 * dim2, activation='softmax')(x)
+        
+        self.model = tf.keras.models.Model(inputs=[inp], outputs=[x])
+
+
+class ConvLSTMDamageClassifier():
+    def __init__(self):
+        s = self
+        L = tf.keras.layers
+        R = tf.keras.regularizers
+
+        inp = L.Input(S.DMG_INPUTSHAPE)
+        factor = 5
+
+        x = s.encoder_block(inp, factor)
+        x = s.encoder_block(x, factor+1)
+        x = s.encoder_block(x, factor+2)
+        x = s.encoder_block(x, factor+3)
+
+        x = s.decoder_block(x, factor+3)
+        x = s.decoder_block(x, factor+2)
+        x = s.decoder_block(x, factor+1)
+        x = s.decoder_block(x, factor)
+
+        x = L.Reshape( (-1,S.N_CLASSES) )(x)
+        x = L.Activation('softmax')(x)
+
+        s.model = tf.keras.models.Model(inputs=[inp], outputs=[x])
+
+    def encoder_block(self, inp, factor):
+        R = tf.keras.regularizers
+        L = tf.keras.layers
+
+        x = L.ConvLSTM2D(2 ** factor, kernel_size=(3,3), strides=1, padding='same',
+                         kernel_regularizer=R.l2(1e-7), return_sequences=True)(inp)
+        x = L.BatchNormalization()(x)
+        x = L.ConvLSTM2D(2 ** factor, kernel_size=(4,4), strides=2, padding='same',
+                         kernel_regularizer=R.l2(1e-7), return_sequences=True)(x)
+        x = L.BatchNormalization()(x)
+        return x
+
+    def decoder_block(self, inp, factor):
+        R = tf.keras.regularizers
+        L = tf.keras.layers
+
+        x = L.Conv2DTranspose(2 ** factor, kernel_size=(3,3), strides=1, padding='same')(inp)
+        x = L.BatchNormalization()(x)
+        x = L.ConvLSTM2D(2 ** factor, kernel_size=(4,4), strides=2, padding='same',
+                         kernel_regularizer=R.l2(1e-7), return_sequences=True)(x)
+        x = L.BatchNormalization()(x)
+        return x
+
+
 class ModelShell(unet.MotokimuraUnet):
     def __init__(self):
         self.model = None
 
+
 def build_model(backbone=S.ARCHITECTURE,
                 train=False,
-                classes=5):
+                classes=4):
+
+    #model = unet.MotokimuraUnet(classes=classes, input_shape=S.DMG_INPUTSHAPE)
+    #model.convert_to_damage_classifier()
+    #return model
 
     model = ModelShell()
-    model.model = tf.keras.applications.ResNet50(classes=classes, include_top=True, input_shape=S.DMG_SAMPLESHAPE, weights=None)
+    model.model = tf.keras.applications.NASNetLarge(classes=classes,
+                                                    include_top=True,
+                                                    input_shape=S.DMG_INPUTSHAPE,
+                                                    weights=None)
     return model
 
 
@@ -296,7 +372,7 @@ def epoch(model, train_seq, val_seq, noaction=False, step=16):
             sys.exit()
 
 
-def main(epochs, noaction=False, restore=False):
+def main(epochs, noaction=False, restore=False, limit=64):
     if not noaction:
         model = build_model()
         if restore:
@@ -310,6 +386,8 @@ def main(epochs, noaction=False, restore=False):
     train_seq = BuildingDataflow(files=get_training_files())
     valid_seq = BuildingDataflow(files=get_validation_files())
     callback = tf.keras.callbacks.ModelCheckpoint(S.DMG_MODELSTRING.replace(".hdf5", "-best.hdf5"), save_weights_only=True, save_best_only=True)
+    train_seq.limit = limit
+    valid_seq.limit = limit
 
     try:
         model.fit(train_seq, validation_data=valid_seq, epochs=epochs,
@@ -351,13 +429,14 @@ def display():
 def cli(show: ("Just show the data that will be fed to the network", "flag", "s"),
         noaction: ("Dry-run by iterating through samples w/o passing to the net", "flag", "n"),
         restore: ("Load saved weights to continue training", "flag", "r"),
-        epochs: ("Number of training epochs", "option", "e", int)=50):
+        epochs: ("Number of training epochs", "option", "e", int)=50,
+        limit: ("Max batch size", "option", "l", int)=64):
 
     if show:
         display()
         sys.exit()
     else:
-        main(epochs=epochs, noaction=noaction, restore=restore)
+        main(epochs=epochs, noaction=noaction, restore=restore, limit=limit)
 
 if __name__ == "__main__":
     plac.call(cli)

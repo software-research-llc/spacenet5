@@ -424,19 +424,21 @@ class BuildingDataflow(Dataflow):
         return np.array(boxes)[:limit], np.array(classes)[:limit]
 
 
-class BuildingDamageDataflow(BuildingDataflow):
+class DamagedBuildingDataflow(Dataflow):
     """
-    BuildingDataflow object that only includes pre- and post-disaster images
+    Dataflow object that only includes pre- and post-disaster images
     that have damaged buildings (buildings with a damage class of 2, 3, or 4).
     """
     def __init__(self, *args, **kwargs):
-        super(BuildingDamageDataflow, self).__init__(self, *args, **kwargs)
+        super(DamagedBuildingDataflow, self).__init__(buildings_only=True, *args, **kwargs)
 
+        # discard any sample pairs with only undamaged (or unclassified) buildings
         samples_copy = self.samples.copy()
         self.samples.clear()
         for (pre,post) in samples_copy:
             if any(post.buildings, lambda x: x.color() > 1 and x.color() <= 4):
                 self.samples.append( (pre, post) )
+
 
 
 class Building:

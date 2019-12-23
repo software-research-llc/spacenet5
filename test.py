@@ -1,5 +1,5 @@
 """
-Generate solution files.
+Generates solution .png files by loading pre-trained models and predicting.
 """
 import random
 import skimage
@@ -65,11 +65,11 @@ def damage_by_building_classification(path):
     # load the localization (segmentation) model
     S.BATCH_SIZE = 1
     model = train.build_model(architecture=S.ARCHITECTURE, train=True)
-    model = train.load_weights(model, S.MODELSTRING)#.replace(".hdf5", "-best.hdf5"))
+    model = train.load_weights(model, S.MODELSTRING_BEST)#.replace(".hdf5", "-best.hdf5"))
 
     # load the damage classification model
     dmg_model = damage.build_model()
-    dmg_model = damage.load_weights(dmg_model, S.DMG_MODELSTRING)
+    dmg_model = damage.load_weights(dmg_model, S.DMG_MODELSTRING_BEST)
 
     # get a dataflow for the test files
     df = flow.Dataflow(files=flow.get_test_files(), transform=False,
@@ -99,7 +99,7 @@ def damage_by_building_classification(path):
             labels = dmg_model.predict(boxes)
             for k, c in enumerate(coords):
                 x,y,w,h = c
-                mask[y:y+h,x:x+w] = np.argmax(labels[k])
+                mask[y:y+h,x:x+w] = np.argmax(labels[k])+1
 
         write_solution(names=[filename], images=[mask], path=path)
         pbar.update(1)
@@ -112,7 +112,7 @@ def damage_by_segmentation(path):
     model to do so.
     """
     model = train.build_model(train=False)
-    model = train.load_weights(model, S.MODELSTRING)
+    model = train.load_weights(model, S.MODELSTRING_BEST)
     df = flow.Dataflow(files=flow.get_test_files(), transform=False,
                        batch_size=1, buildings_only=False, shuffle=False,
                        return_postmask=False, return_stacked=False,
@@ -140,8 +140,8 @@ def damage_random(path):
     """
     Generate solution .png files using random damage.
     """
-    model = train.build_model(train=False, save_path="motokimura-stacked-2-best.hdf5")
-    model = train.load_weights(model, S.MODELSTRING)
+    model = train.build_model(train=False)#, save_path="motokimura-stacked-2.hdf5")
+    model = train.load_weights(model, S.MODELSTRING_BEST)
     df = flow.Dataflow(files=flow.get_test_files(), transform=False,
                        batch_size=1, buildings_only=False, shuffle=False,
                        return_postmask=False, return_stacked=True,

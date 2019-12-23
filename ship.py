@@ -37,7 +37,7 @@ from skimage.morphology import label
 
 # Root directory of the project
 ROOT_DIR = "./"
-TRANSFORM = 0.25
+TRANSFORM = 0.30
 
 # Import Mask RCNN
 #sys.path.append(ROOT_DIR)  # To find local version of the library
@@ -110,6 +110,7 @@ class Xview2Config(Config):
     # # Image mean (RGB)
     # MEAN_PIXEL = np.array([123.7, 116.8, 103.9])
     MEAN_PIXEL = np.array([86.81837701005743, 90.15986695022038, 67.48294656034845])
+    #MEAN_PIXEL = np.array([0.,0.,0.])
 
 ############################################################
 #  Dataset
@@ -127,9 +128,9 @@ class Xview2Dataset(utils.Dataset):
 
         # Load image ids (filenames) and run length encoded pixels
         if subset == "train":
-            self.df = flow.Dataflow(files=flow.get_training_files(), transform=TRANSFORM)
+            self.df = flow.Dataflow(files=flow.get_training_files(), buildings_only=True, transform=TRANSFORM, return_postmask=True, batch_size=1)
         elif subset == "val":
-            self.df = flow.Dataflow(files=flow.get_validation_files())
+            self.df = flow.Dataflow(files=flow.get_validation_files(), buildings_only=True, return_postmask=True, batch_size=1)
         else:
             raise Exception("unrecognized subset %s" % subset)
 

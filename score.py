@@ -129,6 +129,7 @@ def tensor_f1_score(y_true, y_pred):
     return score
 
 
+# df1 = 4 / sum((f1+epsilon)**-1 for f1 in [no_damage_f1, minor_damage_f1, major_damage_f1, destroyed_f1]), where epsilon = 1e-6
 @tf.function
 def damage_f1_score(y_true, y_pred):
     gt, pr = y_true, y_pred

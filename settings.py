@@ -4,7 +4,7 @@ from inspect import getsourcefile
 
 # The architecture to use
 ARCHITECTURE = "motokimura-stacked"
-DAMAGE_ARCHITECTURE = 'nasnetlarge'
+DAMAGE_ARCHITECTURE = 'xception'
 
 # Train/validation split proportion
 SPLITFACTOR = 0.9
@@ -16,6 +16,9 @@ N_CLASSES = 2#len(CLASSES)
 
 MODELSTRING = "%s-%d.hdf5" % (ARCHITECTURE, N_CLASSES)
 DMG_MODELSTRING = "damage-%s.hdf5" % DAMAGE_ARCHITECTURE
+
+MODELSTRING_BEST = MODELSTRING.replace(".hdf5", "-best.hdf5")
+DMG_MODELSTRING_BEST = DMG_MODELSTRING.replace(".hdf5", "-best.hdf5")
 
 # The maximum length of building patches for damage classification
 DAMAGE_MAX_X = 224

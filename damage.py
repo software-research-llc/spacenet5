@@ -14,6 +14,7 @@ import sys
 import skimage
 import score
 import random
+import ordinal_loss
 from flow import Dataflow, BuildingDataflow, get_training_files, get_validation_files
 
 logger = logging.getLogger(__name__)
@@ -119,10 +120,19 @@ def build_model(backbone=S.ARCHITECTURE,
     #return model
 
     model = ModelShell()
-    model.model = tf.keras.applications.NASNetLarge(classes=classes,
-                                                    include_top=True,
+    m = tf.keras.applications.Xception(classes=classes,
+                                                    include_top=False,
                                                     input_shape=S.DMG_INPUTSHAPE,
-                                                    weights=None)
+                                                    weights='imagenet')
+    x = tf.keras.layers.Flatten()(m.output)
+    x = tf.keras.layers.Dropout(0.2)(x)
+    x = tf.keras.layers.Dense(32, activation='relu')(x)
+    x = tf.keras.layers.Dropout(0.2)(x)
+    x = tf.keras.layers.Dense(32, activation='relu')(x)
+    x = tf.keras.layers.Dropout(0.2)(x)
+    x = tf.keras.layers.Dense(4, activation='relu')(x)
+    model.model = tf.keras.models.Model(inputs=m.inputs, outputs=[x])
+
     return model
 
 
@@ -379,7 +389,7 @@ def main(epochs, noaction=False, restore=False, limit=64):
             model = load_weights(model, S.DMG_MODELSTRING)
             logger.info("Weights loaded from {} successfully.".format(S.DMG_MODELSTRING))
         model.compile(optimizer=tf.keras.optimizers.RMSprop(),#tf.keras.optimizers.Adam(lr=0.00001),
-                      loss='categorical_crossentropy',
+                      loss=ordinal_loss.loss,#'categorical_crossentropy',
                       metrics=['categorical_accuracy', score.damage_f1_score])
     else:
         model = None

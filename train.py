@@ -91,7 +91,8 @@ def build_model(*args, **kwargs):
     L = tf.keras.layers
     R = tf.keras.regularizers
 
-    decoder = unet.MotokimuraUnet(classes=S.N_CLASSES)
+    assert 'classes' in kwargs, "must provide classes=N"
+    decoder = unet.MotokimuraUnet(classes=kwargs['classes'])
     
     inp = L.Input(S.INPUTSHAPE)
     x = decoder(inp)
@@ -127,8 +128,7 @@ def build_deeplab_model(architecture=S.ARCHITECTURE, train=False):
 
 
 def main(restore: ("Restore from checkpoint", "flag", "r"),
-         damage: ("Train a damage classifier", "flag", "d"),
-         architecture: ("xception or mobilenetv2", "option", "a", str)=S.ARCHITECTURE,
+         damage: ("Train a damage classifier (default is localization)", "flag", "d"),
          verbose: ("Keras verbosity level", "option", "v", int)=1,
          epochs: ("Number of epochs", "option", "e", int)=50,
          initial_epoch: ("Initial epoch to continue from", "option", "i", int)=1,
@@ -143,19 +143,17 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
              score.recall,
              score.tensor_f1_score]
 
+    classes = 3 if damage else S.N_CLASSES
     logger.info("Building model.")
-    model = build_model(architecture=architecture, train=True)
+    model = build_model(classes=classes)
+
     if restore:
         save_path = S.DMG_MODELSTRING if damage else S.MODELSTRING
         load_weights(model, save_path)
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    if damage:
-        flowcall = flow.DamagedBuildingDataflow
-    else:
-        flowcall = flow.Dataflow
-
+    flowcall = flow.DamagedBuildingDataflow if damage else flow.Dataflow
     train_seq = flowcall(files=flow.get_training_files(), batch_size=S.BATCH_SIZE,
                          transform=0.3,
                          shuffle=True,

@@ -127,41 +127,47 @@ def build_deeplab_model(architecture=S.ARCHITECTURE, train=False):
 
 
 def main(restore: ("Restore from checkpoint", "flag", "r"),
+         damage: ("Train a damage classifier", "flag", "d"),
          architecture: ("xception or mobilenetv2", "option", "a", str)=S.ARCHITECTURE,
-         save_path: ("Save path", "option", "s", str)=S.MODELSTRING,
          verbose: ("Keras verbosity level", "option", "v", int)=1,
          epochs: ("Number of epochs", "option", "e", int)=50,
          initial_epoch: ("Initial epoch to continue from", "option", "i", int)=1,
          optimizer=tf.keras.optimizers.RMSprop(),
          loss='categorical_crossentropy'):
     """
-    Train the model.
+    Train a model.
     """
 #    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
     metrics=['accuracy',
              score.num_correct,
              score.recall,
              score.tensor_f1_score]
+
     logger.info("Building model.")
-    #model = build_sm_model()
     model = build_model(architecture=architecture, train=True)
     if restore:
-        load_weights(model, S.MODELSTRING)
+        save_path = S.DMG_MODELSTRING if damage else S.MODELSTRING
+        load_weights(model, save_path)
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    train_seq = flow.Dataflow(files=flow.get_training_files(), batch_size=S.BATCH_SIZE,
-                              transform=0.3,
-                              shuffle=True,
-                              buildings_only=True,
-                              return_postmask=False,
-                              return_stacked=True,
-                              return_average=False)
-    val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE,
-                            buildings_only=True,
-                            return_postmask=False,
-                            return_stacked=True,
-                            return_average=False)
+    if damage:
+        flowcall = flow.DamagedBuildingDataflow
+    else:
+        flowcall = flow.Dataflow
+
+    train_seq = flowcall(files=flow.get_training_files(), batch_size=S.BATCH_SIZE,
+                         transform=0.3,
+                         shuffle=True,
+                         buildings_only=True,
+                         return_postmask=True if damage else False,
+                         return_stacked=False if damage else True,
+                         return_average=False)
+    val_seq = flowcall(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE,
+                       buildings_only=True,
+                       return_postmask=True if damage else False,
+                       return_stacked=False if damage else True,
+                       return_average=False)
 
     logger.info("Training.")
     train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq, initial_epoch)
@@ -183,7 +189,6 @@ def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_s
     except Exception as exc:
         save_model(model, "tmp.hdf5", pause=0)
         raise(exc)
-
 
 if __name__ == "__main__":
     plac.call(main)

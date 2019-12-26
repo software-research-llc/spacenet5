@@ -23,23 +23,22 @@ def convert_prediction(pred, argmax=True, threshold=None, focus_upper=False):
     """
     Turn a model's prediction output into a grayscale segmentation mask.
 
-    Takes a one hot encoded (batch_size, width * height, classes)
+    Takes a one hot encoded (batch_size, width * height, num_classes)
     array and converts.
     """
-    x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [-1])# + [pred.shape[-1]])
+    x = pred.squeeze().reshape(S.MASKSHAPE[:2] + [-1])
+
     if focus_upper is True:
+        # double the predicted probability of high-channel (damaged building) pixels
         one = x[...,0:3]
         two = x[...,3:] * 2
         x = np.dstack([one,two])
+
     if argmax is True:
         if isinstance(threshold, float):
             x[x<threshold] = 0
             x[:,:,0] = 0
-            thresh = np.argmax(x, axis=2)
-            return thresh
-        else:
-            ret = np.argmax(x, axis=2)
-            return ret
+        return np.argmax(x, axis=2)
     else:
         return x[...,0:3], x[...,3:]
 
@@ -61,38 +60,24 @@ def weave_pred_no_argmax(pred):
 
 
 def weave(chips):
+    """
+    Stitch together 1/16th size squares of an image back to the original image.
+    """
     return Target.weave(chips)
 
 
 def bounding_rectangles(img, diagonals=True):
+    """
+    Return bounding boxes for contiguous blobs within an image.
+    """
     if diagonals is True:
+        # consider diagonally connected pixels as a single shape
         struct = [[1,1,1],[1,1,1],[1,1,1]]
     else:
         struct = None
     rects = label(img, structure=struct)
     objs = find_objects(rects[0])#, max_label=4)
     return objs
-
-
-def infer(model, pre:np.ndarray, post:np.ndarray=None, compress:bool=True):
-    """
-    Do prediction.  If compress is True, calls compress_channels() on the return images.
-
-    Returns a (mask_image, damage_image) tuple.
-    """
-    assert pre.ndim == 3, f"expected 3 dimensions, got {pre.shape}"
-    if post is not None:
-        assert post.ndim == 3, f"expected 3 dimensions, got {post.shape}"
-
-    premask = model.predict(np.expand_dims(pre, axis=0))
-    if post is None:
-        return premask.squeeze()
-
-    postmask = model.predict(np.expand_dims(post, axis=0))
-    if compress:
-        return compress_channels(premask.squeeze()), compress_channels(postmask.squeeze())
-    else:
-        return premask.squeeze(), postmask.squeeze()
 
 
 def show_random(model, df):

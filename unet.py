@@ -13,8 +13,8 @@ class MotokimuraUnet():
     With a GeForce GTX 1080 Ti, trains in about 24 hours with model weight files of 82MB.
 
     Xview2 scores:
-        Multiclass - 0.77 localization, 0.3 damage classification (0.41 overall).
-        Single class - 0.81 localization, 0.0 damage classification (0.25 overall).
+        Multiclass - 0.778 localization, 0.310 damage classification (0.450 overall).
+        Single class - 0.818 localization, 0.0 damage classification (0.304 overall).
     """
     def __init__(self, *args, **kwargs):
         if 'classes' not in kwargs:

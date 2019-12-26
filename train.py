@@ -1,26 +1,16 @@
 import os
-import focal_loss
 import settings as S
 import time
 import sys
 import flow
 import plac
 import tensorflow as tf
-#from tensorflow import keras
-#from tensorflow.keras import backend as K
-#import keras
-#import keras.backend as K
-#import segmentation_models as sm
 import tensorflow.keras as keras
 import numpy as np
 import logging
-import ordinal_loss
-#import tensorflow.keras.backend as K
-import layers
 import deeplabmodel
 import infer
 import score
-import ordinal_loss
 import unet
 
 logger = logging.getLogger(__name__)
@@ -30,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 def save_model(model, save_path=S.MODELSTRING, pause=0):
+    """
+    Save a model, optionally pausing to give the user a chance to cancel the save
+    (canceling training with a CTRL-C [KeyboardInterrupt] saves after 5 seconds).
+    """
     if pause > 0:
         sys.stderr.write("Saving to {} in".format(save_path))
         for i in list(range(1,6))[::-1]:
@@ -44,42 +38,21 @@ def load_weights(model, save_path=S.MODELSTRING):
         model.load_weights(save_path)
         logger.info("Model file %s loaded successfully." % save_path)
     except OSError as exc:
-        sys.stderr.write("!! ERROR LOADING %s:" % save_path)
-        sys.stderr.write(str(exc) + "\n")
+        logger.error("unable to load %s: %s" % (save_path, str(exc)))
     return model
 
 
-def to_categorical(tensor):
-    return tf.keras.utils.to_categorical(tensor)#, S.N_CLASSES)
-
-
-def build_sm_model(*args, **kwargs):
-    tf.keras.backend.set_image_data_format('channels_last')
-    import segmentation_models as sm
-    sm.set_framework('tf.keras')
-
-    inp_pre = tf.keras.layers.Input(S.INPUTSHAPE)
-    inp = tf.keras.layers.Input(S.INPUTSHAPE)
-    m = sm.Unet('efficientnetb0', weights=None, input_shape=S.INPUTSHAPE, activation='softmax', *args, **kwargs)
-    #m.set_trainable('true')
-
-    x = m(inp)
-#    x = tf.one_hot(x, S.N_CLASSES, axis=-1)
-    #tf.keras.utils.to_categorical(x)#, num_classes=S.N_CLASSES)
-    #x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
-    #x = tf.keras.layers.Activation('softmax')(x)
-
-    return tf.keras.models.Model(inputs=[inp_pre, inp], outputs=[x])
-
-
-def build_model(classes=2, damage=True, *args, **kwargs):
+def build_model(classes=6, damage=True, *args, **kwargs):
     L = tf.keras.layers
     R = tf.keras.regularizers
 
-    decoder = unet.SegmentationModel(classes=6) if damage else unet.MotokimuraUnet(classes=classes)
+    decoder = unet.SegmentationModel(classes=classes) if damage else unet.MotokimuraUnet(classes=classes)
     
     inp = L.Input(S.INPUTSHAPE)
     x = decoder(inp)
+
+    # Take the model's output and reshape so we can use categorical_crossentropy loss. To undo this
+    # and recover the predicted mask, see infer.convert_prediction().
     x = L.Reshape((-1,classes))(x)
     x = L.Activation('softmax')(x)
 
@@ -98,9 +71,6 @@ def build_deeplab_model(architecture=S.ARCHITECTURE, train=False):
 
     inp_pre = tf.keras.layers.Input(S.INPUTSHAPE)
     inp_post = tf.keras.layers.Input(S.INPUTSHAPE)
-
-#    x = decoder(inp_pre)
-#    y = decoder(inp_post)
 
     x = tf.keras.layers.Add()([inp_pre, inp_post])
     x = decoder(x)
@@ -181,7 +151,6 @@ def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_s
                             #use_multiprocessing=True,
                             max_queue_size=10)#, workers=8)
     except KeyboardInterrupt:
-            save_model(model, "tmp.hdf5", pause=0)
             save_model(model, save_path, pause=1)
             sys.exit()
     except Exception as exc:

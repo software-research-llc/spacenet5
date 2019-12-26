@@ -21,31 +21,17 @@ import deeplabmodel
 import infer
 import score
 import ordinal_loss
+import unet
 
 logger = logging.getLogger(__name__)
 
 #tf.config.optimizer.set_jit(False)
 #tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
-callbacks = [
-    keras.callbacks.ModelCheckpoint(S.MODELSTRING.replace(".hdf5", "-best.hdf5"), save_weights_only=True, save_best_only=True),
-
-    keras.callbacks.TensorBoard(log_dir="logs"),
-                                #histogram_freq=1,
-                                #write_graph=True,
-                                #write_images=True,
-                                #embeddings_freq=0),
-                                #update_freq=100),
-]
-
-
-#metrics = ['sparse_categorical_accuracy', sm.losses.CategoricalFocalLoss(), sm.metrics.IOUScore(), sm.metrics.FScore()]
-#preprocess_input = sm.get_preprocessing(BACKBONE)
-
 
 def save_model(model, save_path=S.MODELSTRING, pause=0):
     if pause > 0:
-        sys.stderr.write("Saving in")
+        sys.stderr.write("Saving to {} in".format(save_path))
         for i in list(range(1,6))[::-1]:
             sys.stderr.write(" %d...\n" % i)
             time.sleep(pause)
@@ -86,17 +72,15 @@ def build_sm_model(*args, **kwargs):
     return tf.keras.models.Model(inputs=[inp_pre, inp], outputs=[x])
 
 
-def build_model(*args, **kwargs):
-    import unet
+def build_model(classes=2, damage=True, *args, **kwargs):
     L = tf.keras.layers
     R = tf.keras.regularizers
 
-    assert 'classes' in kwargs, "must provide classes=N"
-    decoder = unet.MotokimuraUnet(classes=kwargs['classes'])
+    decoder = unet.SegmentationModel(classes=6) if damage else unet.MotokimuraUnet(classes=classes)
     
     inp = L.Input(S.INPUTSHAPE)
     x = decoder(inp)
-    x = L.Reshape((-1,S.N_CLASSES))(x)
+    x = L.Reshape((-1,classes))(x)
     x = L.Activation('softmax')(x)
 
     m = tf.keras.models.Model(inputs=[inp], outputs=[x])
@@ -138,36 +122,52 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
     Train a model.
     """
 #    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
+    save_path = S.DMG_MODELSTRING if damage else S.MODELSTRING
+
     metrics=['accuracy',
              score.num_correct,
              score.recall,
+             score.damage_f1_score if damage else None,
              score.tensor_f1_score]
 
-    classes = 3 if damage else S.N_CLASSES
-    logger.info("Building model.")
-    model = build_model(classes=classes)
+    callbacks = [
+        keras.callbacks.ModelCheckpoint(save_path.replace(".hdf5", "-best.hdf5"), save_weights_only=True, save_best_only=True),
 
+        keras.callbacks.TensorBoard(log_dir="logs"),
+    ]
+
+
+    S.INPUTSHAPE[-1] = 6 if damage else 6
+    S.DAMAGE = True if damage else False
+    classes = 6 if damage else S.N_CLASSES
+    logger.info("Building model.")
+    model = build_model(classes=classes, damage=damage)
+
+    S.N_CLASSES = 6 if damage else S.N_CLASSES
+    S.MASKSHAPE[-1] = 6 if damage else S.MASKSHAPE[-1]
     if restore:
-        save_path = S.DMG_MODELSTRING if damage else S.MODELSTRING
         load_weights(model, save_path)
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    flowcall = flow.DamagedBuildingDataflow if damage else flow.Dataflow
+    flowcall = flow.DamagedDataflow if damage else flow.Dataflow
     train_seq = flowcall(files=flow.get_training_files(), batch_size=S.BATCH_SIZE,
                          transform=0.3,
                          shuffle=True,
                          buildings_only=True,
                          return_postmask=True if damage else False,
-                         return_stacked=False if damage else True,
+                         return_stacked=True if damage else True,
+                         return_post_only=False if damage else False,
                          return_average=False)
-    val_seq = flowcall(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE,
+    val_seq = flow.Dataflow(files=flow.get_validation_files(), batch_size=S.BATCH_SIZE,
                        buildings_only=True,
+                       shuffle=True,
                        return_postmask=True if damage else False,
-                       return_stacked=False if damage else True,
+                       return_stacked=True if damage else True,
+                       return_post_only=False if damage else False,
                        return_average=False)
 
-    logger.info("Training.")
+    logger.info("Training %s" % save_path)
     train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq, initial_epoch)
     save_model(model, save_path)
 
@@ -187,6 +187,7 @@ def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_s
     except Exception as exc:
         save_model(model, "tmp.hdf5", pause=0)
         raise(exc)
+
 
 if __name__ == "__main__":
     plac.call(main)

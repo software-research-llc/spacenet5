@@ -192,7 +192,7 @@ class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
     """
-    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False, interlace=False, return_postmask=True, return_stacked=False, return_average=False):
+    def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False, interlace=False, return_postmask=True, return_stacked=False, return_average=False, return_post_only=False, return_single_channel=False, segmentation_models=False):
         # boolean, return pre- and post-disaster images added together and divided by 2 (their average)
         self.return_average = return_average
         # boolean, return pre- and post- stacked channelwise
@@ -207,6 +207,11 @@ class Dataflow(tf.keras.utils.Sequence):
         self.batch_size = batch_size
         # boolean, whether to return an interlaced value, see interlace()
         self.interlace = interlace
+        # return only the post-disaster image 
+        self.return_post_only = return_post_only
+        # for segmentation_models compatibility
+        self.return_single_channel = return_single_channel
+        self.segmentation_models = segmentation_models
 
         # deformation object to apply to images (so sample and mask pixel locations correspond)
         self.image_datagen = ImageDataGenerator()
@@ -270,10 +275,10 @@ class Dataflow(tf.keras.utils.Sequence):
                 else:
                     return np.expand_dims(np.dstack([x_pre, x_post]), axis=0), pre.img_path
 
-            premask = pre.multichannelmask()
-            postmask = post.multichannelmask()
+            premask = pre.sm_multichannelmask() if self.segmentation_models else pre.multichannelmask()
+            postmask = post.sm_multichannelmask() if self.segmentation_models else post.multichannelmask()
             if not return_postmask:
-                premask = convert_postmask_to_premask(postmask)
+                premask = convert_postmask_to_premask(postmask.copy())
 
             preimg = pre.image()
             postimg = post.image()
@@ -314,13 +319,23 @@ class Dataflow(tf.keras.utils.Sequence):
                     avgimg = apply_gaussian_blur(avgimg, kernel=(ksize,ksize))
 
             if not self.return_average:
-                x_pre = np.array(preimg, copy=False)#.astype(np.int32)
-                x_post = np.array(postimg, copy=False)#.astype(np.int32)
+                x_pre = np.array(preimg, copy=False).astype(np.int32)
+                x_post = np.array(postimg, copy=False).astype(np.int32)
             else:
                 x_avg = np.array(avgimg, copy=False)
 
-            y_pre = np.array(premask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], -1), copy=False)
-            y_post = np.array(postmask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], -1), copy=False)
+            if self.return_single_channel is True:
+                # segmentation_models compatibility
+                y_pre = np.array(premask.astype(int))
+                y_post = np.array(postmask.astype(int))
+
+
+                #x_pre = tf.compat.v1.image.resize(x_pre, (1008, 1008), align_corners=True)
+                #x_post = tf.compat.v1.image.resize(x_post, (1008, 1008), align_corners=True)
+            else:
+                y_pre = np.array(premask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], -1), copy=False)
+                y_post = np.array(postmask.astype(int).reshape(S.MASKSHAPE[0]*S.MASKSHAPE[1], -1), copy=False)
+
             #y_pre = np.array(premask.astype(int), copy=False)
             #y_post = np.array(postmask.astype(int), copy=False)
 
@@ -360,6 +375,8 @@ class Dataflow(tf.keras.utils.Sequence):
         y_ret = y_posts if return_postmask is True else y_pres
         if self.return_average is True:
             return np.array(x_avgs, copy=False), y_ret
+        elif self.return_post_only is True:
+            return x_posts, y_ret
         elif self.return_stacked is True:
             return np.array(stacked, copy=False), y_ret
         else:
@@ -424,22 +441,28 @@ class BuildingDataflow(Dataflow):
         return np.array(boxes)[:limit], np.array(classes)[:limit]
 
 
-class DamagedBuildingDataflow(Dataflow):
+class DamagedDataflow(Dataflow):
     """
     Dataflow object that only includes pre- and post-disaster images
     that have damaged buildings (buildings with a damage class of 2, 3, or 4).
     """
     def __init__(self, *args, **kwargs):
-        super(DamagedBuildingDataflow, self).__init__(buildings_only=True, *args, **kwargs)
+        Dataflow.__init__(self, *args, **kwargs)
 
         # discard any sample pairs with only undamaged (or unclassified) buildings
         samples_copy = self.samples.copy()
         self.samples.clear()
         for (pre,post) in samples_copy:
-            if any(post.buildings, lambda x: x.color() > 1 and x.color() <= 4):
-                self.samples.append( (pre, post) )
+            for b in post.buildings:
+                if b.color() > 1 and b.color() <= 4:
+                    self.samples.append( (pre,post) )
+                    break
 
 
+class DamagedBuildingDataflow(BuildingDataflow):
+    def __init__(self, *args, **kwargs):
+        DamagedDataflow.__init__(self, *args, **kwargs)
+        self.limit = 80
 
 class Building:
     """Carries the data for a single building; multiple Buildings are
@@ -514,6 +537,12 @@ class Building:
 
     @staticmethod
     def get_all_in(pre, post, mask):
+        """
+        Return the portions of `pre` and `post` that contain buildings.
+
+        Works by extracting contiguous regions in the `mask` provided, so
+        this is imperfect.
+        """
         if pre.shape[-1] > 3:
             post = pre[...,3:]
             pre = pre[...,:3]
@@ -531,14 +560,15 @@ class Building:
             # extract buildings along with a 5 pixel boundary
             x_ = np.max([0,x])
             y_ = np.max([0,y])
-            preview = pre[y_:y+h,x_:x+w,:]
+            #preview = pre[y_:y+h,x_:x+w,:]
             postview = post[y_:y+h,x_:x+w,:]
-            tiny = postview#np.vstack([preview,postview])
+            box = cv2.resize(postview, S.DMG_SAMPLESHAPE, interpolation=cv2.INTER_AREA)
+            #tiny = postview#np.vstack([preview,postview])
 
-            x,y,z = tiny.shape
-            x,y = np.min([S.DMG_SAMPLESHAPE[0],x]), np.min([S.DMG_SAMPLESHAPE[1],y])
-            box = np.zeros(S.DMG_SAMPLESHAPE, dtype=np.uint8)
-            box[0:x,0:y,:] = tiny.astype(np.uint8)[:S.DMG_SAMPLESHAPE[0],:S.DMG_SAMPLESHAPE[1],:]
+            #x,y,z = tiny.shape
+            #x,y = np.min([S.DMG_SAMPLESHAPE[0],x]), np.min([S.DMG_SAMPLESHAPE[1],y])
+            #box = np.zeros(S.DMG_SAMPLESHAPE, dtype=np.uint8)
+            #box[0:x,0:y,:] = tiny.astype(np.uint8)[:S.DMG_SAMPLESHAPE[0],:S.DMG_SAMPLESHAPE[1],:]
 
             boxes.append(box)
             coords.append((x,y,w,h))
@@ -656,6 +686,30 @@ class Target:
         mask = self.multichannelmask()
         return self.chips(image=mask)
 
+    def sm_multichannelmask(self):
+        # Each class gets one channel
+        # Fill background channel with 1s
+        chans = [np.ones(S.SAMPLESHAPE[:2], dtype=np.uint8)]
+        top = 6 if "post" in self.img_name else S.N_CLASSES
+        for i in range(1, top):
+            chan = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
+            chans.append(chan)
+
+        # For each building, set pixels according to (x,y) coordinates; they end up
+        # being a one-hot-encoded vector corresponding to class for each (x,y) location
+        for b in self.buildings:
+            coords = b.coords()
+            # "un-classified" buildings will cause an error during evaluation, so don't train
+            # for them
+            color = b.color()# if b.color() != 5 else 1
+            if len(coords) > 0:
+                # Set the pixels at coordinates in this class' channel to 1
+                cv2.fillPoly(chans[color], np.array([coords]), color)
+                # Zero out the background pixels for the same coordinates
+                cv2.fillPoly(chans[0], np.array([coords]), 0)
+        img = np.dstack(chans)
+        return img
+
     def multichannelmask(self):
         """Get the Target's mask for supervised training of the model"""
         # Each class gets one channel
@@ -683,23 +737,27 @@ class Target:
 
     def rcnn_image(self):
         pre = self.image()
-        if isinstance(self.transform, float) and random.random() < float(self.transform):
-            trans_dict = { 'shear': 0.1 * random.randint(1, 2) }
-            pre = self.image_datagen.apply_transform(pre, trans_dict)
+#        if isinstance(self.transform, float) and random.random() < float(self.transform):
+#            trans_dict = { 'shear': 0.1 * random.randint(1, 2) }
+#            pre = self.image_datagen.apply_transform(pre, trans_dict)
         return pre
 
     def rcnn_masks(self):
         masks = []
+        klasses = []
         for b in self.buildings:
+            if b.color() == 5:
+                continue
             img = np.zeros(S.MASKSHAPE[:2], dtype=np.uint8)
             coords = b.coords()
             if len(coords) > 0:
-                cv2.fillPoly(img, np.array([coords]), b.color())
+                cv2.fillPoly(img, np.array([coords]), 1)
                 masks.append(img)
+                klasses.append(b.color())
         if len(masks) == 0:
-            return np.array(masks), np.ones([0], dtype=np.int32)
+            return np.array(masks, copy=False), np.ones([0], dtype=np.int32)
         #masks.append(np.zeros(MASKSHAPE[:2], dtype=np.uint8))
-        return np.dstack(masks).astype(bool), np.ones([len(masks)], dtype=np.int32)
+        return np.dstack(masks).astype(bool), np.array(klasses)#np.ones([len(masks)], dtype=np.int32)
 
     def image(self):
         """Get this Target's input image (i.e. satellite chip) to feed to the model"""

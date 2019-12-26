@@ -15,7 +15,7 @@ import skimage
 import score
 import random
 import ordinal_loss
-from flow import Dataflow, BuildingDataflow, get_training_files, get_validation_files
+from flow import Dataflow, DamagedBuildingDataflow, BuildingDataflow, get_training_files, get_validation_files
 
 logger = logging.getLogger(__name__)
 
@@ -120,20 +120,28 @@ def build_model(backbone=S.ARCHITECTURE,
     #return model
 
     model = ModelShell()
-    m = tf.keras.applications.Xception(classes=classes,
-                                                    include_top=False,
-                                                    input_shape=S.DMG_INPUTSHAPE,
-                                                    weights='imagenet')
-    x = tf.keras.layers.Flatten()(m.output)
-    x = tf.keras.layers.Dropout(0.2)(x)
-    x = tf.keras.layers.Dense(32, activation='relu')(x)
-    x = tf.keras.layers.Dropout(0.2)(x)
-    x = tf.keras.layers.Dense(32, activation='relu')(x)
-    x = tf.keras.layers.Dropout(0.2)(x)
-    x = tf.keras.layers.Dense(4, activation='relu')(x)
-    model.model = tf.keras.models.Model(inputs=m.inputs, outputs=[x])
+    m = tf.keras.applications.NASNetMobile(classes=classes,
+                                       include_top=True,
+                                       input_shape=S.DMG_INPUTSHAPE,
+                                       weights=None)
+    #inp = m.input
+    #tf.keras.layers.Input(S.DMG_INPUTSHAPE)
+    #x = tf.keras.layers.Flatten()(inp)
+    #x = tf.keras.layers.Dense(128, activation='relu')(x)
+    #x = tf.keras.layers.Dropout(0.2)(x)
+    #x = tf.keras.layers.Dense(128, activation='relu')(x)
+    #x = tf.keras.layers.Dropout(0.2)(x)
+    #x = tf.keras.layers.Dense(128, activation='relu')(x)
+    #x = tf.keras.layers.Dropout(0.2)(x)
+    #x = tf.keras.layers.Dense(4, activation='relu')(x)
+    #x = tf.keras.layers.Dense(4096)(m.output)
+    #x = tf.keras.layers.Dropout(0.2)(x)
+    #x = tf.keras.layers.Dense(4096)(x)
+    #x = tf.keras.layers.Dropout(0.2)(x)
+    #x = tf.keras.layers.Dense(classes)
+    #model.model = tf.keras.models.Model(inputs=inp, outputs=[x])
 
-    return model
+    return m
 
 
 def load_weights(model, save_file=S.DMG_MODELSTRING):
@@ -389,12 +397,12 @@ def main(epochs, noaction=False, restore=False, limit=64):
             model = load_weights(model, S.DMG_MODELSTRING)
             logger.info("Weights loaded from {} successfully.".format(S.DMG_MODELSTRING))
         model.compile(optimizer=tf.keras.optimizers.RMSprop(),#tf.keras.optimizers.Adam(lr=0.00001),
-                      loss=ordinal_loss.loss,#'categorical_crossentropy',
+                      loss='categorical_crossentropy',#'categorical_crossentropy',
                       metrics=['categorical_accuracy', score.damage_f1_score])
     else:
         model = None
-    train_seq = BuildingDataflow(files=get_training_files())
-    valid_seq = BuildingDataflow(files=get_validation_files())
+    train_seq = DamagedBuildingDataflow(files=get_training_files())
+    valid_seq = DamagedBuildingDataflow(files=get_validation_files())
     callback = tf.keras.callbacks.ModelCheckpoint(S.DMG_MODELSTRING.replace(".hdf5", "-best.hdf5"), save_weights_only=True, save_best_only=True)
     train_seq.limit = limit
     valid_seq.limit = limit

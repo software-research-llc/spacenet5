@@ -72,7 +72,7 @@ class Xview2Config(Config):
     IMAGES_PER_GPU = 1
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 1  # Background + ship
+    NUM_CLASSES = 5# + 1  # Background + ship
 
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 8251
@@ -124,27 +124,36 @@ class Xview2Dataset(utils.Dataset):
         subset: Subset to load: train or val
         """
         # Add classes. We have only one class to add.
-        self.add_class("building", 1, "building")
+        #self.add_class("building", 0, "background")
+        self.add_class("building", 1, "no-damage")
+        self.add_class("building", 2, "minor-damage")
+        self.add_class("building", 3, "major-damage")
+        self.add_class("building", 4, "destroyed")
 
         # Load image ids (filenames) and run length encoded pixels
         if subset == "train":
-            self.df = flow.Dataflow(files=flow.get_training_files(), buildings_only=True, transform=TRANSFORM, return_postmask=True, batch_size=1)
+            self.df = flow.Dataflow(files=flow.get_training_files(), buildings_only=True, transform=False, return_postmask=True, return_stacked=False, batch_size=1)
+            Xview2Config.STEPS_PER_EPOCH = len(self.df) * 2
         elif subset == "val":
-            self.df = flow.Dataflow(files=flow.get_validation_files(), buildings_only=True, return_postmask=True, batch_size=1)
+            self.df = flow.Dataflow(files=flow.get_validation_files(), buildings_only=True, return_postmask=True, return_stacked=False, batch_size=1)
+            Xview2Config.VALIDATION_STEPS = len(self.df) * 2
         else:
             raise Exception("unrecognized subset %s" % subset)
 
         n = 0
-        for (pre, post) in self.df.samples:
+#        self.class_names = CLASSES.copy()
+#        self.class_names[0] = 'background'
+        for (preimg, postimg) in self.df.samples:
+          for pre in [preimg, postimg]:
             path = pre.img_path
             if len(pre.buildings) == 0:
                 continue
             n += 1
             self.add_image("building", image_id=path, width=1024, height=1024, target=pre, path=path)
-        if subset == "train":
-            old = Xview2Config.STEPS_PER_EPOCH
-            Xview2Config.STEPS_PER_EPOCH = n // 2
-            print("Changing STEPS_PER_EPOCH from {} to {}".format(old, Xview2Config.STEPS_PER_EPOCH))
+        if subset == "val":
+            Xview2Config.VALIDATION_STEPS = n
+        elif subset == "train":
+            Xview2Config.STEPS_PER_EPOCH = n
 
     def load_mask(self, image_id):
         """Generate instance masks for an image.
@@ -298,10 +307,13 @@ def train(model):
     # COCO trained weights, we don't need to train too long. Also,
     # no need to train all layers, just the heads should do it.
     print("Training")
-    model.train(dataset_train, dataset_val,
+    try:
+        model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
-                epochs=160, layers="all")
-
+                epochs=160,
+                layers="all")
+    except KeyboardInterrupt:
+        model.keras_model.save_weights("mask-rcnn.hdf5")
 
 def output2prediction(output):
     output = output[0]
@@ -579,7 +591,7 @@ if __name__ == '__main__':
             "mrcnn_class_logits", "mrcnn_bbox_fc",
             "mrcnn_bbox", "mrcnn_mask"])
     else:
-        model.load_weights(weights_path, by_name=True)
+        pass#model.load_weights(weights_path, by_name=True)
 
     # Train or evaluate
     if args.command == "train":

@@ -111,12 +111,12 @@ def damage_by_segmentation(path):
     Generate solution .png files, using a single multiclass segmentation
     model to do so.
     """
-    model = train.build_model(train=False)
-    model = train.load_weights(model, S.MODELSTRING_BEST)
+    model = train.build_model(classes=6)
+    model = train.load_weights(model, S.DMG_MODELSTRING_BEST)
     df = flow.Dataflow(files=flow.get_test_files(), transform=False,
                        batch_size=1, buildings_only=False, shuffle=False,
-                       return_postmask=False, return_stacked=False,
-                       return_average=True)
+                       return_postmask=False, return_stacked=True,
+                       return_average=False)
     pbar = tqdm.tqdm(total=len(df))
 
     for image,filename in df:

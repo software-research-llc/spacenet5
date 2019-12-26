@@ -22,58 +22,60 @@ OUT = 0
 OUTPUT_CHANNELS = S.N_CLASSES
 
 class MotokimuraUnet():
-    def __init__(self, input_shape=S.INPUTSHAPE, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         if 'classes' not in kwargs:
             raise KeyError("pass number of classes as classes=N")
+        input_shape = S.INPUTSHAPE
+        damage = S.DAMAGE
         s = self
         factor = 5
         s.c0 = L.Conv2D(2 ** (factor), kernel_size=(3,3), strides=1, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.c1 = L.Conv2D(2 ** (factor+1), kernel_size=(4,4), strides=2, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.c2 = L.Conv2D(2 ** (factor+1), kernel_size=(3,3), strides=1, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.c3 = L.Conv2D(2 ** (factor+2), kernel_size=(4,4), strides=2, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.c4 = L.Conv2D(2 ** (factor+2), kernel_size=(3,3), strides=1, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.c5 = L.Conv2D(2 ** (factor+3), kernel_size=(4,4), strides=2, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.c6 = L.Conv2D(2 ** (factor+3), kernel_size=(3,3), strides=1, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.c7 = L.Conv2D(2 ** (factor+4), kernel_size=(4,4), strides=2, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.c8 = L.Conv2D(2 ** (factor+4), kernel_size=(3,3), strides=1, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
 
         s.dc8 = L.Conv2DTranspose(2 ** (factor+4), kernel_size=(4,4), strides=2, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
         s.dc7 = L.Conv2D(2 ** (factor+4), kernel_size=(3,3), strides=1, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.dc6 = L.Conv2DTranspose(2 ** (factor+3), kernel_size=(4,4), strides=2, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
         s.dc5 = L.Conv2D(2 ** (factor+3), kernel_size=(3,3), strides=1, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.dc4 = L.Conv2DTranspose(2 ** (factor+2), kernel_size=(4,4), strides=2, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
         s.dc3 = L.Conv2D(2 ** (factor+2), kernel_size=(3,3), strides=1, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.dc2 = L.Conv2DTranspose(2 ** (factor), kernel_size=(4,4), strides=2, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
         s.dc1 = L.Conv2D(2 ** (factor), kernel_size=(3,3), strides=1, padding='same',
-                use_bias=False)
+                use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
         s.dc0 = L.Conv2D(kwargs['classes'], kernel_size=(3,3), strides=1, padding='same', name='decoder_out')
 
@@ -122,8 +124,8 @@ class MotokimuraUnet():
     def convert_to_damage_classifier(self):
         L = tf.keras.layers
 
-        x = self.model.output
-        #x = self.model.get_layer("encoder_out").output
+        #x = self.model.output
+        x = self.model.get_layer("encoder_out").output
         #x = self.model.output
         x = L.Flatten()(x)
         x = L.Dense(64, activation='relu')(x)
@@ -150,48 +152,72 @@ class MotokimuraUnet():
         return self.model(*args, **kwargs)
 
 
-class DamageClassifier(MotokimuraUnet):
-    def __init__(self, inp_pre, inp_post, classes=5, filters=16):
-        #x = L.Concatenate()([inp_pre,inp_post])
+class SegmentationModel(MotokimuraUnet):
+    def __init__(self, *args, **kwargs):
+        self.mobilenetv2 = tf.keras.applications.mobilenet_v2.MobileNetV2(input_shape=S.INPUTSHAPE,
+                                                                          weights=None,
+                                                                          include_top=False)
+        if 'classes' not in kwargs:
+            raise KeyError("pass number of classes as classes=N")
+        input_shape = S.INPUTSHAPE
+        damage = S.DAMAGE
+        s = self
+        factor = 5
+        s.dc10 = L.Conv2DTranspose(2 ** (factor+4), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=True if damage else False)
+        #s.dc9 = L.Conv2D(2 ** (factor+4), kernel_size=(3,3), strides=1, padding='same',
+        #        use_bias=True if damage else False)
+        s.dc8 = L.Conv2DTranspose(2 ** (factor+3), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=True if damage else False)
+        s.dc7 = L.Conv2D(2 ** (factor+3), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=True if damage else False)
+        s.dc6 = L.Conv2DTranspose(2 ** (factor+2), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=True if damage else False)
+        s.dc5 = L.Conv2D(2 ** (factor+2), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=True if damage else False)
+        s.dc4 = L.Conv2DTranspose(2 ** (factor+2), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=True if damage else False)
+        s.dc3 = L.Conv2D(2 ** (factor+2), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=True if damage else False)
+        s.dc2 = L.Conv2DTranspose(2 ** (factor+1), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=True if damage else False)
+        s.dc1 = L.Conv2D(2 ** (factor+1), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=True if damage else False)
+        s.dc0 = L.Conv2D(kwargs['classes'], kernel_size=(3,3), strides=1, padding='same', name='decoder_out')
 
-        x = tf.compat.v1.image.resize(inp_pre,
-                                      size=[S.INPUTSHAPE[0]//4, S.INPUTSHAPE[1]//4],
-                                      align_corners=True,
-                                      method=tf.image.ResizeMethod.BILINEAR)
+        s.bnd9 = L.BatchNormalization()
+        s.bnd8 = L.BatchNormalization()
+        s.bnd7 = L.BatchNormalization()
+        s.bnd6 = L.BatchNormalization()
+        s.bnd5 = L.BatchNormalization()
+        s.bnd4 = L.BatchNormalization()
+        s.bnd3 = L.BatchNormalization()
+        s.bnd2 = L.BatchNormalization()
+        s.bnd1 = L.BatchNormalization()
 
-        self.c0 = L.Conv2D(filters, kernel_size=(3,3), strides=1, padding='same')
-        self.bn0 = L.BatchNormalization()
-        self.d0 = L.Conv2DTranspose(filters, kernel_size=(4,4), strides=2, padding='same')
-        self.c1 = L.Conv2D(filters*2, kernel_size=(4,4), strides=2, padding='same')
-        self.bn1 = L.BatchNormalization()
-        self.d1 = L.Conv2DTranspose(filters*2, kernel_size=(3,3), strides=1, padding='same')
+        mobilenet_out = self.mobilenetv2.get_layer("out_relu").output # 32x32
 
-        def melt(self, x):
-            x = self.c0(x)
-            x = self.bn0(x)
-            x = self.d0(x)
-            x = self.c1(x)
-            x = self.bn1(x)
-            x = self.d1(x)
-            return x
-
-        x = melt(self, x)
-        x = L.Conv2D(filters, kernel_size=(5,5), dilation_rate=3, padding='same')(x)
-        x = L.BatchNormalization()(x)
-        x = L.Activation('relu')(x)
-        x = L.Conv2D(filters, kernel_size=(3,3), strides=1, padding='same')(x)
-        x = L.Conv2D(classes, kernel_size=(4,4), strides=2, padding='same')(x)
-
-        x = tf.compat.v1.image.resize(x,
-                                      size=[S.INPUTSHAPE[0], S.INPUTSHAPE[1]],
-                                      align_corners=True,
-                                      method=tf.image.ResizeMethod.BILINEAR)
-        x = L.Reshape((-1,classes))(x)
-        x = L.Activation('softmax')(x)
-
-        self.model = tf.keras.models.Model(inputs=[inp_pre, inp_post], outputs=[x])
+        e10 = self.mobilenetv2.get_layer("block_15_project_BN").output # 32x32
+        e8 = self.mobilenetv2.get_layer("block_12_project_BN").output # 64x64
+        e6 = self.mobilenetv2.get_layer("block_5_project_BN").output # 128x128
+        e4 = self.mobilenetv2.get_layer("block_2_project_BN").output # 256x256
+        e2 = self.mobilenetv2.get_layer("expanded_conv_project_BN").output # 512x512
+        e0 = self.mobilenetv2.get_layer("Conv1_relu").output # 512x512
 
 
+        d10 = L.Activation('relu')(s.bnd9(s.dc10(L.Concatenate()([mobilenet_out,e10]))))
+        #d9 = L.Activation('relu')(s.bnd9(s.dc9(d10)))
+        d8 = L.Activation('relu')(s.bnd8(s.dc8(L.Concatenate()([e8,d10]))))
+        d7 = L.Activation('relu')(s.bnd7(s.dc7(d8)))
+        d6 = L.Activation('relu')(s.bnd6(s.dc6(L.Concatenate()([e6,d7]))))
+        d5 = L.Activation('relu')(s.bnd5(s.dc5(d6)))
+        d4 = L.Activation('relu')(s.bnd4(s.dc4(L.Concatenate()([e4,d5]))))
+        d3 = L.Activation('relu')(s.bnd3(s.dc3(d4)))
+        d2 = L.Activation('relu')(s.bnd2(s.dc2(L.Concatenate()([e2,d3]))))
+        d1 = L.Activation('relu')(s.bnd1(s.dc1(d2)))
+        d0 = s.dc0(d1)#L.Concatenate()([e0,d1]))
+
+        self.model = tf.keras.models.Model(inputs=self.mobilenetv2.inputs, outputs=[d0])
 
 def Discriminator():
   initializer = tf.random_normal_initializer(0., 0.02)

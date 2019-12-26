@@ -3,8 +3,8 @@ from inspect import getsourcefile
 
 
 # The architecture to use
-ARCHITECTURE = "motokimura-stacked"
-DAMAGE_ARCHITECTURE = 'xception'
+ARCHITECTURE = "motokimura"
+DAMAGE_ARCHITECTURE = 'motokimura-mobilenetv2'
 
 # Train/validation split proportion
 SPLITFACTOR = 0.9
@@ -12,7 +12,9 @@ BATCH_SIZE = 2
 
 #           0        1             2                3              4              5
 CLASSES = [None, "no-damage", "minor-damage", 'major-damage', 'destroyed', 'un-classified']
-N_CLASSES = 2#len(CLASSES)
+N_CLASSES = len(CLASSES)
+
+DAMAGE = True 
 
 MODELSTRING = "%s-%d.hdf5" % (ARCHITECTURE, N_CLASSES)
 DMG_MODELSTRING = "damage-%s.hdf5" % DAMAGE_ARCHITECTURE
@@ -26,7 +28,7 @@ DAMAGE_MAX_Y = 224
 
 # Shape of the training input images
 INPUTSHAPE = [1024,1024,6]
-MASKSHAPE = [1024,1024,N_CLASSES]
+MASKSHAPE = [1024,1024,6]
 # The shape of the raw on-disk input images
 SAMPLESHAPE = [1024,1024,3]
 TARGETSHAPE = INPUTSHAPE

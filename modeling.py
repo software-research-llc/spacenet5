@@ -1,190 +1,115 @@
-import keras
-import keras_applications
-keras_applications.resnet_common.backend = keras.backend
-from keras_applications import resnext
-from keras.models import Model
-from keras.layers import Flatten, Reshape, MaxPooling2D, Dropout, BatchNormalization, Conv2D, Activation, Conv2DTranspose, Concatenate, concatenate, Conv3D, Cropping2D, Permute, Activation
-from settings import *
-from mrcnn.utils import MaskRCNN
+import tensorflow.keras.layers as L
+import tensorflow as tf
+import settings as S
 
-keras.backend.set_image_data_format("channels_last")
+class MotokimuraUnet():
+    def __init__(self, input_shape=S.INPUTSHAPE, *args, **kwargs):
+        if 'classes' not in kwargs:
+            raise KeyError("pass number of classes as classes=N")
+        s = self
+        factor = 5
+        s.c0 = L.Conv2D(2 ** (factor), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.c1 = L.Conv2D(2 ** (factor+1), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.c2 = L.Conv2D(2 ** (factor+1), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.c3 = L.Conv2D(2 ** (factor+2), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.c4 = L.Conv2D(2 ** (factor+2), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.c5 = L.Conv2D(2 ** (factor+3), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.c6 = L.Conv2D(2 ** (factor+3), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.c7 = L.Conv2D(2 ** (factor+4), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.c8 = L.Conv2D(2 ** (factor+4), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
 
+        s.dc8 = L.Conv2DTranspose(2 ** (factor+4), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=False)
+        s.dc7 = L.Conv2D(2 ** (factor+4), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.dc6 = L.Conv2DTranspose(2 ** (factor+3), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=False)
+        s.dc5 = L.Conv2D(2 ** (factor+3), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.dc4 = L.Conv2DTranspose(2 ** (factor+2), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=False)
+        s.dc3 = L.Conv2D(2 ** (factor+2), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.dc2 = L.Conv2DTranspose(2 ** (factor), kernel_size=(4,4), strides=2, padding='same',
+                use_bias=False)
+        s.dc1 = L.Conv2D(2 ** (factor), kernel_size=(3,3), strides=1, padding='same',
+                use_bias=False)
+                        #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
+        s.dc0 = L.Conv2D(kwargs['classes'], kernel_size=(3,3), strides=1, padding='same', name='decoder_out')
 
+        s.bnc0 = L.BatchNormalization()
+        s.bnc1 = L.BatchNormalization()
+        s.bnc2 = L.BatchNormalization()
+        s.bnc3 = L.BatchNormalization()
+        s.bnc4 = L.BatchNormalization()
+        s.bnc5 = L.BatchNormalization()
+        s.bnc6 = L.BatchNormalization()
+        s.bnc7 = L.BatchNormalization()
+        s.bnc8 = L.BatchNormalization()
+        
+        s.bnd8 = L.BatchNormalization()
+        s.bnd7 = L.BatchNormalization()
+        s.bnd6 = L.BatchNormalization()
+        s.bnd5 = L.BatchNormalization()
+        s.bnd4 = L.BatchNormalization()
+        s.bnd3 = L.BatchNormalization()
+        s.bnd2 = L.BatchNormalization()
+        s.bnd1 = L.BatchNormalization()
 
-class XviewModel(MaskRCNN):
-    def _crop_post(self, masks):
-        ret = []
-        for mask in masks.astype(np.uint8):
-            ret.append(self.post_input * np.dstack([mask,mask,mask]))
-        return np.array(ret)
+        inp = L.Input(input_shape)
+        e0 = L.Activation('relu')(s.bnc0(s.c0(inp)))
+        e1 = L.Activation('relu')(s.bnc1(s.c1(e0)))
+        e2 = L.Activation('relu')(s.bnc2(s.c2(e1)))
+        e3 = L.Activation('relu')(s.bnc3(s.c3(e2)))
+        e4 = L.Activation('relu')(s.bnc4(s.c4(e3)))
+        e5 = L.Activation('relu')(s.bnc5(s.c5(e4)))
+        e6 = L.Activation('relu')(s.bnc6(s.c6(e5)))
+        e7 = L.Activation('relu')(s.bnc7(s.c7(e6)))
+        e8 = L.Activation('relu', name='encoder_out')(s.bnc8(s.c8(e7)))
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.feature_maps = [self.keras_model.get_layer('fpn_p%d' % i).output for i in range(2,6)]
+        d8 = L.Activation('relu')(s.bnd8(s.dc8(L.Concatenate()([e7,e8]))))
+        d7 = L.Activation('relu')(s.bnd7(s.dc7(d8)))
+        d6 = L.Activation('relu')(s.bnd6(s.dc6(L.Concatenate()([e6,d7]))))
+        d5 = L.Activation('relu')(s.bnd5(s.dc5(d6)))
+        d4 = L.Activation('relu')(s.bnd4(s.dc4(L.Concatenate()([e4,d5]))))
+        d3 = L.Activation('relu')(s.bnd3(s.dc3(d4)))
+        d2 = L.Activation('relu')(s.bnd2(s.dc2(L.Concatenate()([e2,d3]))))
+        d1 = L.Activation('relu')(s.bnd1(s.dc1(d2)))
+        d0 = s.dc0(L.Concatenate()([e0,d1]))
 
-        self.mrcnn_model = self.keras_model
-        self.mrcnn_input = self.mrcnn_model.get_layer("input_image")
+        self.model = tf.keras.models.Model(inputs=[inp], outputs=[d0])
 
-        self.pre_input = Input(INPUTSHAPE)
-        self.post_input = Input(INPUTSHAPE)
+    def compile(self, *args, **kwargs):
+        return self.model.compile(*args, **kwargs)
 
-        self.pre_output = self.mrcnn_model(pre_input)
-        x = keras.layers.Lambda(lambda pre_out: pre_out.numpy()[0].astype(np.uint8))(self.pre_output)
-        x = keras.layers.Lambda(self._crop_post)(x)
-        self.post_output = self.mrcnn_model(x)                    
+    def fit(self, *args, **kwargs):
+        return self.model.fit(*args, **kwargs)
 
-        self.keras_model = Model(inputs=[self.pre_input,self.post_input], outputs=[self.pre_output,self.post_output])
+    def predict(self, *args, **kwargs):
+        return self.model.predict(*args, **kwargs)
 
-
-def conv2d_block(input_tensor, n_filters, kernel_size=3, batchnorm=True):
-    # first layer
-    x = Conv2D(filters=n_filters, kernel_size=(kernel_size, kernel_size),  kernel_initializer="he_normal",
-#               kernel_regularizer=keras.regularizers.l1_l2(0.01),
-               padding="same")(input_tensor)
-    if batchnorm:
-        x = BatchNormalization()(x)
-    x = Activation("relu")(x)
-    # second layer
-    x = Conv2D(filters=n_filters, kernel_size=(kernel_size, kernel_size), kernel_initializer="he_normal",
-#               kernel_regularizer=keras.regularizers.l1_l2(0.01),
-               padding="same")(x)
-    if batchnorm:
-        x = BatchNormalization()(x)
-    x = Activation("relu")(x)
-    return x
-
-def resnet_unet(filters=128, dropout=0.5):
-    backbone = keras.applications.ResNet50(input_shape=INPUTSHAPE, include_top=False, pooling=None)
-    inp = backbone.input
-    x = backbone.output
-
-    gl = lambda x: backbone.get_layer(x).output
-    skips = [gl("activation_10"), gl("activation_22"), gl("activation_40"), gl("activation_46")]
-
-    x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters * 8, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
-    x = Dropout(dropout)(x)
-    x = conv2d_block(x, filters * 8)
-
-    x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters * 4, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
-    x = Dropout(dropout)(x)
-    x = conv2d_block(x, filters * 4)
-
-    x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters * 2, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
-    x = Dropout(dropout)(x)
-    x = conv2d_block(x, filters * 2)
-    
-    x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
-    x = Dropout(dropout)(x)
-    x = conv2d_block(x, filters)
-
-    x = Conv2DTranspose(filters, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
-    x = Conv2D(2, (1, 1))(x)
-
-    x = Reshape((2, INPUTSHAPE[0] * INPUTSHAPE[1]))(x)
-    x = Permute((2, 1))(x)
-    
-    out = Activation("softmax")(x)
-    return Model(inputs=[inp], outputs=[out])
-
-
-def resnetv2_unet(filters=128, dropout=0.5):
-    backbone = keras.applications.ResNet50V2(input_shape=INPUTSHAPE, include_top=False, pooling=None)
-    inp = backbone.input
-    x = backbone.output
-
-    skips = []
-    for i in range(2,6):
-        skips.append(backbone.get_layer("conv%d_block1_out" % i).output)
-#    skips = skips[::-1]
-
-    x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters * 8, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
-    x = Dropout(dropout)(x)
-    x = conv2d_block(x, filters * 8)
-
-    x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters * 4, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
-    x = Dropout(dropout)(x)
-    x = conv2d_block(x, filters * 4)
-
-    x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters * 2, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
-    x = Dropout(dropout)(x)
-    x = conv2d_block(x, filters * 2)
-    
-    x = concatenate([x, skips.pop()])
-    x = Conv2DTranspose(filters, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
-    x = Dropout(dropout)(x)
-    x = conv2d_block(x, filters)
-
-    x = Conv2DTranspose(filters, kernel_size=(2,2), strides=(2,2), padding='valid')(x)
-    x = Conv2D(2, (1, 1))(x)
-
-    x = Reshape((2, INPUTSHAPE[0] * INPUTSHAPE[1]))(x)
-    x = Permute((2, 1))(x)
-    
-    out = Activation("softmax")(x)
-    return Model(inputs=[inp], outputs=[out])
-
-def build_model():
-    return resnet_unet()
-
-def get_unet(n_filters=16, dropout=0.5, batchnorm=True):
-    inp = keras.layers.Input(INPUTSHAPE)
-    c1 = conv2d_block(inp, n_filters=n_filters*1, kernel_size=3, batchnorm=batchnorm)
-    p1 = MaxPooling2D((2, 2)) (c1)
-    p1 = Dropout(dropout / 2)(p1)
-
-    c2 = conv2d_block(p1, n_filters=n_filters*2, kernel_size=3, batchnorm=batchnorm)
-    p2 = MaxPooling2D((2, 2)) (c2)
-    p2 = Dropout(dropout)(p2)
-
-    c3 = conv2d_block(p2, n_filters=n_filters*4, kernel_size=3, batchnorm=batchnorm)
-    p3 = MaxPooling2D((2, 2)) (c3)
-    p3 = Dropout(dropout)(p3)
-
-    c4 = conv2d_block(p3, n_filters=n_filters*8, kernel_size=3, batchnorm=batchnorm)
-    p4 = MaxPooling2D(pool_size=(2, 2)) (c4)
-    p4 = Dropout(dropout)(p4)
-    
-    c5 = conv2d_block(p4, n_filters=n_filters*16, kernel_size=3, batchnorm=batchnorm)
-   
-    u6 = Conv2DTranspose(n_filters*8, (3, 3), strides=(2, 2), padding='same') (c5)
-    u6 = concatenate([u6, c4])
-    u6 = Dropout(dropout)(u6)
-    c6 = conv2d_block(u6, n_filters=n_filters*8, kernel_size=3, batchnorm=batchnorm)
-
-    u7 = Conv2DTranspose(n_filters*4, (3, 3), strides=(2, 2), padding='same') (c6)
-    u7 = concatenate([u7, c3])
-    u7 = Dropout(dropout)(u7)
-    c7 = conv2d_block(u7, n_filters=n_filters*4, kernel_size=3, batchnorm=batchnorm)
-
-    u8 = Conv2DTranspose(n_filters*2, (3, 3), strides=(2, 2), padding='same') (c7)
-    u8 = concatenate([u8, c2])
-    u8 = Dropout(dropout)(u8)
-    c8 = conv2d_block(u8, n_filters=n_filters*2, kernel_size=3, batchnorm=batchnorm)
-
-    u9 = Conv2DTranspose(n_filters*1, (3, 3), strides=(2, 2), padding='same') (c8)
-    u9 = concatenate([u9, c1], axis=3)
-    u9 = Dropout(dropout)(u9)
-    c9 = conv2d_block(u9, n_filters=n_filters*1, kernel_size=3, batchnorm=batchnorm)
-
-    #outputs = Conv2D(flow.N_CLASSES, (1, 1), activation=flow.LAST_LAYER_ACTIVATION) (c9)
-    #x = Conv2D(1, (1, 1), activation='sigmoid')(c9)
-    x = Conv2D(2, (1, 1))(c9)
-
-    x = Reshape((2, INPUTSHAPE[0] * INPUTSHAPE[1]))(x)
-    x = Permute((2, 1))(x)
-    
-    out = Activation("softmax")(x)
-    model = Model(inputs=[inp], outputs=[out])
-    return model
+    def __call__(self, *args, **kwargs):
+        return self.model(*args, **kwargs)
 
 
-if __name__ == '__main__':
-    m = resnet_unet()
-    m.summary()

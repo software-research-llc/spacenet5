@@ -129,9 +129,8 @@ def tensor_f1_score(y_true, y_pred):
     return score
 
 
-# df1 = 4 / sum((f1+epsilon)**-1 for f1 in [no_damage_f1, minor_damage_f1, major_damage_f1, destroyed_f1]), where epsilon = 1e-6
 @tf.function
-def damage_f1_score(y_true, y_pred):
+def nonlogical_f1_score(y_true, y_pred):
     gt, pr = y_true, y_pred
 
     tp = tf.reduce_sum(gt * pr)
@@ -150,6 +149,73 @@ def damage_f1_score(y_true, y_pred):
         score = tf.constant(0.0, tf.float64)
 
     return score
+
+
+# df1 = 4 / sum((f1+epsilon)**-1 for f1 in [no_damage_f1, minor_damage_f1, major_damage_f1, destroyed_f1]), where epsilon = 1e-6
+@tf.function
+def damage_f1_score(y_true, y_pred):
+    gt = y_true
+    scores = {}
+    for i in range(1, 5):
+        pixels = [0.] * S.N_CLASSES
+        pixels[i] = 1.
+        pixels = pixels * S.MASKSHAPE[0] * S.MASKSHAPE[1] * S.BATCH_SIZE
+        pixels = tf.reshape(pixels, [S.BATCH_SIZE, S.MASKSHAPE[0] * S.MASKSHAPE[1], -1])
+        pr = y_pred * pixels
+
+        tp = tf.reduce_sum(gt * pr)
+        fp = tf.reduce_sum(tf.clip_by_value(pr - gt, 0, 1))
+        fn = tf.reduce_sum(tf.clip_by_value(gt - pr, 0, 1))
+
+        prec = tp / (tp + fp + 1e-8)
+        rec = tp / (tp + fn + 1e-8)
+
+        score = 2 * tf.math.multiply_no_nan(prec, rec) / (prec + rec + 1e-8)
+        scores[i] = score
+
+    df1 = 4 / np.sum([1 / (scores[i] + 1e-8) for i in range(1,5)])
+    return df1
+
+
+def sm_tensor_f1_score(y_true, y_pred):
+    pr = tf.clip_by_value(tf.cast(K.round(y_pred), tf.int64), 0, 1)
+    gt = tf.clip_by_value(tf.cast(y_true, tf.int64), 0, 1)
+
+    pr = pr[:,:,:,1:]
+    gt = gt[:,:,:,1:]
+
+    tp = tf.reduce_sum(tf.clip_by_value(gt * pr, 0, 1))
+    fp = tf.reduce_sum(tf.clip_by_value(pr - gt, 0, 1))
+    fn = tf.reduce_sum(tf.clip_by_value(gt - pr, 0, 1))
+
+    prec = tf.cast(tp, tf.float32) / (tf.cast(tp + fp, tf.float32) + 1e-8)
+    rec = tf.cast(tp, tf.float32) / (tf.cast(tp + fn, tf.float32) + 1e-8)
+
+    score = 2 * tf.math.multiply_no_nan(prec, rec) / (prec + rec + 1e-8)
+    return score
+
+
+def sm_damage_f1_score(y_true, y_pred):
+    y_true = tf.clip_by_value(tf.cast(y_true, tf.int64), 0, 1)
+    y_pred = tf.clip_by_value(tf.cast(K.round(y_pred), tf.int64), 0, 1)
+
+    scores = {}
+    for i in range(1, 5):
+        pr = y_pred[:,:,:,i]
+        gt = y_true[:,:,:,i]
+
+        tp = tf.reduce_sum(tf.clip_by_value(gt * pr, 0, 1))
+        fp = tf.reduce_sum(tf.clip_by_value(pr - gt, 0, 1))
+        fn = tf.reduce_sum(tf.clip_by_value(gt - pr, 0, 1))
+
+        prec = tf.cast(tp, tf.float32) / (tf.cast(tp + fp, tf.float32) + 1e-8)
+        rec = tf.cast(tp, tf.float32) / (tf.cast(tp + fn, tf.float32) + 1e-8)
+
+        score = 2 * tf.math.multiply_no_nan(prec, rec) / (prec + rec + 1e-8)
+        scores[i] = score
+
+    df1 = 4 / np.sum([1 / (scores[i] + 1e-8) for i in range(1,5)])
+    return df1
 
 
 if __name__ == '__main__':

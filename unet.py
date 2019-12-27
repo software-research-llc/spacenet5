@@ -3,7 +3,6 @@ import tensorflow.keras.layers as L
 import settings as S
 
 
-
 class MotokimuraUnet():
     """
     Slightly downsized Unet design by Motokimura (winner of SpaceNet challenge).
@@ -127,8 +126,11 @@ class MotokimuraUnet():
     def __call__(self, *args, **kwargs):
         return self.model(*args, **kwargs)
 
+    def load_weights(self, *args, **kwargs):
+        return self.model.load_weights(*args, **kwargs)
 
-class SegmentationModel(MotokimuraUnet):
+
+class MotokimuraMobilenet(MotokimuraUnet):
     """
     MotokimuraUnet modified to use a MobileNetV2 encoder and an extra deconv layer.
 
@@ -207,3 +209,21 @@ class SegmentationModel(MotokimuraUnet):
         d0 = s.dc0(d1)#L.Concatenate()([e0,d1]))
 
         self.model = tf.keras.models.Model(inputs=self.mobilenetv2.inputs, outputs=[d0])
+
+
+class Ensemble(SegmentationModel):
+    def __init__(self, *args, **kwargs):
+        self.motokimura = MotokimuraUnet(*args, **kwargs)
+        self.mobilenet = MotokimuraMobilenet(*args, **kwargs)
+
+        inp = L.Input(S.INPUTSHAPE)
+
+        one = self.motokimura(inp)
+        two = self.mobilenet(inp)
+
+        out = L.Add()([one, two])
+        self.model = tf.keras.models.Model(inputs=[inp], outputs=[out])
+
+    def load_individual_weights(self, onefile="damage-motokimura-best.hdf5", twofile="damage-motokimura-mobilenetv2-best.hdf5"):
+        self.motokimura.load_weights(onefile, by_name=True)
+        self.mobilenet.load_weights(twofile, by_name=True)

@@ -1,3 +1,7 @@
+"""
+Dataset (dataflow) code for feeding to the model, etc; contains enumerable objects and
+functions to find files or apply transforms.
+"""
 import sys
 import glob
 import random

@@ -211,7 +211,7 @@ class MotokimuraMobilenet(MotokimuraUnet):
         self.model = tf.keras.models.Model(inputs=self.mobilenetv2.inputs, outputs=[d0])
 
 
-class Ensemble(SegmentationModel):
+class Ensemble(MotokimuraMobilenet):
     def __init__(self, *args, **kwargs):
         self.motokimura = MotokimuraUnet(*args, **kwargs)
         self.mobilenet = MotokimuraMobilenet(*args, **kwargs)

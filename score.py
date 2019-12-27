@@ -158,20 +158,20 @@ def damage_f1_score(y_true, y_pred):
         pixels = [0.] * S.N_CLASSES
         pixels[i] = 1.
         pixels = pixels * S.MASKSHAPE[0] * S.MASKSHAPE[1] * S.BATCH_SIZE
-        pixels = tf.reshape(pixels, [S.BATCH_SIZE, S.MASKSHAPE[0] * S.MASKSHAPE[1], -1])
+        pixels = tf.reshape(pixels, [S.BATCH_SIZE, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
         pr = y_pred * pixels
 
         tp = tf.reduce_sum(gt * pr)
         fp = tf.reduce_sum(tf.clip_by_value(pr - gt, 0, 1))
         fn = tf.reduce_sum(tf.clip_by_value(gt - pr, 0, 1))
 
-        prec = tp / (tp + fp + 1e-8)
-        rec = tp / (tp + fn + 1e-8)
+        prec = tp / (tp + fp + 1e-6)
+        rec = tp / (tp + fn + 1e-6)
 
-        score = 2 * tf.math.multiply_no_nan(prec, rec) / (prec + rec + 1e-8)
+        score = 2 * tf.math.multiply_no_nan(prec, rec) / (prec + rec + 1e-6)
         scores[i] = score
 
-    df1 = 4 / np.sum([1 / (scores[i] + 1e-8) for i in range(1,5)])
+    df1 = 4 / np.sum([1 / (scores[i] + 1e-6) for i in range(1,5)])
     return df1
 
 

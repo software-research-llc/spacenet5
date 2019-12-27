@@ -1,6 +1,8 @@
 """
 Dataset (dataflow) code for feeding to the model, etc; contains enumerable objects and
 functions to find files or apply transforms.
+
+FIXME: should be refactored now that things aren't being constantly experimented with.
 """
 import sys
 import glob

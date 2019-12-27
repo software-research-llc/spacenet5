@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 def get_glob_path(filename):
+    """
+    Shell-style wildcard (*, ?, etc.) compatible path lookup.  Searches all directories
+    in settings.py for a matching file from the dataset.
+    """
     for path in S.IMAGEDIRS:
         matches = glob.glob(os.path.join(path, filename))
         if len(matches) != 0:
@@ -35,6 +39,9 @@ def get_glob_path(filename):
 
 
 def get_abs_path(filename):
+    """
+    Search the dataset directories in settings.py for a matching filename.
+    """
     if "*" in filename or "?" in filename:
         return get_glob_path(filename)
     elif os.path.exists(filename):
@@ -58,10 +65,12 @@ def get_image(filename):
 
 def get_files(directories):
     """
-    Return a list of all files found in all directories we're given.  The files are
+    Return full paths for all files in all directories we're given.  The files are
     sorted lexicographically by filename (not full path) and returned in (pre, post) pairs.
 
-    No checks are performed, and files are found with glob patterns `*pre*` and `*post*`.
+    No checks are performed, and files are found with glob patterns `*pre*` and `*post*`,
+    since the dataset for the Xview2 challenge names the pre-disaster and post-disaster images
+    as such (e.g. `honolulu-hurricane-pre-00001.png`).
     """
     prefiles = []
     postfiles = []
@@ -118,7 +127,9 @@ def apply_gaussian_blur(img:np.ndarray, kernel=(5,5)):
 
 def convert_postmask_to_premask(postmask):
     """
-    Take a post-disaster mask, and return a copy with values > 1 replaced by 1.
+    Take a post-disaster mask, and return a copy with values > 1 replaced by 1.  Used
+    because from manual inspection, the post-disaster pixel coordinates appear more
+    reliable.
     """
     chan1 = postmask[...,0].copy()
     chan2 = np.argmax(postmask, axis=2)
@@ -163,12 +174,16 @@ def convert_prediction(pred, argmax=True, threshold=None):
         return x[...,0:3], x[...,3:]
 
 
-def eliminate_unclassified(pre, post, warped_mask):
+def eliminate_unclassified(pre:np.ndarray, post:np.ndarray, warped_mask:np.ndarray):
     """
     Takes a pre-disaster, post-disaster, and a mask.  Zeros-out the location of all
     "un-classified" buildings found in the mask provided by altering the input array
     values at those locations, then zeros out the mask values at those locations as
     well and returns all three.
+
+    Since "un-classified" is not part of the test values, we basically want those
+    buildings to effectively not exist, otherwise they'll throw off our training
+    (there are ~11,000 of them in the training set).
     """
     # get a (width,height,channels) sized version of input mask with integer values
     mask = convert_prediction(warped_mask)
@@ -191,6 +206,8 @@ def eliminate_unclassified(pre, post, warped_mask):
 class Dataflow(tf.keras.utils.Sequence):
     """
     A tf.keras.utils.Sequence subclass to feed data to the model.
+
+    See comments in the source for parameter explanations and available options, etc.
     """
     def __init__(self, files=get_training_files(), batch_size=1, transform=None, shuffle=True, buildings_only=False, interlace=False, return_postmask=True, return_stacked=False, return_average=False, return_post_only=False, return_single_channel=False, segmentation_models=False):
         # boolean, return pre- and post-disaster images added together and divided by 2 (their average)
@@ -209,7 +226,7 @@ class Dataflow(tf.keras.utils.Sequence):
         self.interlace = interlace
         # return only the post-disaster image 
         self.return_post_only = return_post_only
-        # for segmentation_models compatibility
+        # should probably remove these
         self.return_single_channel = return_single_channel
         self.segmentation_models = segmentation_models
 
@@ -220,16 +237,20 @@ class Dataflow(tf.keras.utils.Sequence):
 
         if ".json" in files[0][0].lower():
             logger.info("Creating Targets from JSON format files")
+            # use from_json() as the Target object constructor below
             method = Target.from_json
         elif ".png" in files[0][0].lower():
             logger.info("Creating Targets from a list of PNG files")
+            # use from_png() as the Target object constructor below
             method = Target.from_png
         else:
             raise RuntimeError("Files should be in PNG or JSON format")
 
+        # for each (pre-disaster, post-disaster) pair of files, construct two Targets and store them
         for (pre,post) in files:
             t_pre = method(pre, df=self)
             t_post = method(post, df=self)
+            # skip images with no buildings if that option is specified
             if buildings_only is True and len(t_pre.buildings) > 0:
                 self.samples.append((t_pre, t_post))
             elif not buildings_only:
@@ -239,14 +260,19 @@ class Dataflow(tf.keras.utils.Sequence):
             random.shuffle(self.samples)
 
     def __len__(self):
-        """Length of this dataflow in units of batch_size"""
+        """
+        Length of this dataflow in units of batch_size.
+        """
         length = int(np.ceil(len(self.samples) / float(self.batch_size)))
         return length
 
     def __getitem__(self, idx, preprocess=False):
         """
-        pre_image and post_image are the pre-disaster and post-disaster samples.
-        premask is the uint8, single channel localization target we're training to predict.
+        TODO: refactor now that we aren't adding individual options as we test things out
+        during the challenge.
+
+        `pre_image` and `post_image` are the pre-disaster and post-disaster samples.
+        `premask` and `postmask` are the uint8, grayscale (single channel) masks for each.
         """
         if self.shuffle is True and self._do_shuffle is True:
             self._do_shuffle = False
@@ -399,6 +425,10 @@ class Dataflow(tf.keras.utils.Sequence):
 
 
 class BuildingDataflow(Dataflow):
+    """
+    Dataflow object that returns individual building coordinates and the corresponding
+    damage class.
+    """
     def __init__(self, *args, **kwargs):
         super(BuildingDataflow, self).__init__(buildings_only=True, batch_size=1, *args, **kwargs)
         self.limit = 80
@@ -458,15 +488,9 @@ class DamagedDataflow(Dataflow):
                     self.samples.append( (pre,post) )
                     break
 
-
-class DamagedBuildingDataflow(BuildingDataflow):
-    def __init__(self, *args, **kwargs):
-        DamagedDataflow.__init__(self, *args, **kwargs)
-        self.limit = 80
-
 class Building:
     """Carries the data for a single building; multiple Buildings are
-       owned by a single Target"""
+       owned by a single Target object"""
     MAP = {}
     PRE = 1
     POST = 2
@@ -536,7 +560,7 @@ class Building:
         return round(x), round(y)
 
     @staticmethod
-    def get_all_in(pre, post, mask):
+    def get_all_in(pre:np.ndarray, post:np.ndarray, mask:np.ndarray):
         """
         Return the portions of `pre` and `post` that contain buildings.
 
@@ -575,7 +599,11 @@ class Building:
 
         return np.array(boxes), np.array(coords)
 
-    def extract_from_images(self, pre, post):
+    def extract_from_images(self, pre:np.ndarray, post:np.ndarray):
+        """
+        Extracts bounding boxes for the coordinates of this building from
+        the passed `pre` and `post` images.
+        """
         boxes = []
         classes = []
         coords = self.coords()
@@ -631,8 +659,11 @@ class Building:
 
 
 class Target:
-    """Target objects provide filenames, metadata, input images, and masks for training.
-       One target per input image (i.e. two targets per pre-disaster, post-disaster set)."""
+    """
+    Target objects provide filenames, metadata, input images, and masks for training.
+
+    One target per input image (i.e. two targets per pre-disaster, post-disaster set).
+    """
     def __init__(self, text:str="", df:Dataflow=None):
         self._df = df
         self.buildings = []
@@ -641,7 +672,10 @@ class Target:
             self.parse_json(text)
 
     def parse_json(self, text:str):
-        """Parse a JSON formatted string and assign instance variables from it"""
+        """
+        Parse a JSON formatted string and assign instance variables to this target
+        based on the contents; format is expected to comply with the xBD dataset.
+        """
         data = json.loads(text)
         self.img_name = data['metadata']['img_name']
         self.metadata = data['metadata']
@@ -671,7 +705,11 @@ class Target:
             Building.MAP[(b.uid, key)] = b
 
     def mask(self):
-        """Get the Target's mask for supervised training of the model"""
+        """
+        Get this Target's mask for supervised training of the model (single channel).
+
+        Returns: a grayscale image, each pixel value being the class for that pixel location.
+        """
         img = np.zeros(S.SAMPLESHAPE, dtype=np.uint8)
         for b in self.buildings:
             coords = b.coords()#downvert=True, orig_x=1024, new_y=1024)#, new_x=256,new_y=256)
@@ -679,39 +717,29 @@ class Target:
                 try:
                     cv2.fillPoly(img, np.array([coords]), b.color())
                 except Exception as exc:
-                    logger.warning("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
+                    logger.error("cv2.fillPoly(img, {}, {}) call failed: {}".format(str(coords), b.color(), exc))
         return img
 
     def multichannelchipmask(self):
+        """
+        Return a multichannel mask cut up into 1/16th sized squares.
+        """
         mask = self.multichannelmask()
         return self.chips(image=mask)
 
-    def sm_multichannelmask(self):
-        # Each class gets one channel
-        # Fill background channel with 1s
-        chans = [np.ones(S.SAMPLESHAPE[:2], dtype=np.uint8)]
-        top = 6 if "post" in self.img_name else S.N_CLASSES
-        for i in range(1, top):
-            chan = np.zeros(S.SAMPLESHAPE[:2], dtype=np.uint8)
-            chans.append(chan)
-
-        # For each building, set pixels according to (x,y) coordinates; they end up
-        # being a one-hot-encoded vector corresponding to class for each (x,y) location
-        for b in self.buildings:
-            coords = b.coords()
-            # "un-classified" buildings will cause an error during evaluation, so don't train
-            # for them
-            color = b.color()# if b.color() != 5 else 1
-            if len(coords) > 0:
-                # Set the pixels at coordinates in this class' channel to 1
-                cv2.fillPoly(chans[color], np.array([coords]), color)
-                # Zero out the background pixels for the same coordinates
-                cv2.fillPoly(chans[0], np.array([coords]), 0)
-        img = np.dstack(chans)
-        return img
-
     def multichannelmask(self):
-        """Get the Target's mask for supervised training of the model"""
+        """
+        Get the Target's mask for supervised training of the model.  Each channel
+        corresponds to a class, and values are either 0 (background) or 1 (object at
+        that location).
+
+        When reshaped, this results in a target mask that's a one hot encoded list
+        of pixels, e.g. [[0,0,1,0], [1,0,0,0], [1,0,0,0]] if there were 4 classes, 3 pixels,
+        and 2 of those pixels were background with 1 pixel an object of class 2.
+        Note that we assume channels come last, not first.
+
+        Returns: 1024 x 1024 x N_CLASSES numpy.ndarray with dtype np.uint8.
+        """
         # Each class gets one channel
         # Fill background channel with 1s
         chans = [np.ones(S.SAMPLESHAPE[:2], dtype=np.uint8)]
@@ -735,14 +763,17 @@ class Target:
         img = np.dstack(chans)
         return img
 
-    def rcnn_image(self):
+    def mrcnn_image(self):
+        """
+        Get a Mask-RCNN compatible image.
+        """
         pre = self.image()
-#        if isinstance(self.transform, float) and random.random() < float(self.transform):
-#            trans_dict = { 'shear': 0.1 * random.randint(1, 2) }
-#            pre = self.image_datagen.apply_transform(pre, trans_dict)
         return pre
 
-    def rcnn_masks(self):
+    def mrcnn_masks(self):
+        """
+        Get Mask-RCNN compatible masks for an image (one object per channel).
+        """
         masks = []
         klasses = []
         for b in self.buildings:
@@ -765,7 +796,6 @@ class Target:
 
     def image_path(self):
         return self.img_path
-        return get_abs_path(self.img_name)
 
     @staticmethod
     def from_json(filename:str, transform:float=0.0, df:Dataflow=None):
@@ -779,11 +809,14 @@ class Target:
 
     @staticmethod
     def from_png(filename:str, df:Dataflow=None):
-        """Create a Target object from a path to a .PNG file.
+        """
+        Create a Target object from a path to a .PNG file.  For use with test images that have
+        no metadata in a .json file.
 
         Note: from_json() will only store the base filename, but this
               function expects the string passed to be the full (absolute)
-              path to the .png file."""
+              path to the .png file.
+        """
         target = Target()
         target._df = df
         target.img_name = filename
@@ -792,7 +825,9 @@ class Target:
         return target
 
     def chips(self, image=None, step=256, max_x=S.SAMPLESHAPE[0], max_y=S.SAMPLESHAPE[1]):
-        """Turn an image into 1/16th-sized chips"""
+        """
+        Turn an image into 1/16th-sized chips.
+        """
         ret = []
         if image is None:
             image = self.image()
@@ -803,7 +838,9 @@ class Target:
 
     @staticmethod
     def weave(chips):
-        """Stitch 1/16th-sized chips back together into the full size image"""
+        """
+        Stitch 1/16th-sized chips back together into the full size image.
+        """
         return np.vstack([np.hstack(chips[:4]), np.hstack(chips[4:8]), np.hstack(chips[8:12]), np.hstack(chips[12:])])
 
 

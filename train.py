@@ -46,8 +46,9 @@ def build_model(classes=6, damage=True, *args, **kwargs):
     L = tf.keras.layers
     R = tf.keras.regularizers
 
-    decoder = unet.SegmentationModel(classes=classes) if damage else unet.MotokimuraUnet(classes=classes)
-    
+    #decoder = unet.MotokimuraMobilenet(classes=classes) if damage else unet.MotokimuraUnet(classes=classes)
+    decoder = unet.Ensemble(classes=classes)
+
     inp = L.Input(S.INPUTSHAPE)
     x = decoder(inp)
 

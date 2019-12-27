@@ -17,7 +17,6 @@ import sys
 import skimage
 import score
 import random
-import ordinal_loss
 from flow import Dataflow, DamagedBuildingDataflow, BuildingDataflow, get_training_files, get_validation_files
 
 logger = logging.getLogger(__name__)

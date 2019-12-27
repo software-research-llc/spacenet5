@@ -851,7 +851,6 @@ class Target:
 if __name__ == '__main__':
     # Testing and data inspection
     import time
-    import ordinal_loss
     import train
     import score
     df = Dataflow()

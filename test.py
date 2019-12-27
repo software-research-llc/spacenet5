@@ -13,6 +13,7 @@ import infer
 import logging
 import damage
 import plac
+import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ def randomize_damage(img):
 def damage_by_building_classification(path):
     """
     Generate solution .png files, classifying damage using contiguous
-    regions in the segmentation model's predicted masks in order extract
+    regions in the segmentation model's predicted masks in order to extract
     individual building polygons from pre-disaster and post-disaster images.
     """
     # load the localization (segmentation) model
@@ -111,8 +112,9 @@ def damage_by_segmentation(path):
     Generate solution .png files, using a single multiclass segmentation
     model to do so.
     """
-    model = train.build_model(classes=6)
-    model = train.load_weights(model, S.DMG_MODELSTRING_BEST)
+    model = train.build_model(classes=6, damage=True)
+    model = train.load_weights(model, "damage-motokimura-mobilenetv2-best.hdf5")
+    #model.load_individual_weights()# = train.load_weights(model, S.DMG_MODELSTRING_BEST)
     df = flow.Dataflow(files=flow.get_test_files(), transform=False,
                        batch_size=1, buildings_only=False, shuffle=False,
                        return_postmask=False, return_stacked=True,
@@ -165,6 +167,31 @@ def damage_random(path):
 
         pbar.update(1)
 
+
+def from_logits(path):
+    inp = tf.keras.layers.Input((3145728 / 6, 6))
+    #x = tf.keras.layers.Reshape((-1,6))(inp)
+    x = tf.keras.layers.Activation('softmax')(inp)
+    m = tf.keras.models.Model(inputs=[inp], outputs=[x])
+    
+    pbar = tqdm.tqdm(total=933)
+
+    for (pre,post) in flow.get_test_files():
+        filename = os.path.basename(pre)
+
+        logits1 = np.fromfile("logits/1-{}".format(filename)).astype(np.int32).reshape((-1,6))
+        logits2 = np.fromfile("logits/2-{}".format(filename)).astype(np.int32).reshape((-1,6))
+        logits = (logits1 + logits2) / 2
+
+        pred = m.predict(np.expand_dims(logits, axis=0))
+        mask = infer.convert_prediction(pred).astype(np.uint8)
+
+        filename = filename.replace("pre", "localization").replace(".png", "_prediction.png") 
+        write_solution(names=[filename], images=[mask], path=path)
+        filename = filename.replace("localization", "damage")
+        write_solution(names=[filename], images=[mask], path=path)
+
+        pbar.update(1)
 
 def cli(outdir: "The path to write solutions to",
         segmentation: ("Use a multiclass segmentation model", "flag", "s"),

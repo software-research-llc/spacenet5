@@ -1,3 +1,6 @@
+"""
+Largely unused, but contains code dealing with damaged buildings or testing net layers.
+"""
 import numpy as np
 import logging
 import infer

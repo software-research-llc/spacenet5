@@ -236,7 +236,10 @@ class Dataflow(tf.keras.utils.Sequence):
 
         # deformation object to apply to images (so sample and mask pixel locations correspond)
         self.image_datagen = ImageDataGenerator()
+        
+        # a list of tuples, each being composed of (pre-disaster Target object, post-disaster Target object)
         self.samples = []
+
         self._do_shuffle = False
 
         if ".json" in files[0][0].lower():
@@ -281,7 +284,7 @@ class Dataflow(tf.keras.utils.Sequence):
         if self.shuffle is True and self._do_shuffle is True:
             self._do_shuffle = False
             random.shuffle(self.samples)
-        elif self.shuffle is True and idx == len(self):
+        elif self.shuffle is True and idx == len(self)-1:
             # reshuffle samples next call
             self._do_shuffle = True
 
@@ -302,8 +305,10 @@ class Dataflow(tf.keras.utils.Sequence):
                 x_pre, x_post = pre.image(), post.image()
                 if self.return_average is True:
                     return np.expand_dims( (x_pre.astype(np.uint32) + x_post.astype(np.uint32) / 2).astype(np.uint8), axis=0 ), pre.img_path
-                else:
+                elif self.return_stacked is True:
                     return np.expand_dims(np.dstack([x_pre, x_post]), axis=0), pre.img_path
+                else:
+                    return (x_pre, x_post), pre.img_path
 
             premask = pre.sm_multichannelmask() if self.segmentation_models else pre.multichannelmask()
             postmask = post.sm_multichannelmask() if self.segmentation_models else post.multichannelmask()

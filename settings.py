@@ -3,8 +3,8 @@ from inspect import getsourcefile
 
 
 # String descriptions of the architectures in use
-ARCHITECTURE = "ensemble"
-DAMAGE_ARCHITECTURE = 'ensemble'
+ARCHITECTURE = "deeplab-xception"
+DAMAGE_ARCHITECTURE = 'deeplab-xception'
 
 # Train/validation split proportion
 SPLITFACTOR = 0.9

@@ -3,3 +3,9 @@
 Code used for the SpaceNet5 and Xview2 challenges; chronological order was SpaceNet5 first,
 and that code was modified for Xview2 afterward.  See individual commits if desired, as the
 resulting code in the master branch is Xview2-specific.
+
+------
+
+### Developer's environment
+- Python v3.7.4
+- all packages installed via `pip3 install`

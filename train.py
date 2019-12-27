@@ -35,89 +35,92 @@ def save_model(model, save_path=S.MODELSTRING, pause=0):
 
 def load_weights(model, save_path=S.MODELSTRING):
     try:
-        model.load_weights(save_path)
+        model.load_weights(save_path)#, by_name=True)
         logger.info("Model file %s loaded successfully." % save_path)
     except OSError as exc:
         logger.error("unable to load %s: %s" % (save_path, str(exc)))
     return model
 
 
-def build_model(classes=6, damage=True, *args, **kwargs):
+def build_model(classes=6, damage=False, *args, **kwargs):
     L = tf.keras.layers
     R = tf.keras.regularizers
 
     #decoder = unet.MotokimuraMobilenet(classes=classes) if damage else unet.MotokimuraUnet(classes=classes)
-    decoder = unet.Ensemble(classes=classes)
+    #decoder = unet.Ensemble(classes=classes)
+    decoder = unet.MotokimuraUnet(classes=classes)
 
     inp = L.Input(S.INPUTSHAPE)
     x = decoder(inp)
 
     # Take the model's output and reshape so we can use categorical_crossentropy loss. To undo this
     # and recover the predicted mask, see infer.convert_prediction().
-    x = L.Reshape((-1,classes))(x)
+    x = L.Reshape((-1,classes), name="logits")(x)
     x = L.Activation('softmax')(x)
 
     m = tf.keras.models.Model(inputs=[inp], outputs=[x])
     return m
 
 
-def build_deeplab_model(architecture=S.ARCHITECTURE, train=False):
+def build_deeplab_model(classes=6, damage=False, train=False):
     deeplab = deeplabmodel.Deeplabv3(input_shape=S.INPUTSHAPE,
-                                  weights='pascal_voc',
-                                  backbone=architecture,
-                                  classes=S.N_CLASSES,
+                                  weights=None,
+                                  backbone='xception',
+                                  classes=classes,
                                   OS=16 if train is True else 8)
 
-    decoder = keras.models.Model(inputs=deeplab.inputs, outputs=[deeplab.get_layer('custom_logits_semantic').output])
+    #decoder = keras.models.Model(inputs=deeplab.inputs, outputs=[deeplab.get_layer('custom_logits_semantic').output])
 
-    inp_pre = tf.keras.layers.Input(S.INPUTSHAPE)
-    inp_post = tf.keras.layers.Input(S.INPUTSHAPE)
-
-    x = tf.keras.layers.Add()([inp_pre, inp_post])
-    x = decoder(x)
-    x = tf.compat.v1.image.resize(x, size=S.INPUTSHAPE[:2], method=tf.image.ResizeMethod.BILINEAR, align_corners=True)
-    x = tf.keras.layers.Reshape((-1,S.N_CLASSES))(x)
+    #x = decoder(deeplab.input)
+    x = deeplab.get_layer("custom_logits_semantic").output
+    x = tf.compat.v1.image.resize(x, size=S.MASKSHAPE[:2], method=tf.image.ResizeMethod.BILINEAR, align_corners=True)
+    x = tf.keras.layers.Reshape((-1,classes))(x)
     x = tf.keras.layers.Activation('softmax')(x)
 
-    return tf.keras.models.Model(inputs=[inp_pre, inp_post], outputs=[x])
+    return tf.keras.models.Model(inputs=deeplab.inputs, outputs=[x])
 
 
 def main(restore: ("Restore from checkpoint", "flag", "r"),
          damage: ("Train a damage classifier (default is localization)", "flag", "d"),
+         deeplab: ("Build and train a DeeplabV3+ model", "flag", "D"),
+         motokimura: ("Build and train a Motokimura-designed Unet", "flag", "M"),
          verbose: ("Keras verbosity level", "option", "v", int)=1,
          epochs: ("Number of epochs", "option", "e", int)=50,
          initial_epoch: ("Initial epoch to continue from", "option", "i", int)=1,
-         optimizer=tf.keras.optimizers.RMSprop(),
+         optimizer: ("Keras optimizer to use", "option", "o", str)='RMSprop',
          loss='categorical_crossentropy'):
     """
     Train a model.
     """
 #    optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
-    save_path = S.DMG_MODELSTRING if damage else S.MODELSTRING
+    if deeplab:
+        logger.info("Building DeeplabV3+ model.")
+        model = build_deeplab_model(classes=S.N_CLASSES, damage=damage, train=True)
+        S.ARCHITECTURE = "deeplab-xception"
+    elif motokimura:
+        logger.info("Building MotokimuraUnet model.")
+        model = build_model(classes=S.N_CLASSES, damage=damage, train=True)
+        S.ARCHITECTURE = "motokimura"
+    else:
+        logger.error("Use -M (motokimura) or -D (deeplab) parameter.")
+        sys.exit(-1)
+
+    S.DAMAGE = True if damage else False
+    save_path = S.MODELSTRING = f"{S.ARCHITECTURE}.hdf5"
+    S.DMG_MODELSTRING = f"damage-{save_path}"
+    if restore:
+        load_weights(model, save_path)
+
 
     metrics=['accuracy',
              score.num_correct,
              score.recall,
-             score.damage_f1_score if damage else None,
              score.tensor_f1_score]
 
     callbacks = [
         keras.callbacks.ModelCheckpoint(save_path.replace(".hdf5", "-best.hdf5"), save_weights_only=True, save_best_only=True),
-
-        keras.callbacks.TensorBoard(log_dir="logs"),
+        #keras.callbacks.TensorBoard(log_dir="logs"),
     ]
-
-
-    S.INPUTSHAPE[-1] = 6 if damage else 6
-    S.DAMAGE = True if damage else False
-    classes = 6 if damage else S.N_CLASSES
-    logger.info("Building model.")
-    model = build_model(classes=classes, damage=damage)
-
-    S.N_CLASSES = 6 if damage else S.N_CLASSES
-    S.MASKSHAPE[-1] = 6 if damage else S.MASKSHAPE[-1]
-    if restore:
-        load_weights(model, save_path)
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
@@ -138,7 +141,7 @@ def main(restore: ("Restore from checkpoint", "flag", "r"),
                        return_post_only=False if damage else False,
                        return_average=False)
 
-    logger.info("Training %s" % save_path)
+    logger.info("Training and saving best weights after each epoch (CTRL+C to interrupt).")
     train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_seq, initial_epoch)
     save_model(model, save_path)
 
@@ -156,6 +159,7 @@ def train_stepper(model, train_seq, verbose, epochs, callbacks, save_path, val_s
             sys.exit()
     except Exception as exc:
         save_model(model, "tmp.hdf5", pause=0)
+        logger.error("Saved current weights to tmp.hdf5 file.")
         raise(exc)
 
 

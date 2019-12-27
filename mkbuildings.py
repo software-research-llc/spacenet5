@@ -1,3 +1,6 @@
+"""
+Dump target masks of all buildings.
+"""
 import tqdm
 import numpy as np
 import skimage

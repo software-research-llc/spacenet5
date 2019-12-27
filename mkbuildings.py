@@ -1,5 +1,6 @@
 """
-Dump target masks of all buildings.
+Extract patches of training images that contain buildings and write
+each building to its own image file.
 """
 import tqdm
 import numpy as np

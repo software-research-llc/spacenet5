@@ -1,4 +1,4 @@
-# SpaceNet5 and xView2 competition code
+# SpaceNet5 and xView2 competition code (generates solutions for two specific semantic segmentation and object classification tasks)
 
 Code used when competing in the SpaceNet5 and Xview2 challenges; chronological order was SpaceNet5
 first, and that code was modified for Xview2 afterward.  See individual commits if desired, as the
@@ -10,6 +10,10 @@ for internal use only).
 Xview2, sponsored by the Defense Innovation Unit, sought an automated method of identifying
 damaged buildings after natural disasters using only satellite imagery.
 
+The given samples in this case were a pair of pre-disaster and post-disaster satellite images,
+and the required output was a pair of grayscale masks classifying each pixel in the input images
+that represented a building, as well as the level of damage sustained by said building (if any).
+
 [Xview2 Challenge site](https://xview2.org)
 
 
@@ -17,6 +21,10 @@ damaged buildings after natural disasters using only satellite imagery.
 SpaceNet5, sponsored by Cosmiq Works et al., sought an automated method of identifying damaged
 road networks so that first responders could reach necessary areas efficiently after natural
 disasters, also using only satellite imagery.
+
+The given samples for this one were single satellite images of road networks.  The required
+output was a set of coordinates representing a graph of the usable roads in the input image, as
+well as the speed at which those roads could be safely traveled.
 
 [Cosmiq Works](https://www.cosmiqworks.org)
 

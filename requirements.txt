@@ -1,0 +1,9 @@
+scipy
+skimage
+sklearn
+tensorflow-gpu
+opencv-python
+matplotlib
+numpy
+plac
+shapely

@@ -1,10 +1,12 @@
-# SpaceNet5 and xView2 competition code (generates solutions for two specific semantic segmentation and object classification tasks)
+# SpaceNet5 and xView2 competition code
 
 Code used when competing in the SpaceNet5 and Xview2 challenges; chronological order was SpaceNet5
 first, and that code was modified for Xview2 afterward.  See individual commits if desired, as the
 resulting code in the master branch is Xview2-specific and there are no releases (code was meant
 for internal use only).
 
+i.e. this repo houses code that generates solutions for two specific semantic segmentation and
+object classification tasks.
 
 ## Xview2 challenge summary
 Xview2, sponsored by the Defense Innovation Unit, sought an automated method of identifying
@@ -32,7 +34,7 @@ well as the speed at which those roads could be safely traveled.
 
 ## Project overview
 The model takes RGB input images (satellite imagery) and outputs a one hot encoded
-(BATCH_SIZE, HEIGHT * WIDTH, NUM_CLASSES) array so that standard categorical crossentropy
+`(BATCH_SIZE, HEIGHT * WIDTH, NUM_CLASSES)` array so that standard categorical crossentropy
 could be used for training.
 
 The project wasn't written to serve as a basis for derivative works, but if you find it useful,
@@ -60,7 +62,7 @@ it's released under a BSD license and you're free to incorporate it or build on 
 
 ------
 
-### Development environment:
+### Development environment (the only platform it was really tested on):
 - Linux v5.x
 - python v3.7.4
 - tensorflow v2.0

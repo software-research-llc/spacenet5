@@ -40,6 +40,15 @@ could be used for training.
 The project wasn't written to serve as a basis for derivative works, but if you find it useful,
 it's released under a BSD license and you're free to incorporate it or build on it as you please.
 
+If you want to use this project on your own dataset(s), the easiest way would be to make a
+`Dataflow` class in a file named `flow.py`, and implement `__len__()` and `__getitem__()`.  Then
+update the shape of your samples in `settings.py`, and if you want to use `train.py` unmodified,
+you'll also need to implement `flow.get_training_files()` and `flow.get_validation_files()` that
+return a list of paths for the files representing your dataset.
+
+You can also subclass `flow.Dataflow()`, but you'll need to change some calls from `flow.Dataflow()`
+to `myFile.betterClass()` or whatever you call your dataset objects in the existing Python files.
+
 ## File descriptions
 
 ### The models
@@ -55,7 +64,7 @@ it's released under a BSD license and you're free to incorporate it or build on 
 - scansolution.py: Counts pixel values in solution files (sanity checks)
 
 ### The dataset (see the xBD paper for details)
-- flow.py: All the code for the dataset (data objects, a few image deformations, etc.)
+- flow.py: All the code for the dataset (data objects, a few image deformations, etc).
 - show.py: Code for displaying input samples and model predictions
 - damage.py: some miscellaneous code related to damaged buildings
 - mkbuildings.py: A little script to dump individual buildings from input samples to their own files

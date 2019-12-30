@@ -194,38 +194,6 @@ def nonlogical_f1_score(y_true, y_pred):
     return score
 
 
-# df1 = 4 / sum((f1+epsilon)**-1 for f1 in [no_damage_f1, minor_damage_f1, major_damage_f1, destroyed_f1]), where epsilon = 1e-6
-@tf.function
-def damage_f1_score(y_true, y_pred):
-    gt = y_true
-    scores = {}
-
-    for i in range(1, 5):
-        # ignore all classes but the current one (multiply by 0s everywhere but the current class index)
-        pixels = [0.] * S.N_CLASSES
-        pixels[i] = 1.
-        pixels = pixels * S.MASKSHAPE[0] * S.MASKSHAPE[1] * S.BATCH_SIZE
-        pixels = tf.reshape(pixels, [S.BATCH_SIZE, S.MASKSHAPE[0] * S.MASKSHAPE[1], S.N_CLASSES])
-        pr = y_pred * pixels
-
-        # get true positives, false positives, and false negatives
-        tp = tf.reduce_sum(gt * pr)
-        fp = tf.reduce_sum(tf.clip_by_value(pr - gt, 0, 1))
-        fn = tf.reduce_sum(tf.clip_by_value(gt - pr, 0, 1))
-
-        # get precision and recall
-        prec = tp / (tp + fp + 1e-6)
-        rec = tp / (tp + fn + 1e-6)
-
-        # get f1-score for this class
-        score = 2 * tf.math.multiply_no_nan(prec, rec) / (prec + rec + 1e-6)
-        scores[i] = score
-
-    # use the contest formula to calculate damage score and return it
-    df1 = 4 / np.sum([1 / (scores[i] + 1e-6) for i in range(1,5)])
-    return df1
-
-
 @tf.function
 def _isolate_class_1(y_pred):
     pr = y_pred * CLASS_1
@@ -250,7 +218,7 @@ def _isolate_class_4(y_pred):
 
     return pr
 
-
+# df1 = 4 / sum((f1+epsilon)**-1 for f1 in [no_damage_f1, minor_damage_f1, major_damage_f1, destroyed_f1]), where epsilon = 1e-6
 def running_damage_f1_score(y_true, y_pred):
     """
     To get around the fact that metrics are only passed a BATCH_SIZE number of samples

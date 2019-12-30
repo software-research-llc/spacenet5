@@ -15,16 +15,16 @@ class MotokimuraUnet():
     With a GeForce GTX 1080 Ti, trains in about 24 hours with model weight files of 82MB.
 
     Xview2 scores:
-        Multiclass - 0.778 localization, 0.310 damage classification (0.450 overall).
-        Single class - 0.818 localization, 0.0 damage classification (0.304 overall).
+        Overall F1: 0.495268
+        Building Localization F1: 0.802933
+        Damage Classification F1: 0.363411
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, factor=5, *args, **kwargs):
         if 'classes' not in kwargs:
             raise KeyError("pass number of classes as classes=N")
         input_shape = S.INPUTSHAPE
         damage = S.DAMAGE
         s = self
-        factor = 5
         s.c0 = L.Conv2D(2 ** (factor), kernel_size=(3,3), strides=1, padding='same',
                 use_bias=True if damage else False)
                         #kernel_regularizer=tf.keras.regularizers.l2(0.000000001))
@@ -132,6 +132,9 @@ class MotokimuraUnet():
     def load_weights(self, *args, **kwargs):
         return self.model.load_weights(*args, **kwargs)
 
+    def save_weights(self, *args, **kwargs):
+        return self.model.save_weights(*args, **kwargs)
+
 
 class MotokimuraMobilenet(MotokimuraUnet):
     """
@@ -191,12 +194,12 @@ class MotokimuraMobilenet(MotokimuraUnet):
         mobilenet_out = self.mobilenetv2.get_layer("out_relu").output # 32x32
         
         # Skip connections
-        e10 = self.mobilenetv2.get_layer("block_15_project_BN").output # 32x32
-        e8 = self.mobilenetv2.get_layer("block_12_project_BN").output # 64x64
-        e6 = self.mobilenetv2.get_layer("block_5_project_BN").output # 128x128
-        e4 = self.mobilenetv2.get_layer("block_2_project_BN").output # 256x256
-        e2 = self.mobilenetv2.get_layer("expanded_conv_project_BN").output # 512x512
         e0 = self.mobilenetv2.get_layer("Conv1_relu").output # 512x512
+        e2 = self.mobilenetv2.get_layer("expanded_conv_project_BN").output # 512x512
+        e4 = self.mobilenetv2.get_layer("block_2_project_BN").output # 256x256
+        e6 = self.mobilenetv2.get_layer("block_5_project_BN").output # 128x128
+        e8 = self.mobilenetv2.get_layer("block_12_project_BN").output # 64x64
+        e10 = self.mobilenetv2.get_layer("block_15_project_BN").output # 32x32
 
         # Put it all together
         d10 = L.Activation('relu')(s.bnd9(s.dc10(L.Concatenate()([mobilenet_out,e10]))))
@@ -229,7 +232,7 @@ class Ensemble(MotokimuraMobilenet):
         two = self.mobilenet(inp)
         two = L.Reshape((-1,kwargs['classes']))(two)
 
-        out = L.Add()([one, two])
+        out = L.Average()([one, two])
         out = L.Activation('softmax')(out)
 
         self.model = tf.keras.models.Model(inputs=[inp], outputs=[out])

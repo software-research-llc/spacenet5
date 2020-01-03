@@ -1,9 +1,10 @@
-scipy
-skimage
+scikit-image
 sklearn
-tensorflow-gpu
-opencv-python
+skimage
+tqdm
+plac
+tensorflow
 matplotlib
 numpy
-plac
 shapely
+pandas

@@ -18,7 +18,7 @@ that represented a building, as well as the level of damage sustained by said bu
 
 [Xview2 Challenge site](https://xview2.org)
 
-![training_data](progress_images/training.png)
+![example](progress_images/deeplabv3-xception-10_epochs_untrained_on_post.png)
 
 ## SpaceNet5 challenge summary
 SpaceNet5, sponsored by Cosmiq Works et al., sought an automated method of identifying damaged

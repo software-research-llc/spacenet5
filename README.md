@@ -31,6 +31,7 @@ well as the speed at which those roads could be safely traveled.
 
 [Cosmiq Works](https://www.cosmiqworks.org)
 
+![example](progress_images/spacenet-progress12.png)
 ------
 
 ## Project overview
